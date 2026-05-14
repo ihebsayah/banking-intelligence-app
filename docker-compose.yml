@@ -92,7 +92,7 @@ services:
     networks:
       - banking-network
     command: >
-      bash -c "pip install -q -r requirements.txt 2>/dev/null || true && python main.py"
+      bash -c "pip install -q -r requirements.txt 2>/dev/null || true && python -m spacy download en_core_web_sm && uvicorn main:app --host 0.0.0.0 --port 8002"
 
   schema-agent:
     container_name: banking_schema_agent
@@ -112,7 +112,7 @@ services:
     networks:
       - banking-network
     command: >
-      bash -c "pip install -q -r requirements.txt 2>/dev/null || true && python main.py"
+      bash -c "pip install -q -r requirements.txt 2>/dev/null || true && uvicorn main:app --host 0.0.0.0 --port 8003"
 
   entity-resolution-agent:
     container_name: banking_entity_resolution
@@ -240,7 +240,7 @@ services:
     networks:
       - banking-network
     command: >
-      bash -c "pip install -q -r requirements.txt 2>/dev/null || true && python main.py"
+      bash -c "pip install -q -r requirements.txt 2>/dev/null || true && uvicorn main:app --host 0.0.0.0 --port 8009"
 
   secrets-manager:
     container_name: banking_secrets
