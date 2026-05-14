@@ -1,52 +1,79 @@
 """
 services/schema_agent/main.py
-Schema Understanding Agent stub — Domain-to-table mapping — Week 2.
-Full implementation comes in its scheduled week.
-Port: 8003
+FastAPI entry-point for the Schema Understanding Agent (port 8003).
 """
-import sys
-sys.path.insert(0, "/app"); sys.path.insert(0, "/app/shared")
+from __future__ import annotations
 
-import json
+import logging
 import os
-from http.server import BaseHTTPRequestHandler, HTTPServer
 
-HOST = "0.0.0.0"
-PORT = int(os.getenv("PORT", 8003))
+from fastapi import FastAPI, HTTPException
+from models import SchemaMappingRequest, SchemaMappingResponse
+from schema_matcher import SchemaMatcher, INTENT_TO_DOMAINS
 
+logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
+logger = logging.getLogger(__name__)
 
-class HealthHandler(BaseHTTPRequestHandler):
-    def log_message(self, format, *args):
-        pass
+app = FastAPI(
+    title="Schema Understanding Agent",
+    description="Maps user intent categories to database domains, tables, and join paths",
+    version="0.2.0",
+)
 
-    def do_GET(self):
-        if self.path == "/health":
-            body = json.dumps({
-                "status": "healthy",
-                "service": "schema_agent",
-                "note": "Domain-to-table mapping — Week 2"
-            }).encode()
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-        else:
-            self.send_response(404)
-            self.end_headers()
-
-    def do_POST(self):
-        content_length = int(self.headers.get("Content-Length", 0))
-        _ = self.rfile.read(content_length)
-        body = json.dumps({"status": "not_implemented", "service": "schema_agent", "note": "Domain-to-table mapping — Week 2"}).encode()
-        self.send_response(501)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+matcher = SchemaMatcher()
 
 
-if __name__ == "__main__":
-    print(f"[schema_agent] Stub server starting on port {PORT}")
-    server = HTTPServer((HOST, PORT), HealthHandler)
-    server.serve_forever()
+@app.post("/map_schema", response_model=SchemaMappingResponse)
+async def map_schema(request: SchemaMappingRequest) -> SchemaMappingResponse:
+    """
+    Map intent categories to the database schema.
+
+    Input:  {"intent_categories": ["customer_analysis", "risk_analysis"],
+              "primary_entity": "customer"}
+
+    Output: relevant domains, tables, key columns, join paths.
+    """
+    if not request.intent_categories:
+        raise HTTPException(status_code=400, detail="intent_categories must not be empty")
+
+    try:
+        domains = matcher.match_domains(request.intent_categories)
+        tables  = matcher.get_tables(domains)
+
+        entity = (request.primary_entity or "customer").lower()
+        key_columns = matcher.get_key_columns(tables, entity)
+
+        # Derive primary table: entity + "s" (simple pluralisation)
+        # Override for known irregulars
+        _plural_map = {
+            "customer": "customers",
+            "account":  "accounts",
+            "transaction": "transactions",
+            "branch":   "branches",
+            "product":  "products",
+            "region":   "regions",
+        }
+        primary_table = _plural_map.get(entity, entity + "s")
+
+        join_paths = matcher.get_join_paths(tables, primary_table)
+
+        return SchemaMappingResponse(
+            relevant_domains=domains,
+            tables=tables,
+            key_columns=key_columns,
+            join_paths=join_paths,
+        )
+
+    except Exception as exc:
+        logger.exception("Schema mapping failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/domains")
+async def get_domains() -> dict:
+    return {"domains": sorted(INTENT_TO_DOMAINS.keys())}
+
+
+@app.get("/health")
+async def health() -> dict:
+    return {"status": "healthy", "service": "schema_agent"}

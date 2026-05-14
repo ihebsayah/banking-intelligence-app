@@ -1,1 +1,7 @@
-# No external dependencies for stub
+fastapi==0.104.1
+uvicorn==0.24.0
+pydantic==2.5.0
+python-dotenv==1.0.0
+sentence-transformers==2.2.2
+asyncpg==0.29.0
+numpy==1.24.3
