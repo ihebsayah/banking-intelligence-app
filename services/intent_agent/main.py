@@ -1,52 +1,80 @@
 """
 services/intent_agent/main.py
-Intent Recognition Agent stub — Pattern matching intent extraction — Week 2.
-Full implementation comes in its scheduled week.
-Port: 8002
+FastAPI entry-point for the Intent Recognition Agent (port 8002).
 """
-import sys
-sys.path.insert(0, "/app"); sys.path.insert(0, "/app/shared")
+from __future__ import annotations
 
-import json
+import logging
 import os
-from http.server import BaseHTTPRequestHandler, HTTPServer
 
-HOST = "0.0.0.0"
-PORT = int(os.getenv("PORT", 8002))
+from fastapi import FastAPI, HTTPException
+from intent_recognizer import IntentRecognizer
+from models import IntentRequest, IntentResponse
 
+logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
+logger = logging.getLogger(__name__)
 
-class HealthHandler(BaseHTTPRequestHandler):
-    def log_message(self, format, *args):
-        pass
+app = FastAPI(
+    title="Intent Recognition Agent",
+    description="Pattern-matching NLP service – classifies user query intent",
+    version="0.2.0",
+)
 
-    def do_GET(self):
-        if self.path == "/health":
-            body = json.dumps({
-                "status": "healthy",
-                "service": "intent_agent",
-                "note": "Pattern matching intent extraction — Week 2"
-            }).encode()
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-        else:
-            self.send_response(404)
-            self.end_headers()
-
-    def do_POST(self):
-        content_length = int(self.headers.get("Content-Length", 0))
-        _ = self.rfile.read(content_length)
-        body = json.dumps({"status": "not_implemented", "service": "intent_agent", "note": "Pattern matching intent extraction — Week 2"}).encode()
-        self.send_response(501)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+recognizer: IntentRecognizer = None  # type: ignore
 
 
-if __name__ == "__main__":
-    print(f"[intent_agent] Stub server starting on port {PORT}")
-    server = HTTPServer((HOST, PORT), HealthHandler)
-    server.serve_forever()
+@app.on_event("startup")
+async def startup() -> None:
+    global recognizer
+
+    # Optional Redis
+    redis_client = None
+    redis_url = os.getenv("REDIS_URL", "")
+    if redis_url:
+        try:
+            import aioredis
+            redis_client = await aioredis.from_url(redis_url, decode_responses=True)
+            logger.info("Redis connected: %s", redis_url)
+        except Exception as exc:
+            logger.warning("Redis unavailable (%s) — running without cache", exc)
+
+    recognizer = IntentRecognizer(redis_client=redis_client)
+
+    # Warm up spaCy model
+    logger.info("Loading spaCy model …")
+    recognizer._get_nlp()
+    logger.info("spaCy model ready")
+
+
+@app.post("/process_intent", response_model=IntentResponse)
+async def process_intent(request: IntentRequest) -> IntentResponse:
+    """Classify the intent of a natural-language banking query."""
+    if not request.query.strip():
+        raise HTTPException(status_code=400, detail="Query must not be empty")
+    try:
+        result = await recognizer.recognize(request.query)
+        return IntentResponse(**result)
+    except Exception as exc:
+        logger.exception("Intent recognition failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/health")
+async def health() -> dict:
+    return {"status": "healthy", "service": "intent_agent"}
+
+
+@app.get("/categories")
+async def get_categories() -> dict:
+    return {
+        "categories": [
+            "customer_analysis",
+            "risk_analysis",
+            "revenue_analysis",
+            "operational_analysis",
+            "geographic_analysis",
+            "product_analysis",
+            "compliance_analysis",
+            "transaction_analysis",
+        ]
+    }
