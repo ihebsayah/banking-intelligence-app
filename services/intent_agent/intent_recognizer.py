@@ -105,7 +105,7 @@ def _extract_constraints(query: str) -> Dict:
 
     # geography
     for phrase, code in _GEO_MAP.items():
-        if phrase in q:
+        if re.search(rf"\b{phrase}\b", q):
             constraints["geography"] = code
             break
 
