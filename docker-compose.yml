@@ -134,7 +134,7 @@ services:
     networks:
       - banking-network
     command: >
-      bash -c "pip install -q -r requirements.txt 2>/dev/null || true && python main.py"
+      bash -c "pip install -q -r requirements.txt 2>/dev/null || true && uvicorn main:app --host 0.0.0.0 --port 8004"
 
   sql-agent:
     container_name: banking_sql_agent
@@ -154,7 +154,7 @@ services:
     networks:
       - banking-network
     command: >
-      bash -c "pip install -q -r requirements.txt 2>/dev/null || true && python main.py"
+      bash -c "pip install -q -r requirements.txt 2>/dev/null || true && uvicorn main:app --host 0.0.0.0 --port 8005"
 
   validation-agent:
     container_name: banking_validation_agent
@@ -170,7 +170,7 @@ services:
     networks:
       - banking-network
     command: >
-      bash -c "pip install -q -r requirements.txt 2>/dev/null || true && python main.py"
+      bash -c "pip install -q -r requirements.txt 2>/dev/null || true && uvicorn main:app --host 0.0.0.0 --port 8006"
 
   execution-agent:
     container_name: banking_execution_agent
