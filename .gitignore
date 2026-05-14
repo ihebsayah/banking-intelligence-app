@@ -1,0 +1,65 @@
+# Environment & Secrets
+.env
+*.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.py[cod]
+*.egg
+*.egg-info/
+dist/
+build/
+venv/
+env/
+.venv/
+pip-log.txt
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.project
+.settings/
+
+# Docker volumes (local)
+postgres_data/
+redis_data/
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Node (for future frontend)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak

@@ -1,0 +1,372 @@
+version: '3.9'
+
+services:
+
+  # ============================================================================
+  # API GATEWAY & AUTHENTICATION
+  # ============================================================================
+
+  api-gateway:
+    container_name: banking_api_gateway
+    image: python:3.11-slim
+    working_dir: /app
+    volumes:
+      - ./services/api_gateway:/app
+      - ./services/shared:/app/shared
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://banking_user:securepass123@postgres-main:5432/banking_dev
+      - AUDIT_DATABASE_URL=postgresql://audit_user:securepass123@postgres-audit:5432/audit_logs
+      - REDIS_URL=redis://redis:6379/0
+      - AUDIT_AGENT_URL=http://audit-agent:8008
+      - JWT_SECRET_KEY=change-this-in-production-do-not-use-in-prod
+      - LOG_LEVEL=INFO
+    depends_on:
+      postgres-main:
+        condition: service_healthy
+      postgres-audit:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - banking-network
+    command: >
+      bash -c "pip install -q -r requirements.txt && uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ============================================================================
+  # ORCHESTRATOR AGENT (Master Agent)
+  # ============================================================================
+
+  orchestrator-agent:
+    container_name: banking_orchestrator
+    image: python:3.11-slim
+    working_dir: /app
+    volumes:
+      - ./services/orchestrator:/app
+      - ./services/shared:/app/shared
+    ports:
+      - "8001:8001"
+    environment:
+      - CLAUDE_API_KEY=${CLAUDE_API_KEY}
+      - DATABASE_URL=postgresql://banking_user:securepass123@postgres-main:5432/banking_dev
+      - REDIS_URL=redis://redis:6379/1
+      - INTENT_AGENT_URL=http://intent-agent:8002
+      - SCHEMA_AGENT_URL=http://schema-agent:8003
+      - ENTITY_RESOLUTION_AGENT_URL=http://entity-resolution-agent:8004
+      - SQL_AGENT_URL=http://sql-agent:8005
+      - VALIDATION_AGENT_URL=http://validation-agent:8006
+      - EXECUTION_AGENT_URL=http://execution-agent:8007
+      - AUDIT_AGENT_URL=http://audit-agent:8008
+      - LOG_LEVEL=INFO
+    depends_on:
+      - postgres-main
+      - redis
+    networks:
+      - banking-network
+    command: >
+      bash -c "pip install -q -r requirements.txt 2>/dev/null || true && python main.py"
+
+  # ============================================================================
+  # MICROSERVICE AGENTS
+  # ============================================================================
+
+  intent-agent:
+    container_name: banking_intent_agent
+    image: python:3.11-slim
+    working_dir: /app
+    volumes:
+      - ./services/intent_agent:/app
+      - ./services/shared:/app/shared
+    ports:
+      - "8002:8002"
+    environment:
+      - CLAUDE_API_KEY=${CLAUDE_API_KEY}
+      - LOG_LEVEL=INFO
+    networks:
+      - banking-network
+    command: >
+      bash -c "pip install -q -r requirements.txt 2>/dev/null || true && python main.py"
+
+  schema-agent:
+    container_name: banking_schema_agent
+    image: python:3.11-slim
+    working_dir: /app
+    volumes:
+      - ./services/schema_agent:/app
+      - ./services/shared:/app/shared
+    ports:
+      - "8003:8003"
+    environment:
+      - EMBEDDING_SERVICE_URL=http://embedding-service:8009
+      - REDIS_URL=redis://redis:6379/2
+      - LOG_LEVEL=INFO
+    depends_on:
+      - redis
+    networks:
+      - banking-network
+    command: >
+      bash -c "pip install -q -r requirements.txt 2>/dev/null || true && python main.py"
+
+  entity-resolution-agent:
+    container_name: banking_entity_resolution
+    image: python:3.11-slim
+    working_dir: /app
+    volumes:
+      - ./services/entity_resolution_agent:/app
+      - ./services/shared:/app/shared
+    ports:
+      - "8004:8004"
+    environment:
+      - EMBEDDING_SERVICE_URL=http://embedding-service:8009
+      - POSTGRES_EMBEDDINGS_URL=postgresql://embedding_user:securepass123@postgres-embeddings:5432/embeddings
+      - REDIS_URL=redis://redis:6379/3
+      - LOG_LEVEL=INFO
+    depends_on:
+      - postgres-embeddings
+      - redis
+    networks:
+      - banking-network
+    command: >
+      bash -c "pip install -q -r requirements.txt 2>/dev/null || true && python main.py"
+
+  sql-agent:
+    container_name: banking_sql_agent
+    image: python:3.11-slim
+    working_dir: /app
+    volumes:
+      - ./services/sql_agent:/app
+      - ./services/shared:/app/shared
+    ports:
+      - "8005:8005"
+    environment:
+      - CLAUDE_API_KEY=${CLAUDE_API_KEY}
+      - REDIS_URL=redis://redis:6379/4
+      - LOG_LEVEL=INFO
+    depends_on:
+      - redis
+    networks:
+      - banking-network
+    command: >
+      bash -c "pip install -q -r requirements.txt 2>/dev/null || true && python main.py"
+
+  validation-agent:
+    container_name: banking_validation_agent
+    image: python:3.11-slim
+    working_dir: /app
+    volumes:
+      - ./services/validation_agent:/app
+      - ./services/shared:/app/shared
+    ports:
+      - "8006:8006"
+    environment:
+      - LOG_LEVEL=INFO
+    networks:
+      - banking-network
+    command: >
+      bash -c "pip install -q -r requirements.txt 2>/dev/null || true && python main.py"
+
+  execution-agent:
+    container_name: banking_execution_agent
+    image: python:3.11-slim
+    working_dir: /app
+    volumes:
+      - ./services/execution_agent:/app
+      - ./services/shared:/app/shared
+    ports:
+      - "8007:8007"
+    environment:
+      - DATABASE_URL=postgresql://banking_user:securepass123@postgres-main:5432/banking_dev
+      - AUDIT_SERVICE_URL=http://audit-agent:8008
+      - LOG_LEVEL=INFO
+    depends_on:
+      - postgres-main
+    networks:
+      - banking-network
+    command: >
+      bash -c "pip install -q -r requirements.txt 2>/dev/null || true && python main.py"
+
+  audit-agent:
+    container_name: banking_audit_agent
+    image: python:3.11-slim
+    working_dir: /app
+    volumes:
+      - ./services/audit_agent:/app
+      - ./services/shared:/app/shared
+    ports:
+      - "8008:8008"
+    environment:
+      - AUDIT_DATABASE_URL=postgresql://audit_user:securepass123@postgres-audit:5432/audit_logs
+      - LOG_LEVEL=INFO
+    depends_on:
+      postgres-audit:
+        condition: service_healthy
+    networks:
+      - banking-network
+    command: >
+      bash -c "pip install -q -r requirements.txt && uvicorn main:app --host 0.0.0.0 --port 8008 --reload"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8008/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ============================================================================
+  # SUPPORTING SERVICES
+  # ============================================================================
+
+  embedding-service:
+    container_name: banking_embedding_service
+    image: python:3.11-slim
+    working_dir: /app
+    volumes:
+      - ./services/embedding_service:/app
+      - ./services/shared:/app/shared
+    ports:
+      - "8009:8009"
+    environment:
+      - POSTGRES_EMBEDDINGS_URL=postgresql://embedding_user:securepass123@postgres-embeddings:5432/embeddings
+      - LOG_LEVEL=INFO
+    depends_on:
+      postgres-embeddings:
+        condition: service_healthy
+    networks:
+      - banking-network
+    command: >
+      bash -c "pip install -q -r requirements.txt 2>/dev/null || true && python main.py"
+
+  secrets-manager:
+    container_name: banking_secrets
+    image: python:3.11-slim
+    working_dir: /app
+    volumes:
+      - ./services/secrets_manager:/app
+      - banking_secrets_volume:/secrets
+    ports:
+      - "8010:8010"
+    environment:
+      - LOG_LEVEL=INFO
+    networks:
+      - banking-network
+    command: >
+      bash -c "pip install -q -r requirements.txt 2>/dev/null || true && python main.py"
+
+  # ============================================================================
+  # DATABASES
+  # ============================================================================
+
+  postgres-main:
+    container_name: banking_postgres_main
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: banking_dev
+      POSTGRES_USER: banking_user
+      POSTGRES_PASSWORD: securepass123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_main_data:/var/lib/postgresql/data
+      - ./init/postgres-main-init.sql:/docker-entrypoint-initdb.d/01-init.sql
+    networks:
+      - banking-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U banking_user -d banking_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-audit:
+    container_name: banking_postgres_audit
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: audit_logs
+      POSTGRES_USER: audit_user
+      POSTGRES_PASSWORD: securepass123
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_audit_data:/var/lib/postgresql/data
+      - ./init/postgres-audit-init.sql:/docker-entrypoint-initdb.d/01-init.sql
+    networks:
+      - banking-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U audit_user -d audit_logs"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-embeddings:
+    container_name: banking_postgres_embeddings
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: embeddings
+      POSTGRES_USER: embedding_user
+      POSTGRES_PASSWORD: securepass123
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_embeddings_data:/var/lib/postgresql/data
+      - ./init/postgres-embeddings-init.sql:/docker-entrypoint-initdb.d/01-init.sql
+    networks:
+      - banking-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U embedding_user -d embeddings"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================================
+  # CACHING & SESSIONS
+  # ============================================================================
+
+  redis:
+    container_name: banking_redis
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - banking-network
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================================
+  # LOCAL LLM (FALLBACK)
+  # ============================================================================
+
+  ollama:
+    container_name: banking_ollama
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - banking-network
+    environment:
+      - OLLAMA_HOST=0.0.0.0:11434
+    command: serve
+
+volumes:
+  postgres_main_data:
+  postgres_audit_data:
+  postgres_embeddings_data:
+  redis_data:
+  ollama_data:
+  banking_secrets_volume:
+
+networks:
+  banking-network:
+    driver: bridge
