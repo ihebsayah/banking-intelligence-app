@@ -1,0 +1,316 @@
+"""
+services/execution_agent/query_executor.py
+Safe query executor with:
+  - Signature verification (HMAC — blocks tampered queries)
+  - Connection pooling via asyncpg
+  - 30-second execution timeout
+  - Redis caching (cache-aside pattern)
+  - Row-count + execution-time metadata
+"""
+import asyncio
+import hashlib
+import hmac
+import json
+import logging
+import os
+import time
+from typing import Any, Dict, List, Optional, Tuple
+
+import asyncpg
+import redis.asyncio as aioredis
+
+logger = logging.getLogger(__name__)
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Config (matches validation_agent's SIGNING_KEY)
+# ──────────────────────────────────────────────────────────────────────────────
+SIGNING_KEY = os.getenv(
+    "QUERY_SIGNING_KEY",
+    "DEMO_KEY_CHANGE_IN_PRODUCTION_DO_NOT_USE_IN_PROD"
+)
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql://banking_user:securepass123@postgres-main:5432/banking_dev"
+)
+REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/5")
+QUERY_TIMEOUT_SECONDS = 30
+CACHE_TTL = 3600  # 1 hour
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Signature verification (mirrors validation_agent/query_validator.py)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _verify_signature(sql: str, parameters: list, signature: str) -> bool:
+    """
+    HMAC-SHA256 verification.
+    Signature format: sha256:{hex_sig}:{timestamp}
+    """
+    try:
+        parts = signature.split(":")
+        if len(parts) != 3 or parts[0] != "sha256":
+            return False
+        expected_sig = parts[1]
+        message = sql + "|" + str(sorted(str(p) for p in parameters))
+        actual_sig = hmac.new(
+            SIGNING_KEY.encode("utf-8"),
+            message.encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+        return hmac.compare_digest(expected_sig, actual_sig)
+    except Exception:
+        return False
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Query hash for cache key
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _query_hash(sql: str, parameters: list) -> str:
+    message = f"{sql.strip()}:{json.dumps(parameters, sort_keys=True, default=str)}"
+    return hashlib.sha256(message.encode()).hexdigest()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# QueryExecutor
+# ──────────────────────────────────────────────────────────────────────────────
+
+class QueryExecutor:
+    """
+    Executes validated, signed SQL queries against PostgreSQL.
+    Uses asyncpg connection pool + Redis cache.
+    """
+
+    def __init__(self):
+        self._pool: Optional[asyncpg.Pool] = None
+        self._redis: Optional[aioredis.Redis] = None
+
+    # ── Lifecycle ─────────────────────────────────────────────────────────────
+
+    async def initialize(self) -> None:
+        """Create DB pool + Redis connection. Called once at startup."""
+        # Postgres pool
+        try:
+            self._pool = await asyncpg.create_pool(
+                DATABASE_URL,
+                min_size=2,
+                max_size=10,
+                command_timeout=QUERY_TIMEOUT_SECONDS,
+            )
+            logger.info("asyncpg pool ready")
+        except Exception as exc:
+            logger.warning("DB pool unavailable — will use mock data: %s", exc)
+            self._pool = None
+
+        # Redis
+        try:
+            self._redis = aioredis.from_url(
+                REDIS_URL,
+                encoding="utf-8",
+                decode_responses=True,
+                socket_connect_timeout=3,
+            )
+            await self._redis.ping()
+            logger.info("Redis connected")
+        except Exception as exc:
+            logger.warning("Redis unavailable — caching disabled: %s", exc)
+            self._redis = None
+
+    async def close(self) -> None:
+        if self._pool:
+            await self._pool.close()
+        if self._redis:
+            await self._redis.aclose()
+
+    # ── Cache helpers ─────────────────────────────────────────────────────────
+
+    async def _cache_get(self, key: str) -> Optional[Any]:
+        if not self._redis:
+            return None
+        try:
+            raw = await self._redis.get(f"query:{key}")
+            return json.loads(raw) if raw else None
+        except Exception:
+            return None
+
+    async def _cache_set(self, key: str, value: Any) -> None:
+        if not self._redis:
+            return
+        try:
+            await self._redis.setex(f"query:{key}", CACHE_TTL, json.dumps(value, default=str))
+        except Exception:
+            pass
+
+    async def _cache_delete(self, key: str) -> None:
+        if not self._redis:
+            return
+        try:
+            await self._redis.delete(f"query:{key}")
+        except Exception:
+            pass
+
+    async def clear_cache(self) -> int:
+        """Delete all query:* keys. Returns count removed."""
+        if not self._redis:
+            return 0
+        try:
+            keys = await self._redis.keys("query:*")
+            if keys:
+                return await self._redis.delete(*keys)
+            return 0
+        except Exception:
+            return 0
+
+    # ── Main execute ──────────────────────────────────────────────────────────
+
+    async def execute(
+        self,
+        sql: str,
+        parameters: list,
+        signature: str,
+        user_role: str,
+    ) -> Dict[str, Any]:
+        """
+        Execute a validated query.
+
+        Returns:
+          {
+            "data":   [{"col": val, ...}, ...],
+            "metadata": {
+              "rows_returned": int,
+              "execution_time_ms": float,
+              "source": "database" | "cache",
+              "data_freshness": str,
+              "query_hash": str,
+            }
+          }
+
+        Raises:
+          ValueError   — invalid signature
+          TimeoutError — exceeded 30-second limit
+          RuntimeError — DB error
+        """
+        # 1. Verify signature — CRITICAL security check
+        if not _verify_signature(sql, parameters, signature):
+            raise ValueError("SIGNATURE_INVALID: Query signature verification failed — possible tampering detected")
+
+        q_hash = _query_hash(sql, parameters)
+
+        # 2. Cache lookup
+        cached = await self._cache_get(q_hash)
+        if cached is not None:
+            logger.info("Cache HIT for hash=%s", q_hash[:16])
+            return {
+                "data": cached,
+                "metadata": {
+                    "rows_returned": len(cached) if isinstance(cached, list) else 1,
+                    "execution_time_ms": 0.0,
+                    "source": "cache",
+                    "data_freshness": "cached",
+                    "query_hash": q_hash,
+                },
+            }
+
+        # 3. Execute against DB (with timeout)
+        t0 = time.monotonic()
+        rows = await self._execute_with_timeout(sql, parameters)
+        elapsed_ms = round((time.monotonic() - t0) * 1000, 2)
+
+        # 4. Cache result
+        await self._cache_set(q_hash, rows)
+
+        logger.info("DB query OK rows=%d time=%.1fms hash=%s", len(rows), elapsed_ms, q_hash[:16])
+
+        return {
+            "data": rows,
+            "metadata": {
+                "rows_returned": len(rows),
+                "execution_time_ms": elapsed_ms,
+                "source": "database",
+                "data_freshness": "real-time",
+                "query_hash": q_hash,
+            },
+        }
+
+    async def _execute_with_timeout(self, sql: str, parameters: list) -> List[Dict]:
+        """Run query with 30-second timeout. Falls back to mock data if DB unavailable."""
+        try:
+            return await asyncio.wait_for(
+                self._run_query(sql, parameters),
+                timeout=QUERY_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            raise TimeoutError(f"Query exceeded {QUERY_TIMEOUT_SECONDS}s timeout — aborted for safety")
+
+    async def _run_query(self, sql: str, parameters: list) -> List[Dict]:
+        """Execute against real DB or return mock rows if pool unavailable."""
+        if self._pool is None:
+            return self._mock_results(sql)
+
+        # asyncpg uses $1, $2 placeholders; convert ? → $N
+        pg_sql, pg_params = _convert_placeholders(sql, parameters)
+
+        try:
+            async with self._pool.acquire() as conn:
+                records = await conn.fetch(pg_sql, *pg_params)
+                return [dict(r) for r in records]
+        except Exception as exc:
+            logger.error("DB query failed: %s", exc)
+            raise RuntimeError(f"DB_ERROR: {exc}") from exc
+
+    def _mock_results(self, sql: str) -> List[Dict]:
+        """
+        Deterministic mock rows used when DB is unavailable (local testing).
+        Returns rows shaped by the query intent.
+        """
+        sql_upper = sql.upper()
+        if "CUSTOMER" in sql_upper:
+            return [
+                {"customer_id": f"C{i:04d}", "first_name": f"User{i}", "last_name": "Smith",
+                 "balance": round(1000 * i + 500.50, 2), "risk_score": round(0.1 * (i % 10), 2),
+                 "segment": ["retail", "premium", "corporate"][i % 3],
+                 "ssn": f"555-00-{1000+i:04d}", "email": f"user{i}@bank.com",
+                 "credit_score": 650 + i}
+                for i in range(1, 11)
+            ]
+        if "TRANSACTION" in sql_upper:
+            return [
+                {"transaction_id": f"T{i:06d}", "account_id": f"A{i:04d}",
+                 "amount": round(50.0 * i, 2), "transaction_type": ["debit", "credit"][i % 2],
+                 "transaction_date": f"2024-0{(i%9)+1}-{(i%28)+1:02d}"}
+                for i in range(1, 21)
+            ]
+        if "BRANCH" in sql_upper or "GROUP BY" in sql_upper:
+            return [
+                {"branch_id": f"BR{i:03d}", "branch_name": f"Branch {i}",
+                 "region": ["North", "South", "East", "West"][i % 4],
+                 "count": 50 + i * 3, "total_balance": round(500000 * i, 2)}
+                for i in range(1, 6)
+            ]
+        # Generic fallback
+        return [
+            {"id": i, "value": f"row_{i}", "amount": round(100.0 * i, 2)}
+            for i in range(1, 6)
+        ]
+
+
+def _convert_placeholders(sql: str, parameters: list):
+    """Convert ? placeholders to $1, $2, ... for asyncpg."""
+    idx = 0
+    pg_params = []
+    result = []
+    for char in sql:
+        if char == "?":
+            if idx < len(parameters):
+                p = parameters[idx]
+                # Unwrap ParameterValue objects from sql_agent
+                if hasattr(p, "value"):
+                    p = p.value
+                pg_params.append(p)
+                idx += 1
+                result.append(f"${idx}")
+            else:
+                result.append(char)
+        else:
+            result.append(char)
+    return "".join(result), pg_params

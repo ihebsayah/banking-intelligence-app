@@ -5,7 +5,7 @@ Route definitions for the API Gateway.
 Endpoints:
   POST /auth/login   → authenticate, return JWT
   GET  /health       → liveness probe
-  POST /query        → (TODO Week 2) submit NL query to orchestrator
+  POST /query        → submit NL query through full pipeline (Week 4)
 """
 import time
 import uuid
@@ -14,6 +14,7 @@ from typing import Optional
 import httpx
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel
 
 from shared.config import get_settings
 from shared.errors import AuthenticationError, TokenExpiredError, InvalidTokenError
@@ -32,6 +33,15 @@ logger = get_logger(__name__, "api-gateway")
 settings = get_settings()
 router = APIRouter()
 security = HTTPBearer(auto_error=False)
+
+ORCHESTRATOR_URL = "http://orchestrator-agent:8001"
+
+
+# ─── Request model ────────────────────────────────────────────────────────────
+
+class QueryRequest(BaseModel):
+    query: str
+    format: str = "json"    # json | csv | table
 
 
 # ─── Dependency: get_current_user ────────────────────────────────────────────
@@ -186,22 +196,109 @@ async def login(
     )
 
 
+# ─── /query — Full NL pipeline (Week 4) ──────────────────────────────────────
+
 @router.post(
     "/query",
-    summary="Submit natural language query (Week 2+)",
+    summary="Submit natural language query",
     tags=["query"],
 )
 async def submit_query(
     request: Request,
+    body: QueryRequest,
     user: User = Depends(get_current_user),
 ) -> dict:
     """
-    TODO (Week 2): Forward NL query to orchestrator-agent.
-    Placeholder returns 501 to avoid silent failures.
+    Submit a natural language query through the full 6-agent pipeline.
+
+    Pipeline:
+      Intent → Schema → Entity Resolution → SQL → Validation → Execution
+
+    Input:
+      {"query": "Show me high-risk customers in New York", "format": "json"}
+
+    Output:
+      {
+        "status": "success",
+        "results": [...],
+        "metadata": {
+          "rows_returned": 47,
+          "execution_time_ms": 245,
+          "data_freshness": "real-time",
+          "source": "database",
+          "user_role": "analyst"
+        }
+      }
+
+    Formats: json | csv | table
     """
+    start_time = time.monotonic()
+    ip_address = request.client.host if request.client else "unknown"
+
+    logger.info(
+        "Query received",
+        extra={"user_id": user.user_id, "role": user.user_role, "query": body.query[:80]},
+    )
+
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                f"{ORCHESTRATOR_URL}/process_query",
+                json={
+                    "query":     body.query,
+                    "user_role": user.user_role,
+                    "user_id":   user.user_id,
+                    "format":    body.format,
+                },
+            )
+            pipeline_result = response.json()
+    except httpx.TimeoutException:
+        elapsed_ms = int((time.monotonic() - start_time) * 1000)
+        await _send_audit_log(AuditLogEntry(
+            user_id=user.user_id, user_role=user.user_role,
+            action="nl_query", status=AuditStatus.ERROR,
+            ip_address=ip_address, endpoint="/query", http_method="POST",
+            execution_time_ms=elapsed_ms, error_message="Orchestrator timeout",
+        ))
+        raise HTTPException(status_code=504, detail={
+            "error": "PIPELINE_TIMEOUT",
+            "message": "Query pipeline timed out. Try a simpler query.",
+        })
+    except Exception as exc:
+        elapsed_ms = int((time.monotonic() - start_time) * 1000)
+        logger.error("Orchestrator error: %s", exc, exc_info=True)
+        await _send_audit_log(AuditLogEntry(
+            user_id=user.user_id, user_role=user.user_role,
+            action="nl_query", status=AuditStatus.ERROR,
+            ip_address=ip_address, endpoint="/query", http_method="POST",
+            execution_time_ms=elapsed_ms, error_message=str(exc),
+        ))
+        raise HTTPException(status_code=503, detail={
+            "error": "PIPELINE_UNAVAILABLE",
+            "message": "Query pipeline is temporarily unavailable.",
+        })
+
+    elapsed_ms = int((time.monotonic() - start_time) * 1000)
+
+    # Audit success
+    pipeline_status = pipeline_result.get("status", "unknown")
+    audit_status = AuditStatus.SUCCESS if pipeline_status == "success" else AuditStatus.ERROR
+    await _send_audit_log(AuditLogEntry(
+        user_id=user.user_id, user_role=user.user_role,
+        action="nl_query", status=audit_status,
+        ip_address=ip_address, endpoint="/query", http_method="POST",
+        execution_time_ms=elapsed_ms,
+        metadata={
+            "query": body.query[:200],
+            "format": body.format,
+            "pipeline_status": pipeline_status,
+        },
+    ))
+
     return {
-        "status": "not_implemented",
-        "message": "Query pipeline will be available in Week 2.",
-        "user_id": user.user_id,
-        "user_role": user.user_role,
+        "status": pipeline_result.get("status"),
+        "results": pipeline_result.get("results"),
+        "metadata": pipeline_result.get("metadata", {}),
+        "pipeline_steps": pipeline_result.get("pipeline_steps", []),
+        "message": pipeline_result.get("message"),
     }
