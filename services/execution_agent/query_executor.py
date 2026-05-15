@@ -261,30 +261,40 @@ class QueryExecutor:
     def _mock_results(self, sql: str) -> List[Dict]:
         """
         Deterministic mock rows used when DB is unavailable (local testing).
-        Returns rows shaped by the query intent.
+        Uses real schema column names from postgres-main-init.sql.
         """
         sql_upper = sql.upper()
         if "CUSTOMER" in sql_upper:
             return [
-                {"customer_id": f"C{i:04d}", "first_name": f"User{i}", "last_name": "Smith",
-                 "balance": round(1000 * i + 500.50, 2), "risk_score": round(0.1 * (i % 10), 2),
-                 "segment": ["retail", "premium", "corporate"][i % 3],
-                 "ssn": f"555-00-{1000+i:04d}", "email": f"user{i}@bank.com",
-                 "credit_score": 650 + i}
-                for i in range(1, 11)
+                {"customer_id": f"CUST00{i}", "name": f"User{i} Smith",
+                 "email": f"user{i}@example.com", "phone": f"555-010{i}",
+                 "risk_score": round(0.1 * (i % 10), 2), "kyc_verified": i % 2 == 0,
+                 "segment": ["premium", "standard", "high_risk"][i % 3],
+                 "balance": round(1000 * i + 500.50, 2)}
+                for i in range(1, 6)
             ]
         if "TRANSACTION" in sql_upper:
             return [
-                {"transaction_id": f"T{i:06d}", "account_id": f"A{i:04d}",
+                {"transaction_id": f"TXN{i:03d}", "account_id": f"ACC{i:03d}",
+                 "customer_id": f"CUST{i:03d}",
                  "amount": round(50.0 * i, 2), "transaction_type": ["debit", "credit"][i % 2],
-                 "transaction_date": f"2024-0{(i%9)+1}-{(i%28)+1:02d}"}
+                 "status": "completed", "transaction_date": f"2024-0{(i%9)+1}-{(i%28)+1:02d}"}
                 for i in range(1, 21)
             ]
-        if "BRANCH" in sql_upper or "GROUP BY" in sql_upper:
+        if "BRANCH" in sql_upper:
             return [
-                {"branch_id": f"BR{i:03d}", "branch_name": f"Branch {i}",
-                 "region": ["North", "South", "East", "West"][i % 4],
-                 "count": 50 + i * 3, "total_balance": round(500000 * i, 2)}
+                {"branch_id": f"BR{i:03d}", "name": f"Branch {i}",
+                 "state": ["NY", "CA", "IL", "TX", "MA"][i % 5],
+                 "city": ["New York", "Los Angeles", "Chicago", "Houston", "Boston"][i % 5]}
+                for i in range(1, 6)
+            ]
+        if "ACCOUNT" in sql_upper:
+            return [
+                {"account_id": f"ACC{i:03d}", "customer_id": f"CUST{i:03d}",
+                 "account_type": ["checking", "savings"][i % 2],
+                 "status": "active", "balance": round(10000.0 * i, 2),
+                 "available_balance": round(9500.0 * i, 2), "currency": "USD",
+                 "branch_id": f"BR{i:03d}"}
                 for i in range(1, 6)
             ]
         # Generic fallback
@@ -295,7 +305,18 @@ class QueryExecutor:
 
 
 def _convert_placeholders(sql: str, parameters: list):
-    """Convert ? placeholders to $1, $2, ... for asyncpg."""
+    """
+    Convert ? placeholders to $1, $2, ... for asyncpg.
+    If SQL already uses $N notation, pass through unchanged.
+    """
+    import re
+    # Already postgres-style? Just unwrap any ParameterValue objects
+    if re.search(r'\$\d+', sql):
+        pg_params = []
+        for p in parameters:
+            pg_params.append(p.value if hasattr(p, 'value') else p)
+        return sql, pg_params
+
     idx = 0
     pg_params = []
     result = []
@@ -303,7 +324,6 @@ def _convert_placeholders(sql: str, parameters: list):
         if char == "?":
             if idx < len(parameters):
                 p = parameters[idx]
-                # Unwrap ParameterValue objects from sql_agent
                 if hasattr(p, "value"):
                     p = p.value
                 pg_params.append(p)

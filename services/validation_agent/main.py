@@ -7,8 +7,8 @@ import sys
 import logging
 import os
 
-sys.path.insert(0, "/app")
 sys.path.insert(0, "/app/shared")
+sys.path.insert(0, "/app")
 
 from fastapi import FastAPI, HTTPException
 import uvicorn

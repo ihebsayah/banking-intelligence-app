@@ -31,25 +31,40 @@ _ROW_FILTERS: Dict[str, Optional[str]] = {
 
 _VISIBLE_COLUMNS: Dict[str, Optional[List[str]]] = {
     "analyst": [
-        "customer_id", "first_name", "last_name",
-        "balance", "risk_score", "segment",
-        "account_id", "account_number", "account_type", "status",
-        "transaction_id", "amount", "transaction_date", "transaction_type",
-        "branch_id", "branch_name", "region",
-        "product_id", "product_name", "category",
+        # customers
+        "customer_id", "name", "segment", "risk_score", "kyc_verified",
+        # accounts
+        "account_id", "account_type", "status", "balance", "available_balance", "currency", "branch_id",
+        # transactions
+        "transaction_id", "amount", "transaction_type", "transaction_date", "description",
+        # branches
+        "branch_id", "state", "city",
+        # products
+        "product_id", "category",
+        # risk_flags
+        "flag_type", "severity", "resolved",
+        # generic
+        "id", "created_at", "updated_at", "customer_id",
     ],
     "manager": [
-        "customer_id", "first_name", "last_name",
-        "balance", "risk_score", "segment",
-        "account_id", "account_number", "account_type", "status",
-        "transaction_id", "amount", "transaction_date", "transaction_type",
-        "branch_id", "branch_name", "region",
+        # customers
+        "customer_id", "name", "segment", "risk_score", "kyc_verified",
+        # accounts
+        "account_id", "account_type", "status", "balance", "available_balance", "currency", "branch_id",
+        # transactions
+        "transaction_id", "amount", "transaction_type", "transaction_date",
+        # branches
+        "branch_id", "state", "city", "manager_id",
+        # risk flags
+        "flag_type", "severity", "resolved", "description",
+        # generic
+        "id", "created_at",
     ],
-    "compliance": None,                       # all columns, no masking
+    "compliance": None,  # all columns, no masking
     "customer": [
-        "first_name", "last_name",
-        "balance", "account_type", "account_number",
-        "transaction_date", "amount", "transaction_type",
+        "customer_id", "name", "segment",
+        "account_id", "account_type", "balance", "available_balance",
+        "transaction_id", "amount", "transaction_type", "transaction_date",
     ],
 }
 
