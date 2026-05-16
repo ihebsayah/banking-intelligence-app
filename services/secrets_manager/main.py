@@ -5,7 +5,7 @@ Full implementation comes in its scheduled week.
 Port: 8010
 """
 import sys
-sys.path.insert(0, "/app"); sys.path.insert(0, "/app/shared")
+sys.path.insert(0, "/app/shared"); sys.path.insert(0, "/app")
 
 import json
 import os

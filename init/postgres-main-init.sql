@@ -161,3 +161,124 @@ INSERT INTO products (product_id, name, category) VALUES
     ('PROD004', 'Business Credit Line', 'credit'),
     ('PROD005', 'Investment Portfolio', 'investment')
 ON CONFLICT (product_id) DO NOTHING;
+
+-- =============================================================================
+-- Tunisia Seed Data
+-- =============================================================================
+
+-- Insert Tunisia branches
+INSERT INTO branches (branch_id, name, state, city, manager_id) VALUES
+    ('BR_TN_001', 'Tunis Main Branch', 'Tunis', 'Tunis', 'MGR_TN_001'),
+    ('BR_TN_002', 'Sfax Hub Branch', 'Sfax', 'Sfax', 'MGR_TN_002'),
+    ('BR_TN_003', 'Sousse Coastal Branch', 'Sousse', 'Sousse', 'MGR_TN_003')
+ON CONFLICT (branch_id) DO NOTHING;
+
+-- Insert Tunisia customers
+INSERT INTO customers (customer_id, name, email, phone, kyc_verified, risk_score, segment) VALUES
+    ('CUST_TN_001', 'Ahmed Trabelsi', 'ahmed.t@example.tn', '+216 20 123 456', TRUE, 0.10, 'premium'),
+    ('CUST_TN_002', 'Fatma Ben Ali', 'fatma.b@example.tn', '+216 21 987 654', TRUE, 0.25, 'standard'),
+    ('CUST_TN_003', 'Mohamed Gharbi', 'mohamed.g@example.tn', '+216 55 111 222', FALSE, 0.65, 'high_risk'),
+    ('CUST_TN_004', 'Youssef Khemiri', 'youssef.k@example.tn', '+216 98 333 444', TRUE, 0.15, 'premium'),
+    ('CUST_TN_005', 'Amina Baccar', 'amina.b@example.tn', '+216 50 555 666', TRUE, 0.05, 'standard')
+ON CONFLICT (customer_id) DO NOTHING;
+
+-- Insert Tunisia accounts (Currency TND)
+INSERT INTO accounts (account_id, customer_id, account_type, status, balance, available_balance, currency, branch_id) VALUES
+    ('ACC_TN_001', 'CUST_TN_001', 'checking', 'active', 45000.00, 44000.00, 'TND', 'BR_TN_001'),
+    ('ACC_TN_002', 'CUST_TN_001', 'savings', 'active', 120000.00, 120000.00, 'TND', 'BR_TN_001'),
+    ('ACC_TN_003', 'CUST_TN_002', 'checking', 'active', 8500.00, 8000.00, 'TND', 'BR_TN_002'),
+    ('ACC_TN_004', 'CUST_TN_003', 'checking', 'frozen', 1500.00, 0.00, 'TND', 'BR_TN_003'),
+    ('ACC_TN_005', 'CUST_TN_004', 'savings', 'active', 75000.00, 75000.00, 'TND', 'BR_TN_001')
+ON CONFLICT (account_id) DO NOTHING;
+
+-- Insert Tunisia transactions
+INSERT INTO transactions (transaction_id, account_id, customer_id, amount, transaction_type, status, description, transaction_date) VALUES
+    ('TXN_TN_001', 'ACC_TN_001', 'CUST_TN_001', 3500.00, 'credit', 'completed', 'Salary deposit (Tunis)', NOW() - INTERVAL '3 days'),
+    ('TXN_TN_002', 'ACC_TN_001', 'CUST_TN_001', -800.00, 'debit', 'completed', 'Utility bills STEG/SONEDE', NOW() - INTERVAL '2 days'),
+    ('TXN_TN_003', 'ACC_TN_003', 'CUST_TN_002', 450.00, 'credit', 'completed', 'Freelance payment from abroad', NOW() - INTERVAL '1 day'),
+    ('TXN_TN_004', 'ACC_TN_004', 'CUST_TN_003', 12000.00, 'credit', 'flagged', 'Unexplained large cash deposit in Sousse', NOW() - INTERVAL '4 days'),
+    ('TXN_TN_005', 'ACC_TN_005', 'CUST_TN_004', -2000.00, 'debit', 'completed', 'Car loan installment', NOW() - INTERVAL '5 days')
+ON CONFLICT (transaction_id) DO NOTHING;
+
+-- Insert Tunisia risk flags
+INSERT INTO risk_flags (customer_id, flag_type, severity, description) VALUES
+    ('CUST_TN_003', 'aml_suspicious', 'high', 'Unexplained large cash deposit in Sousse branch'),
+    ('CUST_TN_003', 'kyc_incomplete', 'medium', 'Missing national ID update (CIN)'),
+    ('CUST_TN_002', 'unusual_pattern', 'low', 'Frequent small international transfers')
+ON CONFLICT DO NOTHING;
+
+-- =============================================================================
+-- Bulk Tunisia Seed Data (200 rows per table)
+-- =============================================================================
+
+-- 200 Branches
+INSERT INTO branches (branch_id, name, state, city, manager_id)
+SELECT 
+    'BR_TN_GEN_' || i, 
+    'Branch ' || i || ' ' || (ARRAY['Tunis', 'Sfax', 'Sousse', 'Bizerte', 'Gabes', 'Ariana', 'Gafsa', 'Monastir'])[1 + (i % 8)], 
+    (ARRAY['Tunis', 'Sfax', 'Sousse', 'Bizerte', 'Gabes', 'Ariana', 'Gafsa', 'Monastir'])[1 + (i % 8)], 
+    (ARRAY['Tunis', 'Sfax', 'Sousse', 'Bizerte', 'Gabes', 'Ariana', 'Gafsa', 'Monastir'])[1 + (i % 8)], 
+    'MGR_TN_GEN_' || i
+FROM generate_series(1, 200) AS i
+ON CONFLICT (branch_id) DO NOTHING;
+
+-- 200 Customers
+INSERT INTO customers (customer_id, name, email, phone, kyc_verified, risk_score, segment)
+SELECT 
+    'CUST_TN_GEN_' || i, 
+    (ARRAY['Ahmed', 'Fatma', 'Mohamed', 'Youssef', 'Amina', 'Ali', 'Samir', 'Nour', 'Omar', 'Leila'])[1 + (i % 10)] || ' ' || (ARRAY['Trabelsi', 'Ben Ali', 'Gharbi', 'Khemiri', 'Baccar', 'Ayari', 'Mejri', 'Driss'])[1 + (i % 8)] || ' ' || i,
+    'user' || i || '@example.tn',
+    '+216 ' || (20000000 + i),
+    (i % 5 != 0),
+    (random() * 0.9)::numeric(3,2),
+    (ARRAY['standard', 'premium', 'high_risk'])[1 + (i % 3)]
+FROM generate_series(1, 200) AS i
+ON CONFLICT (customer_id) DO NOTHING;
+
+-- 200 Accounts
+INSERT INTO accounts (account_id, customer_id, account_type, status, balance, available_balance, currency, branch_id)
+SELECT 
+    'ACC_TN_GEN_' || i,
+    'CUST_TN_GEN_' || i,
+    (ARRAY['checking', 'savings', 'business'])[1 + (i % 3)],
+    (ARRAY['active', 'active', 'active', 'frozen', 'closed'])[1 + (i % 5)],
+    ROUND((random() * 100000)::numeric, 2),
+    ROUND((random() * 90000)::numeric, 2),
+    'TND',
+    'BR_TN_GEN_' || (1 + (i % 200))
+FROM generate_series(1, 200) AS i
+ON CONFLICT (account_id) DO NOTHING;
+
+-- 200 Transactions
+INSERT INTO transactions (transaction_id, account_id, customer_id, amount, transaction_type, status, description, transaction_date)
+SELECT 
+    'TXN_TN_GEN_' || i,
+    'ACC_TN_GEN_' || (1 + (i % 200)),
+    'CUST_TN_GEN_' || (1 + (i % 200)),
+    ROUND(((random() * 5000) - 2000)::numeric, 2),
+    CASE WHEN (i % 2) = 0 THEN 'credit' ELSE 'debit' END,
+    (ARRAY['completed', 'completed', 'completed', 'pending', 'flagged'])[1 + (i % 5)],
+    (ARRAY['Salary deposit', 'Utility bill STEG', 'Online purchase', 'Transfer to Tunis', 'ATM Withdrawal'])[1 + (i % 5)],
+    NOW() - (i || ' hours')::interval
+FROM generate_series(1, 200) AS i
+ON CONFLICT (transaction_id) DO NOTHING;
+
+-- 200 Risk Flags
+INSERT INTO risk_flags (customer_id, flag_type, severity, description)
+SELECT 
+    'CUST_TN_GEN_' || (1 + (i % 200)),
+    (ARRAY['aml_suspicious', 'kyc_incomplete', 'unusual_pattern'])[1 + (i % 3)],
+    (ARRAY['low', 'medium', 'high', 'critical'])[1 + (i % 4)],
+    'Automated risk detection flag ' || i
+FROM generate_series(1, 200) AS i
+ON CONFLICT DO NOTHING;
+
+-- 200 Products
+INSERT INTO products (product_id, name, category, description)
+SELECT 
+    'PROD_TN_GEN_' || i,
+    'Tunisian Bank Product ' || i,
+    (ARRAY['checking', 'savings', 'loan', 'credit', 'investment'])[1 + (i % 5)],
+    'Locally tailored financial product for Tunisian market ' || i
+FROM generate_series(1, 200) AS i
+ON CONFLICT (product_id) DO NOTHING;

@@ -35,11 +35,24 @@ class Settings(BaseSettings):
         description="Redis connection string",
     )
 
-    # ─── Claude AI ────────────────────────────────────────────────────────────
-    CLAUDE_API_KEY: str = Field(
-        default="",
-        description="Anthropic Claude API key",
+    # ─── Mistral AI ────────────────────────────────────────────────────────────
+    MISTRAL_API_URL: str = Field(
+        default="http://localhost:11434",
+        description="Mistral local Ollama API URL"
     )
+    MISTRAL_MODEL: str = Field(
+        default="mistral",
+        description="Mistral model name"
+    )
+    ORCHESTRATOR_LLM: str = Field(
+        default="mistral",
+        description="LLM used by orchestrator"
+    )
+    
+    # ─── LLM Settings ─────────────────────────────────────────────────────────
+    LLM_TIMEOUT: int = Field(default=120, description="Mistral can be slow")
+    LLM_MAX_TOKENS: int = Field(default=1000)
+    LLM_TEMPERATURE: float = Field(default=0.7)
 
     # ─── JWT Auth ─────────────────────────────────────────────────────────────
     JWT_SECRET_KEY: str = Field(

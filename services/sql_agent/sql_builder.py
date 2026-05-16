@@ -253,7 +253,17 @@ class SQLBuilder:
         if not tables:
             raise ValueError("No tables specified")
 
+        # Determine true primary table instead of just using alphabetical tables[0]
         primary_table = tables[0]
+        if request.join_paths:
+            primary_table = request.join_paths[0].from_table
+        else:
+            # simple pluralization fallback
+            derived = f"{request.primary_entity.lower()}s"
+            if derived in tables:
+                primary_table = derived
+            elif request.primary_entity.lower() in tables:
+                primary_table = request.primary_entity.lower()
 
         # SELECT columns
         select_cols = _safe_columns(tables, request.columns)

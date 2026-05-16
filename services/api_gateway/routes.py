@@ -301,4 +301,5 @@ async def submit_query(
         "metadata": pipeline_result.get("metadata", {}),
         "pipeline_steps": pipeline_result.get("pipeline_steps", []),
         "message": pipeline_result.get("message"),
+        "error": pipeline_result.get("error"),
     }

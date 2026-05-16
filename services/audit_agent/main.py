@@ -13,8 +13,8 @@ DB:   postgres-audit (audit_logs database)
 """
 import sys
 
-sys.path.insert(0, "/app")
 sys.path.insert(0, "/app/shared")
+sys.path.insert(0, "/app")
 
 from contextlib import asynccontextmanager
 

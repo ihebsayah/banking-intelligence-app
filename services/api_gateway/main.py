@@ -19,92 +19,104 @@ import uuid
 
 # ─── Make shared/ importable inside the container ────────────────────────────
 # Docker mounts shared/ at /app/shared; add /app to sys.path.
-sys.path.insert(0, "/app")
 sys.path.insert(0, "/app/shared")
+sys.path.insert(0, "/app")
 
-from contextlib import asynccontextmanager
+try:
+    from contextlib import asynccontextmanager
 
-import httpx
-from fastapi import FastAPI, Request, status
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
+    import httpx
+    from fastapi import FastAPI, Request, status
+    from fastapi.middleware.cors import CORSMiddleware
+    from fastapi.responses import JSONResponse
+    from slowapi import Limiter, _rate_limit_exceeded_handler
+    from slowapi.errors import RateLimitExceeded
+    from slowapi.util import get_remote_address
 
-from shared.config import get_settings
-from shared.database import DatabaseConnector
-from shared.errors import (
-    AuthenticationError,
-    AuthorizationError,
-    BankingBaseError,
-    TokenExpiredError,
-    InvalidTokenError,
-)
-from shared.logger import get_logger
-from shared.models import AuditLogEntry, AuditStatus
+    from shared.config import get_settings
+    from shared.database import DatabaseConnector
+    from shared.errors import (
+        AuthenticationError,
+        AuthorizationError,
+        BankingBaseError,
+        TokenExpiredError,
+        InvalidTokenError,
+    )
+    from shared.logger import get_logger
+    from shared.models import AuditLogEntry, AuditStatus
 
-from routes import router
+    from routes import router
+except Exception as e:
+    import traceback
+    with open("/app/startup_error.log", "w") as f:
+        f.write(traceback.format_exc())
+    raise
 
-logger = get_logger(__name__, "api-gateway")
-settings = get_settings()
+try:
+    logger = get_logger(__name__, "api-gateway")
+    settings = get_settings()
 
-# ─── Rate Limiter ─────────────────────────────────────────────────────────────
-limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
-
-
-# ─── Lifespan (startup / shutdown) ───────────────────────────────────────────
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Initialize resources on startup, clean up on shutdown."""
-    logger.info("API Gateway starting up")
-
-    # Store DB connector in app state for health checks (optional)
-    try:
-        app.state.db = DatabaseConnector(settings.DATABASE_URL)
-        await app.state.db.initialize()
-        logger.info("Database connection pool ready")
-    except Exception as exc:
-        logger.warning("Database not available at startup", extra={"error": str(exc)})
-        app.state.db = None
-
-    yield
-
-    # Shutdown
-    logger.info("API Gateway shutting down")
-    if getattr(app.state, "db", None):
-        await app.state.db.close()
+    # ─── Rate Limiter ─────────────────────────────────────────────────────────────
+    limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
 
 
-# ─── Application ──────────────────────────────────────────────────────────────
-app = FastAPI(
-    title="Banking Intelligence API Gateway",
-    description=(
-        "Secure API Gateway for the Banking Intelligence System. "
-        "Handles authentication, rate limiting, audit logging, and request routing."
-    ),
-    version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json",
-    lifespan=lifespan,
-)
+    # ─── Lifespan (startup / shutdown) ───────────────────────────────────────────
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        """Initialize resources on startup, clean up on shutdown."""
+        logger.info("API Gateway starting up")
 
-# ─── Rate Limiting ─────────────────────────────────────────────────────────────
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+        # Store DB connector in app state for health checks (optional)
+        try:
+            app.state.db = DatabaseConnector(settings.DATABASE_URL)
+            await app.state.db.initialize()
+            logger.info("Database connection pool ready")
+        except Exception as exc:
+            logger.warning("Database not available at startup", extra={"error": str(exc)})
+            app.state.db = None
 
-# ─── CORS ─────────────────────────────────────────────────────────────────────
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],   # Restrict to known origins in production
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+        yield
 
-# ─── Include Routers ──────────────────────────────────────────────────────────
-app.include_router(router)
+        # Shutdown
+        logger.info("API Gateway shutting down")
+        if getattr(app.state, "db", None):
+            await app.state.db.close()
+
+
+    # ─── Application ──────────────────────────────────────────────────────────────
+    app = FastAPI(
+        title="Banking Intelligence API Gateway",
+        description=(
+            "Secure API Gateway for the Banking Intelligence System. "
+            "Handles authentication, rate limiting, audit logging, and request routing."
+        ),
+        version="1.0.0",
+        docs_url="/docs",
+        redoc_url="/redoc",
+        openapi_url="/openapi.json",
+        lifespan=lifespan,
+    )
+
+    # ─── Rate Limiting ─────────────────────────────────────────────────────────────
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+    # ─── CORS ─────────────────────────────────────────────────────────────────────
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],   # Restrict to known origins in production
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    # ─── Include Routers ──────────────────────────────────────────────────────────
+    app.include_router(router)
+except Exception as e:
+    import traceback
+    with open("/app/startup_error2.log", "w") as f:
+        f.write(traceback.format_exc())
+    raise
 
 
 # ─── Audit Middleware ─────────────────────────────────────────────────────────

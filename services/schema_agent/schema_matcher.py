@@ -26,16 +26,16 @@ INTENT_TO_DOMAINS: Dict[str, List[str]] = {
 # ── Domains → Tables ──────────────────────────────────────────────────────────
 
 DOMAIN_TO_TABLES: Dict[str, List[str]] = {
-    "customer_analysis":    ["customers", "customer_segments"],
-    "account_analysis":     ["accounts", "account_types"],
-    "risk_analysis":        ["risk_flags", "aml_flags", "fraud_detection", "credit_risk_scores"],
-    "revenue_analysis":     ["fees", "commissions", "interest_income", "products"],
-    "operational_analysis": ["transactions", "transaction_details"],
-    "geographic_analysis":  ["regions", "branches", "branch_locations"],
+    "customer_analysis":    ["customers"],
+    "account_analysis":     ["accounts"],
+    "risk_analysis":        ["risk_flags"],
+    "revenue_analysis":     ["products"],
+    "operational_analysis": ["transactions"],
+    "geographic_analysis":  ["branches"],
     "product_analysis":     ["products"],
-    "compliance_analysis":  ["kyc_status", "audit_logs", "regulatory_reports"],
-    "transaction_analysis": ["transactions", "transaction_details"],
-    "branch_analysis":      ["branches", "branch_locations", "branch_performance"],
+    "compliance_analysis":  ["risk_flags"],
+    "transaction_analysis": ["transactions"],
+    "branch_analysis":      ["branches"],
 }
 
 # ── Entity → primary key ──────────────────────────────────────────────────────
@@ -52,27 +52,12 @@ PRIMARY_ENTITY_KEYS: Dict[str, str] = {
 # ── Table → filtering columns ─────────────────────────────────────────────────
 
 TABLE_FILTER_COLUMNS: Dict[str, List[str]] = {
-    "customers":            ["customer_segment", "kyc_verified", "risk_score", "country"],
-    "customer_segments":    ["segment_name", "tier"],
+    "customers":            ["segment", "kyc_verified", "risk_score", "name", "email", "phone"],
     "accounts":             ["account_type", "status", "balance", "currency"],
-    "account_types":        ["type_name", "product_category"],
-    "transactions":         ["transaction_type", "status", "amount", "channel", "transaction_date"],
-    "transaction_details":  ["detail_type", "value"],
-    "risk_flags":           ["flag_type", "severity", "status", "created_at"],
-    "aml_flags":            ["flag_category", "resolution_status"],
-    "fraud_detection":      ["fraud_score", "case_status"],
-    "credit_risk_scores":   ["pd_score", "lgd", "ead", "rating"],
-    "fees":                 ["fee_type", "amount", "fee_date"],
-    "commissions":          ["commission_type", "amount"],
-    "interest_income":      ["product_type", "amount", "period"],
-    "products":             ["product_name", "product_category", "status"],
-    "branches":             ["state", "city", "region_id", "status"],
-    "branch_locations":     ["address", "latitude", "longitude"],
-    "branch_performance":   ["revenue", "customer_count", "headcount", "period"],
-    "kyc_status":           ["verification_status", "last_verified_at"],
-    "audit_logs":           ["action_type", "severity", "actor_id", "created_at"],
-    "regulatory_reports":   ["report_type", "submission_status", "regulator"],
-    "regions":              ["region_name", "country"],
+    "transactions":         ["transaction_type", "status", "amount", "transaction_date"],
+    "risk_flags":           ["flag_type", "severity", "resolved"],
+    "products":             ["name", "category"],
+    "branches":             ["state", "city", "name"],
 }
 
 # ── Hardcoded join graph (source → list of join specs) ────────────────────────
@@ -83,31 +68,24 @@ JOIN_GRAPH: Dict[str, List[JoinSpec]] = {
     "customers": [
         {"to": "accounts",          "key": "customer_id",    "type": "LEFT JOIN"},
         {"to": "risk_flags",        "key": "customer_id",    "type": "LEFT JOIN"},
-        {"to": "aml_flags",         "key": "customer_id",    "type": "LEFT JOIN"},
-        {"to": "kyc_status",        "key": "customer_id",    "type": "LEFT JOIN"},
-        {"to": "customer_segments", "key": "customer_id",    "type": "LEFT JOIN"},
-        {"to": "credit_risk_scores","key": "customer_id",    "type": "LEFT JOIN"},
+        {"to": "transactions",      "key": "customer_id",    "type": "LEFT JOIN"},
     ],
     "accounts": [
         {"to": "transactions",      "key": "account_id",     "type": "LEFT JOIN"},
-        {"to": "account_types",     "key": "account_type_id","type": "INNER JOIN"},
-        {"to": "fees",              "key": "account_id",     "type": "LEFT JOIN"},
-        {"to": "interest_income",   "key": "account_id",     "type": "LEFT JOIN"},
+        {"to": "customers",         "key": "customer_id",    "type": "INNER JOIN"},
+        {"to": "branches",          "key": "branch_id",      "type": "LEFT JOIN"},
     ],
     "transactions": [
         {"to": "accounts",          "key": "account_id",     "type": "INNER JOIN"},
-        {"to": "transaction_details","key": "transaction_id","type": "LEFT JOIN"},
-        {"to": "fraud_detection",   "key": "transaction_id", "type": "LEFT JOIN"},
+        {"to": "customers",         "key": "customer_id",    "type": "INNER JOIN"},
     ],
     "branches": [
-        {"to": "branch_locations",  "key": "branch_id",      "type": "LEFT JOIN"},
-        {"to": "branch_performance","key": "branch_id",      "type": "LEFT JOIN"},
-        {"to": "regions",           "key": "region_id",      "type": "INNER JOIN"},
+        {"to": "accounts",          "key": "branch_id",      "type": "LEFT JOIN"},
     ],
-    "products": [
-        {"to": "accounts",          "key": "product_id",     "type": "LEFT JOIN"},
-        {"to": "commissions",       "key": "product_id",     "type": "LEFT JOIN"},
-    ],
+    "products": [],
+    "risk_flags": [
+        {"to": "customers",         "key": "customer_id",    "type": "INNER JOIN"},
+    ]
 }
 
 
@@ -159,14 +137,13 @@ class SchemaMatcher:
         """
         table_set = set(tables)
         paths: List[JoinPath] = []
-        visited: set = set()
+        joined_tables: set = {primary_table}
 
         def _add(from_t: str) -> None:
             for spec in JOIN_GRAPH.get(from_t, []):
                 to_t = spec["to"]
-                edge  = (from_t, to_t)
-                if to_t in table_set and edge not in visited:
-                    visited.add(edge)
+                if to_t in table_set and to_t not in joined_tables:
+                    joined_tables.add(to_t)
                     paths.append(JoinPath(
                         from_table=from_t,
                         to_table=to_t,
