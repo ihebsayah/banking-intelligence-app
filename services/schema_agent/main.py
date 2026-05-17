@@ -7,6 +7,7 @@ from __future__ import annotations
 import logging
 import os
 
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException
 from models import SchemaMappingRequest, SchemaMappingResponse
 from schema_matcher import SchemaMatcher, INTENT_TO_DOMAINS
@@ -18,6 +19,14 @@ app = FastAPI(
     title="Schema Understanding Agent",
     description="Maps user intent categories to database domains, tables, and join paths",
     version="0.2.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=['*'],
+    allow_credentials=True,
+    allow_methods=['*'],
+    allow_headers=['*'],
 )
 
 matcher = SchemaMatcher()

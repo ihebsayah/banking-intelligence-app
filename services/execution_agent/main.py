@@ -17,6 +17,7 @@ sys.path.insert(0, "/app/shared")
 sys.path.insert(0, "/app")
 
 from contextlib import asynccontextmanager
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException
 import uvicorn
 
@@ -55,6 +56,14 @@ app = FastAPI(
     ),
     version="0.4.0",
     lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=['*'],
+    allow_credentials=True,
+    allow_methods=['*'],
+    allow_headers=['*'],
 )
 
 

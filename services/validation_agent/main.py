@@ -10,6 +10,7 @@ import os
 sys.path.insert(0, "/app/shared")
 sys.path.insert(0, "/app")
 
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException
 import uvicorn
 
@@ -31,6 +32,14 @@ app = FastAPI(
         "Blocks DELETE, DROP, UNION, OR 1=1, SLEEP and 20+ attack vectors. Week 3."
     ),
     version="0.3.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=['*'],
+    allow_credentials=True,
+    allow_methods=['*'],
+    allow_headers=['*'],
 )
 
 validator = QueryValidator()

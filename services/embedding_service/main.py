@@ -7,6 +7,7 @@ from __future__ import annotations
 import logging
 import os
 
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List
@@ -21,6 +22,14 @@ app = FastAPI(
     title="Embedding Service",
     description="Compute and serve sentence embeddings; pre-computes schema embeddings on startup",
     version="0.2.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=['*'],
+    allow_credentials=True,
+    allow_methods=['*'],
+    allow_headers=['*'],
 )
 
 embedder: EmbeddingComputer = None      # type: ignore

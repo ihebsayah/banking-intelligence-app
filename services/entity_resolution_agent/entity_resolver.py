@@ -47,16 +47,31 @@ class EntityResolver:
                 primary_table, tables
             )
 
+        # If we need products but don't have accounts, we MUST have accounts to bridge them
+        if "products" in join_targets and "accounts" not in join_targets and primary_table != "accounts":
+            join_targets.append("accounts")
+
         # Build joins
         join_paths: List[JoinPath] = []
         for target in join_targets:
+            # Special mapping for products which joins to accounts.account_type
+            if target == "products":
+                join_paths.append(JoinPath(
+                    from_table="accounts",
+                    to_table="products",
+                    join_key="account_type",
+                    join_type="LEFT JOIN",
+                    condition="accounts.account_type = products.category",
+                ))
+                continue
+                
             join_key = find_join_key(primary_table, target) or primary_key
             condition = f"{primary_table}.{join_key} = {target}.{join_key}"
             join_paths.append(JoinPath(
                 from_table=primary_table,
                 to_table=target,
                 join_key=join_key,
-                join_type="INNER JOIN",
+                join_type="LEFT JOIN",
                 condition=condition,
             ))
 

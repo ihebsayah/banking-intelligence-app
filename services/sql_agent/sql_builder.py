@@ -31,22 +31,21 @@ ALLOWED_COLUMNS: Dict[str, List[str]] = {
         "risk_level", "branch_id",
     ],
     "accounts": [
-        "account_id", "customer_id", "account_number", "account_type",
-        "balance", "currency", "status", "branch_id", "product_id",
-        "opened_at", "interest_rate",
+        "account_id", "customer_id", "account_type",
+        "balance", "available_balance", "currency", "status", "branch_id",
+        "created_at",
     ],
     "transactions": [
         "transaction_id", "account_id", "customer_id", "amount",
-        "transaction_type", "description", "created_at", "status",
-        "channel", "merchant_category",
+        "transaction_type", "status", "description", "transaction_date",
+        "created_at",
     ],
     "branches": [
         "branch_id", "branch_name", "city", "country", "region",
         "manager_id", "opened_at", "status",
     ],
     "products": [
-        "product_id", "product_name", "product_type", "interest_rate",
-        "minimum_balance", "maximum_balance", "currency", "status",
+        "product_id", "name", "category", "description", "created_at"
     ],
     "risk_flags": [
         "risk_id", "customer_id", "account_id", "flag_type", "severity",

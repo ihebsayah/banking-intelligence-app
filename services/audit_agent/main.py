@@ -18,6 +18,7 @@ sys.path.insert(0, "/app")
 
 from contextlib import asynccontextmanager
 
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
 
@@ -62,6 +63,14 @@ app = FastAPI(
     description="Immutable compliance audit logging service.",
     version="1.0.0",
     lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=['*'],
+    allow_credentials=True,
+    allow_methods=['*'],
+    allow_headers=['*'],
 )
 
 

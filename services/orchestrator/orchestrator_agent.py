@@ -10,10 +10,10 @@ class OrchestratorAgent:
     Master orchestrator using Mistral LLM.
     Coordinates all other agents in the pipeline.
     """
-    def __init__(self, config: Settings):
+    def __init__(self, config: Settings, log_callback=None):
         self.config = config
+        self.log_callback = log_callback
         
-        # Initialize Mistral client
         self.mistral = MistralClient(
             base_url=config.MISTRAL_API_URL,
             model=config.MISTRAL_MODEL,
@@ -21,7 +21,6 @@ class OrchestratorAgent:
             max_tokens=config.LLM_MAX_TOKENS
         )
         
-        # Service URLs
         self.intent_agent_url = config.INTENT_AGENT_URL
         self.schema_agent_url = config.SCHEMA_AGENT_URL
         self.entity_resolution_url = config.ENTITY_RESOLUTION_AGENT_URL
@@ -30,59 +29,63 @@ class OrchestratorAgent:
         self.execution_agent_url = config.EXECUTION_AGENT_URL
         self.audit_agent_url = config.AUDIT_AGENT_URL
 
+    async def _log(self, agent_name: str, message: str, level: str = "info"):
+        if self.log_callback:
+            await self.log_callback(agent_name, message, level)
+
     async def process_query(self, user_query: str, user_role: str) -> dict:
-        """
-        Process user query through entire pipeline.
-        
-        Flow:
-        1. Call Intent Agent → get intent
-        2. Call Schema Agent → get tables
-        3. Call Entity Resolution → get joins
-        4. Call SQL Agent → generate SQL
-        5. Call Validation Agent → verify safety
-        6. Call Execution Agent → execute & get results
-        7. Call Audit Agent → log access
-        8. Return results to user
-        """
-        
         try:
             logger.info(f"[ORCHESTRATOR] Processing query: {user_query[:50]}...")
+            await self._log("orchestrator", f"Processing new query from user '{user_role}'")
             
             # Step 1: Intent Recognition
             logger.info("[ORCHESTRATOR] → Intent Agent")
+            await self._log("intent", "Analyzing natural language intent...")
             intent_response = await self._call_intent_agent(user_query)
             
             if not intent_response["success"]:
-                return self._error_response(f"Intent recognition failed: {intent_response.get('error')}")
+                err = f"Intent recognition failed: {intent_response.get('error')}"
+                await self._log("intent", err, "error")
+                return self._error_response(err)
             
             intent_data = intent_response["data"]
             logger.info(f"[ORCHESTRATOR] ← Intent: {intent_data.get('primary_category', 'unknown')}")
+            await self._log("intent", f"Identified intent: {intent_data.get('primary_category', 'unknown')}")
             
             # Step 2: Schema Understanding
             logger.info("[ORCHESTRATOR] → Schema Agent")
+            await self._log("schema", "Mapping intent to database domains and tables...")
             schema_response = await self._call_schema_agent(intent_data)
             
             if not schema_response["success"]:
-                return self._error_response(f"Schema mapping failed: {schema_response.get('error')}")
+                err = f"Schema mapping failed: {schema_response.get('error')}"
+                await self._log("schema", err, "error")
+                return self._error_response(err)
             
             schema_data = schema_response["data"]
             logger.info(f"[ORCHESTRATOR] ← Tables retrieved")
+            await self._log("schema", f"Identified tables: {', '.join(schema_data.get('tables', []))}")
             
             # Step 3: Entity Resolution
             logger.info("[ORCHESTRATOR] → Entity Resolution Agent")
+            await self._log("entity_resolution", "Resolving semantic relationships and join paths...")
             entity_response = await self._call_entity_resolution(
                 intent_data,
                 schema_data
             )
             
             if not entity_response["success"]:
-                return self._error_response(f"Entity resolution failed: {entity_response.get('error')}")
+                err = f"Entity resolution failed: {entity_response.get('error')}"
+                await self._log("entity_resolution", err, "error")
+                return self._error_response(err)
             
             entity_data = entity_response["data"]
             logger.info(f"[ORCHESTRATOR] ← Join paths determined")
+            await self._log("entity_resolution", f"Resolved {len(entity_data.get('join_structure', []))} join paths")
             
             # Step 4: SQL Generation
             logger.info("[ORCHESTRATOR] → SQL Agent")
+            await self._log("sql", "Generating safe parameterized SQL...")
             sql_response = await self._call_sql_agent(
                 intent_data,
                 schema_data,
@@ -90,28 +93,38 @@ class OrchestratorAgent:
             )
             
             if not sql_response["success"]:
-                return self._error_response(f"SQL generation failed: {sql_response.get('error')}")
+                err = f"SQL generation failed: {sql_response.get('error')}"
+                await self._log("sql", err, "error")
+                return self._error_response(err)
             
             sql_data = sql_response["data"]
             logger.info(f"[ORCHESTRATOR] ← SQL generated (parameterized)")
+            await self._log("sql", "SQL query successfully generated")
             
             # Step 5: Validation
             logger.info("[ORCHESTRATOR] → Validation Agent")
+            await self._log("validation", "Validating query against security policies...")
             validation_response = await self._call_validation_agent(sql_data, user_role)
             
             if not validation_response["success"]:
-                return self._error_response(f"Validation failed: {validation_response.get('error')}")
+                err = f"Validation failed: {validation_response.get('error')}"
+                await self._log("validation", err, "error")
+                return self._error_response(err)
             
             validation_data = validation_response["data"]
             
             if not validation_data.get("safe", False):
+                err = f"Query unsafe: {validation_data.get('issues', [])}"
                 logger.error(f"[ORCHESTRATOR] Query failed validation: {validation_data.get('issues', [])}")
-                return self._error_response(f"Query unsafe: {validation_data.get('issues', [])}")
+                await self._log("validation", err, "error")
+                return self._error_response(err)
             
             logger.info(f"[ORCHESTRATOR] ← Query validated (safe)")
+            await self._log("validation", "Query is SAFE and signed. Proceeding to execution.")
             
             # Step 6: Execution
             logger.info("[ORCHESTRATOR] → Execution Agent")
+            await self._log("execution", "Executing query against database...")
             execution_response = await self._call_execution_agent(
                 sql_data,
                 validation_data,
@@ -119,13 +132,21 @@ class OrchestratorAgent:
             )
             
             if not execution_response["success"]:
-                return self._error_response(f"Execution failed: {execution_response.get('error')}")
+                err = f"Execution failed: {execution_response.get('error')}"
+                await self._log("execution", err, "error")
+                return self._error_response(err)
             
             execution_data = execution_response["data"]
             logger.info(f"[ORCHESTRATOR] ← Results returned")
+            meta = execution_data.get("metadata", {})
+            rows = meta.get('rows_returned', 0)
+            ms = meta.get('execution_time_ms', 0)
+            src = meta.get('source', 'database')
+            await self._log("execution", f"Execution complete. Returned {rows} rows in {ms:.2f}ms (from {src}).")
             
             # Step 7: Audit Logging
             logger.info("[ORCHESTRATOR] → Audit Agent")
+            await self._log("audit", "Logging query access for compliance...")
             await self._call_audit_agent(
                 user_role,
                 intent_data,
@@ -134,6 +155,8 @@ class OrchestratorAgent:
                 user_query
             )
             logger.info(f"[ORCHESTRATOR] ← Audit logged")
+            await self._log("audit", "Audit log saved successfully.")
+            await self._log("orchestrator", "Pipeline complete. Returning results to user.")
             
             # Return final results
             return {
@@ -213,6 +236,30 @@ class OrchestratorAgent:
     async def _call_sql_agent(self, intent_data: dict, schema_data: dict, entity_data: dict) -> dict:
         """Call SQL Generation Agent."""
         try:
+            limit = 100
+            order_by = None
+            constraints = intent_data.get("explicit_constraints", {})
+            threshold = constraints.get("threshold")
+            
+            if threshold and threshold.startswith("top_"):
+                try:
+                    limit = int(threshold.split("_")[1])
+                    
+                    # If we are asking for "top N", we need to order by something.
+                    # We can infer a sensible default based on the intent category.
+                    intent_cat = intent_data.get("primary_category", "")
+                    if intent_cat == "revenue_analysis":
+                        order_by = "balance DESC"
+                    elif intent_cat == "risk_analysis":
+                        order_by = "severity DESC"
+                    elif intent_cat == "transaction_analysis":
+                        order_by = "amount DESC"
+                    else:
+                        order_by = "created_at DESC" # generic fallback
+                        
+                except (ValueError, IndexError):
+                    pass
+
             async with httpx.AsyncClient() as client:
                 response = await client.post(
                     f"{self.sql_agent_url}/generate_sql",
@@ -221,7 +268,8 @@ class OrchestratorAgent:
                         "primary_entity": entity_data.get("primary_entity", "customer"),
                         "tables": schema_data.get("tables", ["customers"]),
                         "join_paths": entity_data.get("join_structure", []),
-                        "limit": 100
+                        "limit": limit,
+                        "order_by": order_by
                     },
                     timeout=10
                 )

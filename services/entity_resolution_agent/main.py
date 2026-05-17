@@ -10,6 +10,7 @@ import os
 sys.path.insert(0, "/app/shared")
 sys.path.insert(0, "/app")
 
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 import uvicorn
@@ -28,6 +29,14 @@ app = FastAPI(
     title="Entity Resolution Agent",
     description="Finds semantic join paths using business-key correlation. Week 3.",
     version="0.3.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=['*'],
+    allow_credentials=True,
+    allow_methods=['*'],
+    allow_headers=['*'],
 )
 
 resolver = EntityResolver()

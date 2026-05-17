@@ -7,6 +7,7 @@ from __future__ import annotations
 import logging
 import os
 
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException
 from intent_recognizer import IntentRecognizer
 from models import IntentRequest, IntentResponse
@@ -18,6 +19,14 @@ app = FastAPI(
     title="Intent Recognition Agent",
     description="Pattern-matching NLP service – classifies user query intent",
     version="0.2.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=['*'],
+    allow_credentials=True,
+    allow_methods=['*'],
+    allow_headers=['*'],
 )
 
 recognizer: IntentRecognizer = None  # type: ignore
