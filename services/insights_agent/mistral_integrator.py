@@ -1,0 +1,118 @@
+import logging
+import requests
+from typing import Dict, Any, List
+
+from config import Settings
+
+logger = logging.getLogger(__name__)
+
+
+class MistralIntegrator:
+    """Generate natural language insights using local Mistral (Ollama)."""
+
+    def __init__(self, config: Settings):
+        self.config = config
+        self._base_url = config.MISTRAL_API_URL
+        self._model = config.MISTRAL_MODEL
+
+    # ──────────────────────────────────────────────────────────────────────
+    # Public API
+    # ──────────────────────────────────────────────────────────────────────
+
+    def generate_summary(
+        self,
+        query_intent: str,
+        query_text: str,
+        results: List[Dict],
+        statistics: Dict[str, Any],
+        context: Dict[str, Any],
+        trends: List[Dict],
+    ) -> str:
+        """Call Mistral for a 2-3 sentence executive summary."""
+        prompt = self._build_summary_prompt(
+            query_intent, query_text, results, statistics, context, trends
+        )
+        return self._call_ollama(prompt, max_tokens=400) or "Summary unavailable."
+
+    def generate_recommendations(
+        self,
+        summary: str,
+        statistics: Dict[str, Any],
+        trends: List[Dict],
+    ) -> List[str]:
+        """Return up to 3 actionable business recommendations."""
+        prompt = (
+            f"Banking analysis summary: {summary}\n"
+            f"Key statistics: total={statistics.get('total_sum')}, "
+            f"avg={statistics.get('average')}, outliers={len(statistics.get('outliers', []))}\n"
+            f"Trends: {[t.get('metric') for t in trends]}\n\n"
+            "Generate exactly 3 specific, actionable banking business recommendations.\n"
+            "Format: numbered list 1. 2. 3. — one per line, no preamble."
+        )
+        raw = self._call_ollama(prompt, max_tokens=250)
+        if not raw:
+            return []
+        lines = [
+            ln.strip()
+            for ln in raw.splitlines()
+            if ln.strip() and ln.strip()[0].isdigit()
+        ]
+        return lines[:3]
+
+    # ──────────────────────────────────────────────────────────────────────
+    # Internal helpers
+    # ──────────────────────────────────────────────────────────────────────
+
+    def _call_ollama(self, prompt: str, max_tokens: int = 300) -> str:
+        """POST to Ollama /api/generate. Returns text or empty string on failure."""
+        try:
+            resp = requests.post(
+                f"{self._base_url}/api/generate",
+                json={
+                    "model": self._model,
+                    "prompt": prompt,
+                    "stream": False,
+                    "temperature": 0.6,
+                    "num_predict": max_tokens,
+                },
+                timeout=120,
+            )
+            if resp.status_code == 200:
+                return resp.json().get("response", "").strip()
+            logger.warning(f"Ollama HTTP {resp.status_code}: {resp.text[:200]}")
+        except Exception as exc:
+            logger.error(f"Ollama call failed: {exc}")
+        return ""
+
+    def _build_summary_prompt(
+        self,
+        query_intent: str,
+        query_text: str,
+        results: List[Dict],
+        statistics: Dict[str, Any],
+        context: Dict[str, Any],
+        trends: List[Dict],
+    ) -> str:
+        top_region = max(
+            context.get("regional_breakdown", {"Unknown": 1}),
+            key=lambda k: context.get("regional_breakdown", {}).get(k, 0),
+            default="Unknown",
+        )
+        return (
+            "You are a senior banking analyst. Write a 2-3 sentence executive summary.\n\n"
+            f"Query: \"{query_text}\"\n"
+            f"Intent category: {query_intent}\n"
+            f"Records returned: {len(results)}\n"
+            f"Sample rows: {results[:2]}\n\n"
+            f"Statistics:\n"
+            f"  Total: {statistics.get('total_sum', 'N/A')}\n"
+            f"  Average: {statistics.get('average', 'N/A')}\n"
+            f"  Std dev: {statistics.get('std_dev', 'N/A')}\n"
+            f"  Outliers: {len(statistics.get('outliers', []))}\n\n"
+            f"System context:\n"
+            f"  System total deposits: {context.get('system_totals', {}).get('total_deposits', 'N/A')}\n"
+            f"  Total customers: {context.get('system_totals', {}).get('total_customers', 'N/A')}\n"
+            f"  Top region: {top_region}\n\n"
+            f"Trends detected: {[t.get('metric') for t in trends]}\n\n"
+            "Summary (be specific, use numbers, use banking terminology):"
+        )

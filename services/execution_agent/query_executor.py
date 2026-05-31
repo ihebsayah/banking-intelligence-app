@@ -310,11 +310,26 @@ def _convert_placeholders(sql: str, parameters: list):
     If SQL already uses $N notation, pass through unchanged.
     """
     import re
+    from datetime import datetime
+    
+    def _parse_val(val):
+        if isinstance(val, str) and re.match(r"^\d{4}-\d{2}-\d{2}", val):
+            try:
+                # if it has time, parse time, else just date
+                if len(val) > 10:
+                    return datetime.fromisoformat(val.replace("Z", "+00:00"))
+                else:
+                    return datetime.strptime(val[:10], "%Y-%m-%d").date()
+            except ValueError:
+                pass
+        return val
+
     # Already postgres-style? Just unwrap any ParameterValue objects
     if re.search(r'\$\d+', sql):
         pg_params = []
         for p in parameters:
-            pg_params.append(p.value if hasattr(p, 'value') else p)
+            val = p.value if hasattr(p, 'value') else p
+            pg_params.append(_parse_val(val))
         return sql, pg_params
 
     idx = 0
@@ -324,9 +339,8 @@ def _convert_placeholders(sql: str, parameters: list):
         if char == "?":
             if idx < len(parameters):
                 p = parameters[idx]
-                if hasattr(p, "value"):
-                    p = p.value
-                pg_params.append(p)
+                val = p.value if hasattr(p, "value") else p
+                pg_params.append(_parse_val(val))
                 idx += 1
                 result.append(f"${idx}")
             else:

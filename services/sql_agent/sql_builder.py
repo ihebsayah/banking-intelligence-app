@@ -1,3 +1,4 @@
+import re
 """
 services/sql_agent/sql_builder.py
 Safe, parameterized SQL generation.
@@ -26,9 +27,8 @@ logger = logging.getLogger(__name__)
 # ──────────────────────────────────────────────────────────────────────────────
 ALLOWED_COLUMNS: Dict[str, List[str]] = {
     "customers": [
-        "customer_id", "first_name", "last_name", "email", "phone",
-        "date_of_birth", "kyc_status", "credit_score", "created_at",
-        "risk_level", "branch_id",
+        "customer_id", "name", "email", "phone",
+        "kyc_verified", "risk_score", "segment", "created_at",
     ],
     "accounts": [
         "account_id", "customer_id", "account_type",
@@ -202,6 +202,8 @@ def _infer_type(value: Any) -> str:
         return "integer"
     if isinstance(value, float):
         return "float"
+    if isinstance(value, str) and re.match(r"^\d{4}-\d{2}-\d{2}", value):
+        return "date"
     return "string"
 
 

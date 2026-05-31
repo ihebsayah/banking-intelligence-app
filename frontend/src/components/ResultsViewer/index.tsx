@@ -1,6 +1,5 @@
-// src/components/ResultsViewer/index.tsx
 import React, { useState, useMemo } from 'react';
-import { Download, Copy, Table, FileJson, FileText, Info, ChevronUp, ChevronDown } from 'lucide-react';
+import { Download, Copy, Table, FileJson, FileText, Info, ChevronUp, ChevronDown, Sparkles, ShieldAlert, CheckCircle } from 'lucide-react';
 import { useQueryStore } from '../../stores/queryStore';
 import type { TabId, SortConfig } from '../../types/results';
 
@@ -152,6 +151,8 @@ export function ResultsViewer() {
 
   const data = activeResult?.results ?? [];
   const meta = activeResult?.metadata;
+  const insights = activeResult?.insights;
+  const compliance = activeResult?.pipeline?.compliance;
 
   if (status === 'idle') {
     return (
@@ -193,6 +194,7 @@ export function ResultsViewer() {
   };
 
   const tabs = [
+    { id: 'insights' as TabId, label: 'Insights', icon: <Sparkles size={13} className="text-emerald-400" /> },
     { id: 'table' as TabId, label: 'Table',    icon: <Table size={13} /> },
     { id: 'json'  as TabId, label: 'JSON',     icon: <FileJson size={13} /> },
     { id: 'csv'   as TabId, label: 'CSV',      icon: <FileText size={13} /> },
@@ -200,8 +202,36 @@ export function ResultsViewer() {
   ];
 
   return (
-    <div className="glass-card p-5 flex flex-col gap-4">
-      {/* Tabs + actions */}
+    <div className="flex flex-col gap-4">
+      {compliance && (
+        <div className={`p-4 rounded-xl border ${compliance.compliant ? 'bg-emerald-900/10 border-emerald-500/20' : 'bg-red-900/10 border-red-500/20'} flex items-start gap-3`}>
+          {compliance.compliant ? (
+            <CheckCircle className="text-emerald-400 mt-0.5" size={18} />
+          ) : (
+            <ShieldAlert className="text-red-400 mt-0.5" size={18} />
+          )}
+          <div>
+            <h4 className={`text-sm font-semibold mb-1 ${compliance.compliant ? 'text-emerald-300' : 'text-red-300'}`}>
+              Compliance Agent: {compliance.compliant ? 'Query Compliant' : 'Violations Detected'}
+            </h4>
+            {compliance.masking_required?.length > 0 && (
+              <p className="text-xs text-slate-300 mb-2">
+                <span className="font-semibold text-slate-200">Masking Applied:</span> {compliance.masking_required.map(m => `${m.column} (${m.mask_type})`).join(', ')}
+              </p>
+            )}
+            {compliance.violations?.length > 0 && (
+              <ul className="text-xs text-red-300 list-disc list-inside space-y-1">
+                {compliance.violations.map((v, i) => (
+                  <li key={i}>{v.rule} - {v.reason} ({v.severity})</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="glass-card p-5 flex flex-col gap-4">
+        {/* Tabs + actions */}
       <div className="flex items-center justify-between border-b border-bg-border -mx-5 px-5 pb-0">
         <div className="flex gap-1">
           {tabs.map((tab) => (
@@ -243,6 +273,51 @@ export function ResultsViewer() {
 
       {/* Tab content */}
       <div className="animate-fade-in">
+        {activeTab === 'insights' && (
+          <div className="space-y-6">
+            {insights?.summary ? (
+              <>
+                <div className="bg-bg-tertiary p-4 rounded-lg border border-emerald-500/20">
+                  <h4 className="text-sm font-semibold text-emerald-400 mb-2 flex items-center gap-2"><Sparkles size={16} /> Executive Summary</h4>
+                  <p className="text-sm text-slate-300 leading-relaxed">{insights.summary}</p>
+                </div>
+                
+                {insights.recommendations && insights.recommendations.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-200 mb-3">Key Recommendations</h4>
+                    <ul className="space-y-2">
+                      {insights.recommendations.map((rec, i) => (
+                        <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
+                          <span className="text-emerald-400 font-bold">•</span>
+                          {rec}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                
+                {insights.trends && insights.trends.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-200 mb-3">Detected Trends</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      {insights.trends.map((t, i) => (
+                        <div key={i} className="bg-bg-secondary p-3 rounded-lg border border-bg-border">
+                          <p className="text-xs text-slate-500 capitalize">{t.metric.replace(/_/g, ' ')}</p>
+                          <p className="text-sm font-semibold text-slate-200">{t.value} {t.direction === 'up' ? '↗' : t.direction === 'down' ? '↘' : '→'}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="flex items-center justify-center py-10 text-slate-500 text-sm">
+                No insights generated for this query.
+              </div>
+            )}
+          </div>
+        )}
+
         {activeTab === 'table' && <TableView data={data} />}
 
         {activeTab === 'json' && (
@@ -291,5 +366,7 @@ export function ResultsViewer() {
         )}
       </div>
     </div>
+  </div>
   );
 }
+

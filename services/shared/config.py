@@ -72,13 +72,19 @@ class Settings(BaseSettings):
     VALIDATION_AGENT_URL: str = Field(default="http://localhost:8006")
     EXECUTION_AGENT_URL: str = Field(default="http://localhost:8007")
     EMBEDDING_SERVICE_URL: str = Field(default="http://localhost:8009")
+    # Phase 2 agents
+    INSIGHTS_AGENT_URL: str = Field(default="http://localhost:8013")
+    COMPLIANCE_AGENT_URL: str = Field(default="http://localhost:8011")
+    AUDIT_ENHANCEMENT_URL: str = Field(default="http://localhost:8012")
 
     # ─── Logging ──────────────────────────────────────────────────────────────
     LOG_LEVEL: str = Field(default="INFO")
 
     # ─── Feature flags ────────────────────────────────────────────────────────
-    ENABLE_INSIGHTS_AGENT: bool = Field(default=False)
+    ENABLE_INSIGHTS_AGENT: bool = Field(default=True)
+    ENABLE_COMPLIANCE_AGENT: bool = Field(default=True)
     ENABLE_CACHING: bool = Field(default=True)
+
 
     class Config:
         env_file = ".env"

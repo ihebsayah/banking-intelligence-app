@@ -295,11 +295,44 @@ async def submit_query(
         },
     ))
 
+    # Construct pipeline_steps dynamically for frontend visualization
+    pipeline = pipeline_result.get("pipeline", {})
+    pipeline_steps = []
+    
+    for step_name in ["intent", "schema", "entity_resolution", "sql", "validation", "compliance"]:
+        if step_name in pipeline:
+            step_data = pipeline[step_name]
+            is_success = step_data and (isinstance(step_data, dict) and not step_data.get("error"))
+            pipeline_steps.append({
+                "agent": step_name,
+                "status": "success" if is_success else "error",
+                "response": step_data
+            })
+            
+    # Add execution step
+    if "results" in pipeline_result:
+        pipeline_steps.append({
+            "agent": "execution",
+            "status": "success" if pipeline_result.get("status") == "success" else "error",
+            "response": {"rows_returned": len(pipeline_result.get("results", []))}
+        })
+        
+    # Add insights step
+    if "insights" in pipeline_result and pipeline_result.get("insights"):
+        pipeline_steps.append({
+            "agent": "insights",
+            "status": "success",
+            "response": pipeline_result.get("insights")
+        })
+
     return {
         "status": pipeline_result.get("status"),
         "results": pipeline_result.get("results"),
         "metadata": pipeline_result.get("metadata", {}),
-        "pipeline_steps": pipeline_result.get("pipeline_steps", []),
+        "pipeline_steps": pipeline_steps,
+        "insights": pipeline_result.get("insights"),
         "message": pipeline_result.get("message"),
         "error": pipeline_result.get("error"),
+        "request_id": pipeline_result.get("request_id"),
+        "debug_url": pipeline_result.get("debug_url"),
     }

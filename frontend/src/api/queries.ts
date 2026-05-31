@@ -48,7 +48,9 @@ export async function submitQuery(req: QueryRequest): Promise<QueryResult> {
         totalPipelineTimeMs: Date.now() - start,
         agentTimings:        data.metadata?.agent_timings,
       },
+      insights:      data.insights,
       pipelineSteps: steps,
+      pipeline:      data.pipeline,
       rawResponse:   data,
       error: data.status !== 'success' ? (data.message ?? 'Query failed') : undefined,
     };

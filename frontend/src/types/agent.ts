@@ -9,7 +9,8 @@ export type AgentName =
   | 'execution'
   | 'audit'
   | 'orchestrator'
-  | 'embedding';
+  | 'embedding'
+  | 'insights';
 
 export type AgentStatus = 'healthy' | 'slow' | 'down' | 'unknown';
 
@@ -77,4 +78,5 @@ export const AGENT_REGISTRY: AgentInfo[] = [
   { name: 'execution',         displayName: 'Execution Agent',    port: 8007, color: '#ef4444', description: 'Secure query execution' },
   { name: 'audit',             displayName: 'Audit Agent',        port: 8008, color: '#ec4899', description: 'Immutable audit logging' },
   { name: 'embedding',         displayName: 'Embedding Service',  port: 8009, color: '#14b8a6', description: 'Schema vectorization service' },
+  { name: 'insights',          displayName: 'Insights Agent',     port: 8013, color: '#a855f7', description: 'Natural language insight generation' },
 ];

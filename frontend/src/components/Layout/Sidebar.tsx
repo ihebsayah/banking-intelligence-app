@@ -3,18 +3,20 @@ import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, FlaskConical, Activity, Gauge, Settings,
-  Cpu, Wifi, WifiOff, Shield
+  Cpu, Wifi, WifiOff, Shield, Bug
 } from 'lucide-react';
 import { useAgentStore } from '../../stores/agentStore';
 import { useQueryStore } from '../../stores/queryStore';
 
 const NAV_ITEMS = [
-  { to: '/',            icon: LayoutDashboard, label: 'Dashboard'   },
-  { to: '/query',       icon: FlaskConical,    label: 'Query Tester' },
-  { to: '/agents',      icon: Activity,        label: 'Agent Monitor' },
-  { to: '/performance', icon: Gauge,           label: 'Performance'  },
-  { to: '/settings',    icon: Settings,        label: 'Settings'     },
+  { to: '/dev',         icon: LayoutDashboard, label: 'Dashboard'   },
+  { to: '/dev/query',   icon: FlaskConical,    label: 'Query Tester' },
+  { to: '/dev/agents',  icon: Activity,        label: 'Agent Monitor' },
+  { to: '/dev/performance', icon: Gauge,       label: 'Performance'  },
+  { to: '/dev/debug',   icon: Bug,             label: 'Debugger'     },
+  { to: '/dev/settings',icon: Settings,        label: 'Settings'     },
 ];
+
 
 export function Sidebar() {
   const location       = useLocation();
@@ -45,7 +47,9 @@ export function Sidebar() {
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 space-y-1">
         {NAV_ITEMS.map(({ to, icon: Icon, label }) => {
-          const active = to === '/' ? location.pathname === '/' : location.pathname.startsWith(to);
+          const active = to === '/dev'
+            ? location.pathname === '/dev' || location.pathname === '/dev/'
+            : location.pathname.startsWith(to);
           return (
             <NavLink
               key={to}
@@ -57,6 +61,17 @@ export function Sidebar() {
             </NavLink>
           );
         })}
+
+        {/* Business Portal Toggle */}
+        <div className="pt-4 mt-4 border-t border-bg-border">
+          <NavLink
+            to="/dashboard"
+            className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-400 hover:bg-bg-hover hover:text-slate-200 transition-all text-xs font-semibold"
+          >
+            <LayoutDashboard size={14} className="text-blue-400" />
+            <span>Business Portal</span>
+          </NavLink>
+        </div>
       </nav>
 
       {/* Status footer */}

@@ -19,7 +19,7 @@ services:
     networks:
       - banking-network
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:80"]
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:80"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -72,6 +72,7 @@ services:
     volumes:
       - ./services/orchestrator:/app
       - ./services/shared:/app/shared
+      - ./services/debugging:/app/debugging
     ports:
       - "8001:8001"
     environment:
@@ -87,6 +88,8 @@ services:
       - VALIDATION_AGENT_URL=http://validation-agent:8006
       - EXECUTION_AGENT_URL=http://execution-agent:8007
       - AUDIT_AGENT_URL=http://audit-agent:8008
+      - INSIGHTS_AGENT_URL=http://insights-agent:8013
+      - COMPLIANCE_AGENT_URL=http://compliance-agent:8011
       - QUERY_SIGNING_KEY=DEMO_KEY_CHANGE_IN_PRODUCTION_DO_NOT_USE_IN_PROD
       - LOG_LEVEL=INFO
     depends_on:
@@ -96,6 +99,23 @@ services:
       - banking-network
     command: >
       bash -c "pip install -r requirements.txt && python main.py"
+
+  debug-service:
+    container_name: banking_debug_service
+    image: python:3.11-slim
+    working_dir: /app
+    volumes:
+      - ./services/debugging:/app
+    ports:
+      - "8099:8099"
+    environment:
+      - LOG_LEVEL=DEBUG
+      - IS_DEBUG_SERVICE=true
+    networks:
+      - banking-network
+    command: >
+      bash -c "pip install fastapi uvicorn websockets requests && python main.py"
+
 
   # ============================================================================
   # MICROSERVICE AGENTS
@@ -290,6 +310,72 @@ services:
       - banking-network
     command: >
       bash -c "pip install -r requirements.txt && python main.py"
+
+  # ============================================================================
+  # PHASE 2: INSIGHTS, COMPLIANCE & AUDIT ENHANCEMENT
+  # ============================================================================
+
+  insights-agent:
+    container_name: banking_insights_agent
+    image: python:3.11-slim
+    working_dir: /app
+    volumes:
+      - ./services/insights_agent:/app
+    ports:
+      - "8013:8013"
+    environment:
+      - DATABASE_URL=postgresql://banking_user:securepass123@postgres-main:5432/banking_dev
+      - MISTRAL_API_URL=http://ollama:11434
+      - MISTRAL_MODEL=mistral
+      - LOG_LEVEL=INFO
+    depends_on:
+      - postgres-main
+      - ollama
+    networks:
+      - banking-network
+    command: >
+      bash -c "pip install -q -r requirements.txt && uvicorn main:app --host 0.0.0.0 --port 8013 --reload"
+
+  compliance-agent:
+    container_name: banking_compliance_agent
+    image: python:3.11-slim
+    working_dir: /app
+    volumes:
+      - ./services/compliance_agent:/app
+    ports:
+      - "8011:8011"
+    environment:
+      - DATABASE_URL=postgresql://banking_user:securepass123@postgres-main:5432/banking_dev
+      - LOG_LEVEL=INFO
+    depends_on:
+      postgres-main:
+        condition: service_healthy
+    networks:
+      - banking-network
+    command: >
+      bash -c "pip install -q -r requirements.txt && uvicorn main:app --host 0.0.0.0 --port 8011 --reload"
+
+  audit-enhancement:
+    container_name: banking_audit_enhancement
+    image: python:3.11-slim
+    working_dir: /app
+    volumes:
+      - ./services/audit_enhancement:/app
+    ports:
+      - "8012:8012"
+    environment:
+      - DATABASE_URL=postgresql://banking_user:securepass123@postgres-main:5432/banking_dev
+      - AUDIT_DATABASE_URL=postgresql://audit_user:securepass123@postgres-audit:5432/audit_logs
+      - LOG_LEVEL=INFO
+    depends_on:
+      postgres-main:
+        condition: service_healthy
+      postgres-audit:
+        condition: service_healthy
+    networks:
+      - banking-network
+    command: >
+      bash -c "pip install -q -r requirements.txt && uvicorn main:app --host 0.0.0.0 --port 8012 --reload"
 
   # ============================================================================
   # DATABASES

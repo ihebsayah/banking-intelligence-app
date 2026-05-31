@@ -25,7 +25,7 @@ export interface FilterConfig {
   value: string;
 }
 
-export type TabId = 'json' | 'csv' | 'table' | 'metadata';
+export type TabId = 'json' | 'csv' | 'table' | 'metadata' | 'insights';
 
 export interface SQLValidationResult {
   valid: boolean;

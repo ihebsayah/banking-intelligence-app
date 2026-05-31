@@ -54,7 +54,21 @@ export interface QueryResult {
   results?: unknown[];
   csvData?: string;
   metadata?: QueryMetadata;
+  insights?: {
+    summary?: string;
+    key_metrics?: Record<string, unknown>;
+    recommendations?: string[];
+    trends?: { metric: string; value: number; direction: string }[];
+    anomalies?: unknown[];
+  };
   pipelineSteps: PipelineStep[];
+  pipeline?: {
+    compliance?: {
+      compliant: boolean;
+      violations: { rule: string; severity: string; reason: string }[];
+      masking_required: { column: string; mask_type: string }[];
+    };
+  };
   error?: string;
   rawResponse?: unknown;
 }

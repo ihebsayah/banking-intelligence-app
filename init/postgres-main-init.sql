@@ -282,3 +282,96 @@ SELECT
     'Locally tailored financial product for Tunisian market ' || i
 FROM generate_series(1, 200) AS i
 ON CONFLICT (product_id) DO NOTHING;
+
+-- =============================================================================
+-- PHASE 2: Compliance & Audit Enhancement Schema
+-- =============================================================================
+
+-- Compliance Rules Table
+CREATE TABLE IF NOT EXISTS compliance_rules (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    rule_name VARCHAR(255) NOT NULL,
+    regulation VARCHAR(50),
+    rule_type VARCHAR(50),
+    condition VARCHAR(500),
+    action VARCHAR(500),
+    enabled BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_compliance_rules_regulation ON compliance_rules(regulation);
+CREATE INDEX IF NOT EXISTS idx_compliance_rules_enabled    ON compliance_rules(enabled);
+
+-- Data Lineage Table
+CREATE TABLE IF NOT EXISTS data_lineage (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    query_id VARCHAR(100),
+    source_table VARCHAR(100),
+    source_column VARCHAR(100),
+    destination_column VARCHAR(100),
+    user_id VARCHAR(100),
+    accessed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_lineage_query_id     ON data_lineage(query_id);
+CREATE INDEX IF NOT EXISTS idx_lineage_source_table ON data_lineage(source_table);
+CREATE INDEX IF NOT EXISTS idx_lineage_user_id      ON data_lineage(user_id);
+CREATE INDEX IF NOT EXISTS idx_lineage_accessed_at  ON data_lineage(accessed_at);
+
+-- Compliance Violations Table
+CREATE TABLE IF NOT EXISTS compliance_violations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    query_id VARCHAR(100),
+    user_id VARCHAR(100),
+    violation_type VARCHAR(50),
+    severity VARCHAR(20),
+    description TEXT,
+    regulation VARCHAR(50),
+    detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    status VARCHAR(20) DEFAULT 'open',
+    resolution_notes TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_violations_query_id    ON compliance_violations(query_id);
+CREATE INDEX IF NOT EXISTS idx_violations_user_id     ON compliance_violations(user_id);
+CREATE INDEX IF NOT EXISTS idx_violations_severity    ON compliance_violations(severity);
+CREATE INDEX IF NOT EXISTS idx_violations_status      ON compliance_violations(status);
+CREATE INDEX IF NOT EXISTS idx_violations_detected_at ON compliance_violations(detected_at);
+
+-- Regulatory Reports Table
+CREATE TABLE IF NOT EXISTS regulatory_reports (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    report_type VARCHAR(100),
+    regulation VARCHAR(50),
+    report_period_start DATE,
+    report_period_end DATE,
+    generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    report_content TEXT,
+    status VARCHAR(20) DEFAULT 'draft',
+    submitted_to VARCHAR(255),
+    submitted_at TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_reports_report_type ON regulatory_reports(report_type);
+CREATE INDEX IF NOT EXISTS idx_reports_regulation  ON regulatory_reports(regulation);
+CREATE INDEX IF NOT EXISTS idx_reports_status      ON regulatory_reports(status);
+
+-- =============================================================================
+-- Seed Compliance Rules (12 rules: GDPR x3, PCI-DSS x3, SOX x3, AML/KYC x3)
+-- =============================================================================
+
+INSERT INTO compliance_rules (rule_name, regulation, rule_type, condition, action, enabled) VALUES
+    ('Mask PII - GDPR',                      'GDPR',    'data_masking',   'column IN (ssn, email, phone, national_id)', 'MASK_VALUE',       true),
+    ('Right to be Forgotten - 3yr',           'GDPR',    'data_retention', 'last_activity < NOW() - INTERVAL 3 YEAR',   'DELETE_RECORD',    true),
+    ('Data Portability on Request',           'GDPR',    'data_export',    'user_requests_export = true',               'EXPORT_JSON',      true),
+    ('Mask Card Numbers - PCI-DSS',           'PCI-DSS', 'data_masking',   'column IN (credit_card, card_number, pan)', 'MASK_LAST4',       true),
+    ('Restrict Card Data Access - PCI-DSS',   'PCI-DSS', 'access_control', 'user_role NOT IN (compliance, admin)',      'DENY_ACCESS',      true),
+    ('Tokenize Card Data - PCI-DSS',          'PCI-DSS', 'data_handling',  'column = credit_card',                      'TOKENIZE',         true),
+    ('Log All Sensitive Access - SOX',        'SOX',     'audit',          'table IN (accounts, transactions, risk_flags)', 'LOG_ACCESS',   true),
+    ('Segregation of Duties - SOX',           'SOX',     'access_control', 'user_role NOT IN (maker_checker)',          'DENY_ACCESS',      true),
+    ('Change Management Approval - SOX',      'SOX',     'change_control', 'schema_change = true',                      'REQUIRE_APPROVAL', true),
+    ('Monitor Large Transactions - AML',      'AML',     'monitoring',     'amount > 10000',                            'FLAG_TRANSACTION', true),
+    ('Sanctions Screening - AML',             'AML',     'screening',      'new_customer = true',                       'SCREEN_NAMES',     true),
+    ('Enhanced Due Diligence - KYC',          'KYC',     'due_diligence',  'pep_status = true',                         'REQUIRE_EDD',      true)
+ON CONFLICT DO NOTHING;
+
