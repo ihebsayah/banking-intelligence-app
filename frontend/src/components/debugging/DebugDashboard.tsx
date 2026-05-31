@@ -24,8 +24,8 @@ export const DebugDashboard: React.FC<DebugDashboardProps> = ({ requestId }) => 
     setError(null);
     try {
       const [logsRes, statsRes] = await Promise.all([
-        fetch(`http://localhost:8099/debug/logs/${requestId}`),
-        fetch(`http://localhost:8099/debug/statistics/${requestId}`)
+        fetch(`/debug/logs/${requestId}`),
+        fetch(`/debug/statistics/${requestId}`)
       ]);
 
       if (!logsRes.ok || !statsRes.ok) throw new Error('Failed to fetch debug data');
@@ -128,7 +128,7 @@ export const DebugDashboard: React.FC<DebugDashboardProps> = ({ requestId }) => 
       {/* Error banner */}
       {error && (
         <div className="mx-6 mt-4 p-4 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-lg text-sm font-mono">
-          ⚠ {error} — Check that the debug service is running on port 8099.
+          ⚠ {error} — Check that the debug service is running and healthy.
         </div>
       )}
 

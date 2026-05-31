@@ -11,11 +11,9 @@ export const LiveStream: React.FC<LiveStreamProps> = ({ requestId }) => {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Connect to WebSocket on port 8099
+    // Connect to WebSocket using same host & port (via Nginx proxy)
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsHost = window.location.hostname;
-    const wsPort = '8099';
-    const wsUrl = `${protocol}//${wsHost}:${wsPort}/debug/stream`;
+    const wsUrl = `${protocol}//${window.location.host}/debug/stream`;
 
     console.log(`Connecting to WebSocket at ${wsUrl}`);
     ws.current = new WebSocket(wsUrl);

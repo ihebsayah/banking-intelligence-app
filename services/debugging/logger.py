@@ -16,9 +16,11 @@ IS_DEBUG_SERVICE = os.environ.get("IS_DEBUG_SERVICE", "false").lower() == "true"
 def _send_background_post(url: str, data: dict):
     def post():
         try:
-            requests.post(url, json=data, timeout=2.0)
-        except Exception:
-            pass
+            r = requests.post(url, json=data, timeout=2.0)
+            if r.status_code != 200:
+                print(f"[DEBUG POST ERROR] {url} returned {r.status_code}: {r.text}")
+        except Exception as e:
+            print(f"[DEBUG POST EXCEPTION] {url} failed: {e}")
     threading.Thread(target=post, daemon=True).start()
 
 
