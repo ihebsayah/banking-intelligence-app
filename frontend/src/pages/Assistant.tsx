@@ -1,12 +1,13 @@
 // src/pages/Assistant.tsx
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts';
 import { bankingApi, SUGGESTED_QUERIES, getMockQueryResult } from '../api/banking';
 import { useBankingQueryStore } from '../stores/bankingQueryStore';
 import { useAuthStore } from '../stores/authStore';
-import type { QueryResult, Insight, QueryResultRow } from '../types/insights';
+import type { QueryResult, Insight, QueryResultRow, PipelineStep } from '../types/insights';
 
 /* ─────────────────────── types ─────────────────────── */
 type TabKey = 'table' | 'chart' | 'json' | 'csv';
@@ -60,16 +61,85 @@ function downloadCSV(rows: QueryResultRow[], filename = 'export.csv') {
   a.click();
 }
 
-/* ─────────────────────── pipeline steps mock ─────────────────────── */
-const PIPELINE_STEPS = [
-  { label: 'Intent Parsing',      icon: '🧠', ms: 42  },
-  { label: 'Query Planning',      icon: '📋', ms: 78  },
-  { label: 'SQL Generation',      icon: '⚙️',  ms: 115 },
-  { label: 'Database Execution',  icon: '🗄️',  ms: 210 },
-  { label: 'Insight Generation',  icon: '💡', ms: 55  },
-];
+/* ─────────────────────── pipeline trace (real data) ─────────────────────── */
 
-/* ─────────────────────── sub-components ─────────────────────── */
+const AGENT_ICONS: Record<string, string> = {
+  intent: '🧠', schema: '🗂️', entity_resolution: '🔗',
+  sql: '⚙️', validation: '🛡️', compliance: '⚖️',
+  execution: '🗄️', insights: '💡', audit: '📝',
+};
+
+function PipelineTrace({ steps, requestId }: { steps?: PipelineStep[]; requestId?: string }) {
+  const navigate = useNavigate();
+  const [visible, setVisible] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setVisible(true), 50); return () => clearTimeout(t); }, []);
+
+  if (!steps || steps.length === 0) return null;
+
+  const totalMs = steps.reduce((sum, s) => {
+    const ms = (s.response as any)?.execution_time_ms ?? 0;
+    return sum + (typeof ms === 'number' ? ms : 0);
+  }, 0) || 1;
+
+  return (
+    <div className={`pipeline-trace${visible ? ' visible' : ''}`}>
+      <div className="pipeline-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span>🔬 Agent Pipeline Trace</span>
+        {requestId && (
+          <button
+            onClick={() => navigate(`/debug?request_id=${requestId}`)}
+            style={{
+              fontSize: '11px', fontFamily: 'monospace', padding: '3px 10px',
+              background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.3)',
+              borderRadius: '6px', color: '#60a5fa', cursor: 'pointer', transition: 'all 0.2s',
+            }}
+            title="Open full debug dashboard"
+          >
+            🔍 Debug Trace →
+          </button>
+        )}
+      </div>
+      <div className="pipeline-steps">
+        {steps.map((s, i) => {
+          const ms = (s.response as any)?.execution_time_ms;
+          const pct = ms != null ? Math.max(Math.round((ms / totalMs) * 100), 6) : 6;
+          const isError = s.status === 'error';
+          return (
+            <div key={i} className="pipeline-step">
+              <div className="pipeline-step-icon">{AGENT_ICONS[s.agent] ?? '⚡'}</div>
+              <div className="pipeline-step-body">
+                <div className="pipeline-step-label" style={{ color: isError ? '#f87171' : undefined }}>
+                  {s.agent.replace(/_/g, ' ')}
+                  {isError && <span style={{ marginLeft: 6, fontSize: 10 }}>✗ error</span>}
+                </div>
+                <div className="pipeline-step-bar-wrap">
+                  <div
+                    className="pipeline-step-bar"
+                    style={{
+                      width: `${pct}%`,
+                      animationDelay: `${i * 80}ms`,
+                      background: isError ? '#ef4444' : undefined,
+                    }}
+                  />
+                </div>
+              </div>
+              <div className="pipeline-step-ms">
+                {ms != null ? `${ms.toFixed(0)}ms` : '—'}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {requestId && (
+        <div style={{ textAlign: 'right', marginTop: 8 }}>
+          <code style={{ fontSize: 10, color: '#475569', fontFamily: 'monospace' }}>
+            {requestId}
+          </code>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function CategoryChips({ onSelect }: { onSelect: (q: string) => void }) {
   const categories = Array.from(new Set(SUGGESTED_QUERIES.map(q => q.category)));
@@ -102,41 +172,6 @@ function CategoryChips({ onSelect }: { onSelect: (q: string) => void }) {
             <span className="chip-dot" style={{ background: CATEGORY_COLORS[q.category] }} />
             {q.label}
           </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function PipelineTrace({ execMs }: { execMs: number }) {
-  const [visible, setVisible] = useState(false);
-  useEffect(() => { const t = setTimeout(() => setVisible(true), 50); return () => clearTimeout(t); }, []);
-
-  let elapsed = 0;
-  const steps = PIPELINE_STEPS.map(s => {
-    const start = elapsed;
-    elapsed += s.ms;
-    return { ...s, start, pct: Math.round((s.ms / execMs) * 100) };
-  });
-
-  return (
-    <div className={`pipeline-trace${visible ? ' visible' : ''}`}>
-      <div className="pipeline-header">🔬 Agent Pipeline Trace</div>
-      <div className="pipeline-steps">
-        {steps.map((s, i) => (
-          <div key={i} className="pipeline-step">
-            <div className="pipeline-step-icon">{s.icon}</div>
-            <div className="pipeline-step-body">
-              <div className="pipeline-step-label">{s.label}</div>
-              <div className="pipeline-step-bar-wrap">
-                <div
-                  className="pipeline-step-bar"
-                  style={{ width: `${Math.max(s.pct, 8)}%`, animationDelay: `${i * 80}ms` }}
-                />
-              </div>
-            </div>
-            <div className="pipeline-step-ms">{s.ms}ms</div>
-          </div>
         ))}
       </div>
     </div>
@@ -299,8 +334,8 @@ function ResultViewer({ result }: { result: QueryResult }) {
       {/* insights */}
       {result.insights && <InsightsPanel insight={result.insights} />}
 
-      {/* pipeline trace */}
-      <PipelineTrace execMs={result.execution_time_ms} />
+      {/* pipeline trace — real agent data */}
+      <PipelineTrace steps={result.pipeline_steps} requestId={result.request_id} />
     </div>
   );
 }

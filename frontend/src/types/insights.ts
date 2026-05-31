@@ -15,6 +15,12 @@ export interface QueryResultRow {
   [key: string]: string | number | boolean | null;
 }
 
+export interface PipelineStep {
+  agent: string;
+  status: 'success' | 'error';
+  response: Record<string, unknown>;
+}
+
 export interface QueryResult {
   query_id: string;
   query_text: string;
@@ -27,6 +33,10 @@ export interface QueryResult {
   data_freshness: 'real-time' | '6-hour' | 'daily';
   created_at: string;
   insights?: Insight;
+  // Debug tracing
+  request_id?: string;
+  debug_url?: string;
+  pipeline_steps?: PipelineStep[];
 }
 
 export interface BankingQueryHistoryItem {

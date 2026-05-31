@@ -4,8 +4,49 @@ import type { QueryResult, Insight } from '../types/insights';
 
 export const bankingApi = {
   submitQuery: async (query: string, userRole: string): Promise<QueryResult> => {
-    const res = await apiClient.post<QueryResult>('/query', { query, user_role: userRole });
-    return res.data;
+    const res = await apiClient.post<any>('/query', { query, user_role: userRole });
+    const raw = res.data;
+
+    // The gateway returns a flat response — map it to our QueryResult shape
+    const meta = raw.metadata ?? {};
+    const insights = raw.insights ?? null;
+
+    // Normalise insight shape coming from the insights-agent
+    let normalisedInsight: Insight | undefined;
+    if (insights) {
+      normalisedInsight = {
+        insight_id: raw.request_id ?? 'n/a',
+        query_id: raw.request_id ?? 'n/a',
+        summary: insights.summary ?? '',
+        key_metrics: insights.key_metrics ?? {},
+        trends: (insights.trends ?? []).map((t: any) => ({
+          label: t.metric ?? t.label ?? '',
+          direction: t.direction ?? 'stable',
+          value: t.value != null ? String(t.value) : '',
+        })),
+        anomalies: insights.anomalies ?? [],
+        recommendations: insights.recommendations ?? [],
+        confidence: insights.confidence ?? 1.0,
+        generated_at: new Date().toISOString(),
+      };
+    }
+
+    return {
+      query_id: raw.request_id ?? crypto.randomUUID(),
+      query_text: query,
+      user_id: userRole,
+      results: raw.results ?? [],
+      row_count: meta.rows_returned ?? (raw.results ?? []).length,
+      execution_time_ms: meta.execution_time_ms ?? 0,
+      source: meta.source === 'cache' ? 'cache' : 'database',
+      data_freshness: 'real-time',
+      created_at: new Date().toISOString(),
+      insights: normalisedInsight,
+      // Debug tracing fields — surfaced from gateway
+      request_id: raw.request_id,
+      debug_url: raw.debug_url,
+      pipeline_steps: raw.pipeline_steps,
+    };
   },
   getHistory: async () => {
     const res = await apiClient.get('/queries/history');
