@@ -38,12 +38,26 @@ function formatMs(ms: number) {
 }
 
 function formatNumber(v: unknown): string {
+  if (v == null) return '—';
+  
+  let numVal: number | null = null;
   if (typeof v === 'number') {
-    if (v > 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
-    if (v > 1_000)     return v.toLocaleString();
-    return String(v);
+    numVal = v;
+  } else if (typeof v === 'string' && v.trim() !== '') {
+    // Check if it's a valid numeric string, excluding dates, hours, and IDs
+    const parsed = Number(v);
+    if (!isNaN(parsed) && !v.includes('-') && !v.includes(':') && !/^[A-Za-z]+_?\d+$/.test(v)) {
+      numVal = parsed;
+    }
   }
-  return String(v ?? '—');
+
+  if (numVal !== null) {
+    if (numVal > 1_000_000) return `$${(numVal / 1_000_000).toFixed(1)}M`;
+    if (numVal > 1_000)     return numVal.toLocaleString();
+    return String(v); // preserve decimals if it was originally formatted
+  }
+  
+  return String(v);
 }
 
 function toCSV(rows: QueryResultRow[]): string {
@@ -240,9 +254,17 @@ function ResultViewer({ result }: { result: QueryResult }) {
   const rows = result.results;
   const cols = rows.length ? Object.keys(rows[0]) : [];
 
-  // pick numeric col for chart
-  const numericCols = cols.filter(c => typeof rows[0]?.[c] === 'number');
-  const labelCol = cols.find(c => typeof rows[0]?.[c] === 'string') ?? cols[0];
+  // pick numeric col for chart (supporting actual numbers and numeric strings)
+  const numericCols = cols.filter(c => {
+    const val = rows[0]?.[c];
+    if (typeof val === 'number') return true;
+    if (typeof val === 'string' && val.trim() !== '') {
+      const parsed = Number(val);
+      return !isNaN(parsed) && !val.includes('-') && !val.includes(':') && !/^[A-Za-z]+_?\d+$/.test(val);
+    }
+    return false;
+  });
+  const labelCol = cols.find(c => typeof rows[0]?.[c] === 'string' && isNaN(Number(rows[0]?.[c]))) ?? cols[0];
   const valueCol = numericCols[0] ?? cols[1];
 
   const chartData = rows.slice(0, 12).map(r => ({
