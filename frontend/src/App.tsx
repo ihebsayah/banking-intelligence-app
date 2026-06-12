@@ -15,6 +15,12 @@ import { BankingDashboard } from './pages/BankingDashboard';
 import { Branches } from './pages/Branches';
 import { Assistant } from './pages/Assistant';
 import { DebugPage } from './pages/DebugPage';
+import { KpiPage } from './pages/KpiPage';
+import { RiskPage } from './pages/RiskPage';
+import { CompliancePage } from './pages/CompliancePage';
+import { ReportsPage } from './pages/ReportsPage';
+import { AdminPage } from './pages/AdminPage';
+import { ProfilePage } from './pages/ProfilePage';
 import { useWebSocket } from './hooks/useWebSocket';
 
 function AppShell() {
@@ -31,20 +37,23 @@ function AppShell() {
     );
   }
 
-  const isBusinessRoute = ['/', '/dashboard', '/branches', '/assistant'].includes(path) || (path === '/settings' && localStorage.getItem('auth_token'));
+  const isDevRoute = path === '/dev' || path.startsWith('/dev/');
 
-  if (isBusinessRoute) {
+  if (isDevRoute) {
+    // Developer Layout - Gated to admin users only
     return (
-      <div className="flex h-screen overflow-hidden bg-[#040711]">
-        <BankingSidebar />
+      <div className="flex h-screen overflow-hidden bg-bg-primary">
+        <Sidebar />
         <div className="flex-1 flex flex-col overflow-hidden">
+          <Header />
           <main className="flex-1 overflow-y-auto">
             <Routes>
-              <Route path="/" element={<ProtectedRoute><BankingDashboard /></ProtectedRoute>} />
-              <Route path="/dashboard" element={<ProtectedRoute><BankingDashboard /></ProtectedRoute>} />
-              <Route path="/branches"  element={<ProtectedRoute><Branches /></ProtectedRoute>} />
-              <Route path="/assistant" element={<ProtectedRoute><Assistant /></ProtectedRoute>} />
-              <Route path="/settings"  element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+              <Route path="/dev"            element={<ProtectedRoute requiredRole="admin"><Dashboard /></ProtectedRoute>} />
+              <Route path="/dev/query"       element={<ProtectedRoute requiredRole="admin"><QueryTester /></ProtectedRoute>} />
+              <Route path="/dev/agents"      element={<ProtectedRoute requiredRole="admin"><AgentMonitorPage /></ProtectedRoute>} />
+              <Route path="/dev/performance" element={<ProtectedRoute requiredRole="admin"><PerformanceMonitor /></ProtectedRoute>} />
+              <Route path="/dev/settings"    element={<ProtectedRoute requiredRole="admin"><Settings /></ProtectedRoute>} />
+              <Route path="/dev/debug"       element={<ProtectedRoute requiredRole="admin"><DebugPage /></ProtectedRoute>} />
             </Routes>
           </main>
         </div>
@@ -52,20 +61,24 @@ function AppShell() {
     );
   }
 
-  // Developer Layout
+  // Business Banking Portal Layout
   return (
-    <div className="flex h-screen overflow-hidden bg-bg-primary">
-      <Sidebar />
+    <div className="flex h-screen overflow-hidden bg-[#040711]">
+      <BankingSidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
-        <Header />
         <main className="flex-1 overflow-y-auto">
           <Routes>
-            <Route path="/dev"            element={<Dashboard />} />
-            <Route path="/dev/query"       element={<QueryTester />} />
-            <Route path="/dev/agents"      element={<AgentMonitorPage />} />
-            <Route path="/dev/performance" element={<PerformanceMonitor />} />
-            <Route path="/dev/settings"    element={<Settings />} />
-            <Route path="/dev/debug"       element={<DebugPage />} />
+            <Route path="/" element={<ProtectedRoute><BankingDashboard /></ProtectedRoute>} />
+            <Route path="/dashboard" element={<ProtectedRoute><BankingDashboard /></ProtectedRoute>} />
+            <Route path="/branches"  element={<ProtectedRoute><Branches /></ProtectedRoute>} />
+            <Route path="/assistant" element={<ProtectedRoute><Assistant /></ProtectedRoute>} />
+            <Route path="/kpi"       element={<ProtectedRoute><KpiPage /></ProtectedRoute>} />
+            <Route path="/risk"       element={<ProtectedRoute requiredRole={['analyst', 'manager', 'compliance', 'admin']}><RiskPage /></ProtectedRoute>} />
+            <Route path="/compliance" element={<ProtectedRoute requiredRole={['compliance', 'manager', 'admin']}><CompliancePage /></ProtectedRoute>} />
+            <Route path="/reports"    element={<ProtectedRoute requiredRole={['manager', 'admin']}><ReportsPage /></ProtectedRoute>} />
+            <Route path="/admin"      element={<ProtectedRoute requiredRole="admin"><AdminPage /></ProtectedRoute>} />
+            <Route path="/profile"    element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+            <Route path="/settings"  element={<ProtectedRoute><Settings /></ProtectedRoute>} />
           </Routes>
         </main>
       </div>

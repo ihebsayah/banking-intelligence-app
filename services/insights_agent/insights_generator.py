@@ -12,8 +12,16 @@ logger = logging.getLogger(__name__)
 # Columns that count as numeric for banking analysis
 _KNOWN_NUMERIC = {
     "balance", "amount", "fee", "revenue", "count", "score",
-    "rate", "available_balance", "risk_score",
+    "rate", "available_balance", "risk_score", "avg", "sum",
+    "min", "max", "average", "total_balance", "total_amount",
 }
+
+# Priority ordering of numeric fields (monetary and volumes first, ratios and rates last)
+_NUMERIC_PRIORITY = [
+    "balance", "total_balance", "total_amount", "sum", "avg", "average",
+    "available_balance", "amount", "fee", "revenue", 
+    "count", "score", "risk_score", "rate"
+]
 
 
 class InsightsGenerator:
@@ -35,6 +43,7 @@ class InsightsGenerator:
 
             # Step 1 — statistics
             numeric_cols = self._detect_numeric_columns(request.results)
+            primary_col = numeric_cols[0] if numeric_cols else None
             stats = self.analyzer.analyze(request.results, numeric_cols)
 
             # Step 2 — context
@@ -56,6 +65,7 @@ class InsightsGenerator:
                 stats_dict,
                 context_dict,
                 [t.model_dump() for t in trends],
+                primary_col=primary_col,
             )
 
             # Step 5 — recommendations
@@ -99,7 +109,14 @@ class InsightsGenerator:
     def _detect_numeric_columns(self, results: List[Dict]) -> List[str]:
         if not results:
             return []
-        return [k for k in results[0] if k in _KNOWN_NUMERIC]
+        found = [k for k in results[0] if k in _KNOWN_NUMERIC]
+        # sort by priority: balance/amount first, risk_score/rate last
+        def priority(col):
+            try:
+                return _NUMERIC_PRIORITY.index(col)
+            except ValueError:
+                return len(_NUMERIC_PRIORITY)
+        return sorted(found, key=priority)
 
     @staticmethod
     def _concentration(top_sum, total) -> float:

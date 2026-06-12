@@ -99,8 +99,35 @@ class AccessController:
         return user_role.lower() != "compliance"
 
     def filter_columns(self, row: Dict, user_role: str) -> Dict:
-        """Remove columns the role cannot see from a result row."""
+        """Remove columns the role cannot see from a result row, allowing dynamic/aggregate columns."""
         visible = self.get_visible_columns(user_role)
         if visible is None:
             return row
-        return {k: v for k, v in row.items() if k.lower() in visible}
+            
+        all_db_cols = {
+            # customers
+            "id", "customer_id", "name", "email", "phone", "kyc_verified", "risk_score", "segment", "created_at", "updated_at",
+            "credit_score", "ssn", "social_security_number", "credit_card", "credit_card_number", "card_number", 
+            "email_address", "password", "password_hash", "phone_number", "date_of_birth", "dob",
+            # accounts
+            "account_id", "account_type", "status", "balance", "available_balance", "currency", "branch_id",
+            # transactions
+            "transaction_id", "amount", "transaction_type", "transaction_date", "description",
+            # branches
+            "branch_name", "state", "city", "country", "manager_id", "opened_at",
+            # products
+            "product_id", "category",
+            # risk_flags
+            "risk_id", "flag_type", "severity", "resolved", "flagged_at", "resolved_at",
+            # loans
+            "loan_id", "loan_type", "principal_amount", "interest_rate", "term_months", "disbursed_at", "due_date",
+            # employees
+            "employee_id", "first_name", "last_name", "role", "hired_at"
+        }
+        
+        filtered = {}
+        for k, v in row.items():
+            k_lower = k.lower()
+            if k_lower in visible or k_lower not in all_db_cols:
+                filtered[k] = v
+        return filtered

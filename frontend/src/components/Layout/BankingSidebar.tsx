@@ -1,16 +1,38 @@
 // src/components/Layout/BankingSidebar.tsx
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Building2, LayoutDashboard, GitBranch, Bot, Settings, LogOut, ChevronLeft, ChevronRight, Bell } from 'lucide-react';
+import { 
+  Building2, 
+  LayoutDashboard, 
+  GitBranch, 
+  Bot, 
+  Settings, 
+  LogOut, 
+  ChevronLeft, 
+  ChevronRight, 
+  Bell,
+  BarChart3,
+  ShieldAlert,
+  Scale,
+  FileText,
+  Settings2,
+  User
+} from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { useUIStore } from '../../stores/uiStore';
 import { clsx } from 'clsx';
 
 const NAV_ITEMS = [
-  { to: '/dashboard',  icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/branches',   icon: GitBranch,        label: 'Branches'  },
-  { to: '/assistant',  icon: Bot,              label: 'AI Assistant' },
-  { to: '/settings',  icon: Settings,          label: 'Settings'  },
+  { to: '/dashboard',  icon: LayoutDashboard, label: 'Dashboard', roles: ['analyst', 'manager', 'compliance', 'admin'] },
+  { to: '/branches',   icon: GitBranch,        label: 'Branches', roles: ['analyst', 'manager', 'compliance', 'admin'] },
+  { to: '/assistant',  icon: Bot,              label: 'AI Assistant', roles: ['analyst', 'manager', 'compliance', 'admin'] },
+  { to: '/kpi',        icon: BarChart3,        label: 'KPI Analytics', roles: ['analyst', 'manager', 'compliance', 'admin'] },
+  { to: '/risk',       icon: ShieldAlert,      label: 'Risk Monitor', roles: ['analyst', 'manager', 'compliance', 'admin'] },
+  { to: '/compliance', icon: Scale,            label: 'Compliance', roles: ['compliance', 'manager', 'admin'] },
+  { to: '/reports',    icon: FileText,         label: 'Reports', roles: ['manager', 'admin'] },
+  { to: '/admin',      icon: Settings2,        label: 'Admin Portal', roles: ['admin'] },
+  { to: '/profile',    icon: User,             label: 'User Profile', roles: ['analyst', 'manager', 'compliance', 'admin'] },
+  { to: '/settings',   icon: Settings,         label: 'Settings', roles: ['analyst', 'manager', 'compliance', 'admin'] },
 ];
 
 export function BankingSidebar() {
@@ -23,6 +45,10 @@ export function BankingSidebar() {
     logout();
     navigate('/login', { replace: true });
   }
+
+  // Filter items by user role
+  const userRole = user?.role ?? 'analyst';
+  const visibleNavItems = NAV_ITEMS.filter(item => item.roles.includes(userRole));
 
   return (
     <aside className={clsx(
@@ -44,7 +70,7 @@ export function BankingSidebar() {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        {NAV_ITEMS.map(({ to, icon: Icon, label }) => (
+        {visibleNavItems.map(({ to, icon: Icon, label }) => (
           <NavLink key={to} to={to} className={({ isActive }) => clsx(
             'flex items-center gap-3 rounded-lg transition-all duration-200 text-sm font-medium group relative',
             sidebarCollapsed ? 'justify-center p-2.5' : 'px-3 py-2.5',
@@ -80,23 +106,37 @@ export function BankingSidebar() {
           )}
         </button>
 
-        {/* User */}
+        {/* User Card */}
         {!sidebarCollapsed && user && (
-          <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-[#0a1628] border border-[#0f2040]">
-            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#0066CC] to-[#003366] flex items-center justify-center flex-shrink-0 text-[11px] font-bold text-white">
-              {user.name?.charAt(0).toUpperCase() ?? 'A'}
+          <div className="flex flex-col gap-1.5 px-3 py-2 rounded-lg bg-[#0a1628] border border-[#0f2040]">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#0066CC] to-[#003366] flex items-center justify-center flex-shrink-0 text-[11px] font-bold text-white">
+                {user.name?.charAt(0).toUpperCase() ?? 'A'}
+              </div>
+              <div className="flex-1 overflow-hidden">
+                <p className="text-xs font-medium text-slate-200 truncate">{user.name}</p>
+                <p className="text-[10px] text-slate-500 truncate capitalize">{user.role}</p>
+              </div>
             </div>
-            <div className="flex-1 overflow-hidden">
-              <p className="text-xs font-medium text-slate-200 truncate">{user.name}</p>
-              <p className="text-[10px] text-slate-500 truncate capitalize">{user.role}</p>
+            <div className="flex items-center justify-between mt-1 pt-1 border-t border-[#0f2040]/50">
+              <span className={clsx(
+                'text-[9px] font-semibold px-1.5 py-0.5 rounded border capitalize',
+                user.role === 'admin' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
+                user.role === 'compliance' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
+                user.role === 'manager' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
+                'bg-blue-500/10 text-blue-400 border-blue-500/20'
+              )}>
+                {user.role}
+              </span>
+              <span className="text-[9px] text-slate-650 font-mono">ID: {user.user_id.slice(0, 8)}</span>
             </div>
           </div>
         )}
 
-        {/* Developer Monitor */}
-        {!sidebarCollapsed && (
+        {/* Developer Monitor for Admins Only */}
+        {!sidebarCollapsed && user?.role === 'admin' && (
           <NavLink
-            to="/"
+            to="/dev"
             className="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-500 hover:bg-[#0066CC]/15 hover:text-[#4d9fff] transition-all duration-200 text-xs"
           >
             <Settings size={14} className="flex-shrink-0" />

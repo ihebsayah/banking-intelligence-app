@@ -75,16 +75,39 @@ MAX_LIMIT = 10_000
 DEFAULT_LIMIT = 100
 
 
+def _extract_table_and_column(col_expr: str) -> Tuple[Optional[str], str]:
+    """
+    Extracts table name and raw column name from an expression.
+    Examples:
+      "accounts.balance" -> ("accounts", "balance")
+      "AVG(accounts.balance)" -> ("accounts", "balance")
+      "SUM(accounts.balance) AS balance" -> ("accounts", "balance")
+      "customer_id" -> (None, "customer_id")
+      "COUNT(customer_id)" -> (None, "customer_id")
+    """
+    expr = col_expr.strip()
+    
+    # Strip AS alias
+    alias_match = re.search(r'\s+AS\s+\w+', expr, re.IGNORECASE)
+    if alias_match:
+        expr = expr[:alias_match.start()].strip()
+        
+    # Strip aggregate function: e.g. AVG(...)
+    for agg in ALLOWED_AGGREGATES:
+        if expr.upper().startswith(f"{agg}("):
+            expr = expr[len(agg)+1:].rstrip(")").strip()
+            break
+            
+    # Now check for table prefix
+    parts = expr.split(".")
+    if len(parts) == 2:
+        return parts[0], parts[1]
+    return None, expr
+
+
 def _validate_column(table: str, column: str) -> bool:
     """Return True if column is whitelisted for table."""
-    allowed = ALLOWED_COLUMNS.get(table, [])
-    # Strip aggregate wrappers: COUNT(col) → col
-    col_clean = column.strip()
-    for agg in ALLOWED_AGGREGATES:
-        if col_clean.upper().startswith(f"{agg}("):
-            col_clean = col_clean[len(agg)+1:].rstrip(")")
-            break
-    return col_clean in allowed or col_clean == "*"
+    return column in ALLOWED_COLUMNS.get(table, []) or column == "*"
 
 
 def _safe_columns(tables: List[str], requested: Optional[List[str]]) -> str:
@@ -99,21 +122,18 @@ def _safe_columns(tables: List[str], requested: Optional[List[str]]) -> str:
 
     valid_cols = []
     for col in requested:
-        # format: "table.column" or "column" or "COUNT(column) AS alias"
-        parts = col.split(".")
-        if len(parts) == 2:
-            tbl, colname = parts
+        tbl, colname = _extract_table_and_column(col)
+        if tbl:
             if tbl in tables and _validate_column(tbl, colname):
                 valid_cols.append(col)
             else:
-                logger.warning("Column not whitelisted: %s — skipped", col)
+                logger.warning("Column not whitelisted: %s (table %s, col %s) — skipped", col, tbl, colname)
         else:
-            # Check against any table
-            found = any(_validate_column(t, col) for t in tables)
-            if found or col.upper() in ("*", "1"):
+            found = any(_validate_column(t, colname) for t in tables)
+            if found or colname.upper() in ("*", "1"):
                 valid_cols.append(col)
             else:
-                logger.warning("Column not whitelisted: %s — skipped", col)
+                logger.warning("Column not whitelisted: %s (col %s) — skipped", col, colname)
 
     return ", ".join(valid_cols) if valid_cols else f"{tables[0]}.*"
 
@@ -212,13 +232,12 @@ def _build_group_by(group_by: Optional[List[str]], tables: List[str]) -> str:
         return ""
     valid = []
     for col in group_by:
-        parts = col.split(".")
-        if len(parts) == 2:
-            tbl, c = parts
-            if tbl in tables and _validate_column(tbl, c):
+        tbl, colname = _extract_table_and_column(col)
+        if tbl:
+            if tbl in tables and _validate_column(tbl, colname):
                 valid.append(col)
         else:
-            if any(_validate_column(t, col) for t in tables):
+            if any(_validate_column(t, colname) for t in tables):
                 valid.append(col)
     return f"GROUP BY {', '.join(valid)}" if valid else ""
 
@@ -231,14 +250,13 @@ def _build_order_by(order_by: Optional[str], tables: List[str]) -> str:
     direction = parts[1].upper() if len(parts) > 1 else "ASC"
     if direction not in ALLOWED_ORDER_DIRS:
         direction = "ASC"
-    # Validate col
-    col_parts = col.split(".")
-    if len(col_parts) == 2:
-        tbl, c = col_parts
-        if tbl not in tables or not _validate_column(tbl, c):
+    
+    tbl, colname = _extract_table_and_column(col)
+    if tbl:
+        if tbl not in tables or not _validate_column(tbl, colname):
             return ""
     else:
-        if not any(_validate_column(t, col) for t in tables):
+        if not any(_validate_column(t, colname) for t in tables):
             return ""
     return f"ORDER BY {col} {direction}"
 

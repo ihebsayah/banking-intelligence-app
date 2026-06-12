@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
 
   # ============================================================================
@@ -38,13 +36,14 @@ services:
       - ./services/shared:/app/shared
     ports:
       - "8000:8000"
+    restart: unless-stopped
     environment:
-      - DATABASE_URL=postgresql://banking_user:securepass123@postgres-main:5432/banking_dev
-      - AUDIT_DATABASE_URL=postgresql://audit_user:securepass123@postgres-audit:5432/audit_logs
+      - DATABASE_URL=postgresql://${POSTGRES_MAIN_USER:-banking_user}:${POSTGRES_MAIN_PASSWORD:-securepass123}@postgres-main:5432/${POSTGRES_MAIN_DB:-banking_dev}
+      - AUDIT_DATABASE_URL=postgresql://${POSTGRES_AUDIT_USER:-audit_user}:${POSTGRES_AUDIT_PASSWORD:-securepass123}@postgres-audit:5432/${POSTGRES_AUDIT_DB:-audit_logs}
       - REDIS_URL=redis://redis:6379/0
       - AUDIT_AGENT_URL=http://audit-agent:8008
-      - JWT_SECRET_KEY=change-this-in-production-do-not-use-in-prod
-      - LOG_LEVEL=INFO
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-change-this-in-production}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     depends_on:
       postgres-main:
         condition: service_healthy
@@ -69,6 +68,7 @@ services:
     container_name: banking_orchestrator
     image: python:3.11-slim
     working_dir: /app
+    restart: unless-stopped
     volumes:
       - ./services/orchestrator:/app
       - ./services/shared:/app/shared
@@ -76,10 +76,10 @@ services:
     ports:
       - "8001:8001"
     environment:
-      - MISTRAL_API_URL=http://ollama:11434
-      - MISTRAL_MODEL=mistral
-      - ORCHESTRATOR_LLM=mistral
-      - DATABASE_URL=postgresql://banking_user:securepass123@postgres-main:5432/banking_dev
+      - MISTRAL_API_URL=${MISTRAL_API_URL:-http://ollama:11434}
+      - MISTRAL_MODEL=${MISTRAL_MODEL:-mistral}
+      - ORCHESTRATOR_LLM=${ORCHESTRATOR_LLM:-mistral}
+      - DATABASE_URL=postgresql://${POSTGRES_MAIN_USER:-banking_user}:${POSTGRES_MAIN_PASSWORD:-securepass123}@postgres-main:5432/${POSTGRES_MAIN_DB:-banking_dev}
       - REDIS_URL=redis://redis:6379/1
       - INTENT_AGENT_URL=http://intent-agent:8002
       - SCHEMA_AGENT_URL=http://schema-agent:8003
@@ -90,13 +90,19 @@ services:
       - AUDIT_AGENT_URL=http://audit-agent:8008
       - INSIGHTS_AGENT_URL=http://insights-agent:8013
       - COMPLIANCE_AGENT_URL=http://compliance-agent:8011
-      - QUERY_SIGNING_KEY=DEMO_KEY_CHANGE_IN_PRODUCTION_DO_NOT_USE_IN_PROD
-      - LOG_LEVEL=INFO
+      - QUERY_SIGNING_KEY=${QUERY_SIGNING_KEY:-CHANGE_IN_PRODUCTION}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     depends_on:
       - postgres-main
       - redis
     networks:
       - banking-network
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8001/health')\" || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 300s
     command: >
       bash -c "pip install -r requirements.txt && python main.py"
 
@@ -104,6 +110,7 @@ services:
     container_name: banking_debug_service
     image: python:3.11-slim
     working_dir: /app
+    # NOTE: debug-service intentionally has no restart policy — dev tool only
     volumes:
       - ./services/debugging:/app
     ports:
@@ -113,6 +120,12 @@ services:
       - IS_DEBUG_SERVICE=true
     networks:
       - banking-network
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8099/health')\" || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     command: >
       bash -c "pip install fastapi uvicorn websockets requests && python main.py"
 
@@ -125,16 +138,22 @@ services:
     container_name: banking_intent_agent
     image: python:3.11-slim
     working_dir: /app
+    restart: unless-stopped
     volumes:
       - ./services/intent_agent:/app
       - ./services/shared:/app/shared
     ports:
       - "8002:8002"
     environment:
-
-      - LOG_LEVEL=INFO
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     networks:
       - banking-network
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8002/health')\" || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 300s
     command: >
       bash -c "pip install -r requirements.txt && pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1.tar.gz && uvicorn main:app --host 0.0.0.0 --port 8002"
 
@@ -142,6 +161,7 @@ services:
     container_name: banking_schema_agent
     image: python:3.11-slim
     working_dir: /app
+    restart: unless-stopped
     volumes:
       - ./services/schema_agent:/app
       - ./services/shared:/app/shared
@@ -150,11 +170,17 @@ services:
     environment:
       - EMBEDDING_SERVICE_URL=http://embedding-service:8009
       - REDIS_URL=redis://redis:6379/2
-      - LOG_LEVEL=INFO
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     depends_on:
       - redis
     networks:
       - banking-network
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8003/health')\" || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 180s
     command: >
       bash -c "pip install -r requirements.txt && uvicorn main:app --host 0.0.0.0 --port 8003"
 
@@ -162,6 +188,7 @@ services:
     container_name: banking_entity_resolution
     image: python:3.11-slim
     working_dir: /app
+    restart: unless-stopped
     volumes:
       - ./services/entity_resolution_agent:/app
       - ./services/shared:/app/shared
@@ -169,14 +196,20 @@ services:
       - "8004:8004"
     environment:
       - EMBEDDING_SERVICE_URL=http://embedding-service:8009
-      - POSTGRES_EMBEDDINGS_URL=postgresql://embedding_user:securepass123@postgres-embeddings:5432/embeddings
+      - POSTGRES_EMBEDDINGS_URL=postgresql://${POSTGRES_EMBEDDINGS_USER:-embedding_user}:${POSTGRES_EMBEDDINGS_PASSWORD:-securepass123}@postgres-embeddings:5432/${POSTGRES_EMBEDDINGS_DB:-embeddings}
       - REDIS_URL=redis://redis:6379/3
-      - LOG_LEVEL=INFO
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     depends_on:
       - postgres-embeddings
       - redis
     networks:
       - banking-network
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8004/health')\" || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 180s
     command: >
       bash -c "pip install -r requirements.txt && uvicorn main:app --host 0.0.0.0 --port 8004"
 
@@ -184,19 +217,25 @@ services:
     container_name: banking_sql_agent
     image: python:3.11-slim
     working_dir: /app
+    restart: unless-stopped
     volumes:
       - ./services/sql_agent:/app
       - ./services/shared:/app/shared
     ports:
       - "8005:8005"
     environment:
-
       - REDIS_URL=redis://redis:6379/4
-      - LOG_LEVEL=INFO
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     depends_on:
       - redis
     networks:
       - banking-network
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8005/health')\" || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 180s
     command: >
       bash -c "pip install -r requirements.txt && uvicorn main:app --host 0.0.0.0 --port 8005"
 
@@ -204,15 +243,22 @@ services:
     container_name: banking_validation_agent
     image: python:3.11-slim
     working_dir: /app
+    restart: unless-stopped
     volumes:
       - ./services/validation_agent:/app
       - ./services/shared:/app/shared
     ports:
       - "8006:8006"
     environment:
-      - LOG_LEVEL=INFO
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     networks:
       - banking-network
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8006/health')\" || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 180s
     command: >
       bash -c "pip install -r requirements.txt && uvicorn main:app --host 0.0.0.0 --port 8006"
 
@@ -220,56 +266,58 @@ services:
     container_name: banking_execution_agent
     image: python:3.11-slim
     working_dir: /app
+    restart: unless-stopped
     volumes:
       - ./services/execution_agent:/app
       - ./services/shared:/app/shared
     ports:
       - "8007:8007"
     environment:
-      - DATABASE_URL=postgresql://banking_user:securepass123@postgres-main:5432/banking_dev
+      - DATABASE_URL=postgresql://${POSTGRES_MAIN_USER:-banking_user}:${POSTGRES_MAIN_PASSWORD:-securepass123}@postgres-main:5432/${POSTGRES_MAIN_DB:-banking_dev}
       - REDIS_URL=redis://redis:6379/5
-      - QUERY_SIGNING_KEY=DEMO_KEY_CHANGE_IN_PRODUCTION_DO_NOT_USE_IN_PROD
+      - QUERY_SIGNING_KEY=${QUERY_SIGNING_KEY:-CHANGE_IN_PRODUCTION}
       - AUDIT_SERVICE_URL=http://audit-agent:8008
-      - LOG_LEVEL=INFO
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     depends_on:
       - postgres-main
       - redis
     networks:
       - banking-network
-    command: >
-      bash -c "pip install -r requirements.txt && uvicorn main:app --host 0.0.0.0 --port 8007"
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8007/health')\" || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 300s
+    command: >
+      bash -c "pip install -r requirements.txt && uvicorn main:app --host 0.0.0.0 --port 8007"
 
   audit-agent:
     container_name: banking_audit_agent
     image: python:3.11-slim
     working_dir: /app
+    restart: unless-stopped
     volumes:
       - ./services/audit_agent:/app
       - ./services/shared:/app/shared
     ports:
       - "8008:8008"
     environment:
-      - AUDIT_DATABASE_URL=postgresql://audit_user:securepass123@postgres-audit:5432/audit_logs
-      - LOG_LEVEL=INFO
+      - AUDIT_DATABASE_URL=postgresql://${POSTGRES_AUDIT_USER:-audit_user}:${POSTGRES_AUDIT_PASSWORD:-securepass123}@postgres-audit:5432/${POSTGRES_AUDIT_DB:-audit_logs}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     depends_on:
       postgres-audit:
         condition: service_healthy
     networks:
       - banking-network
-    command: >
-      bash -c "pip install -q -r requirements.txt && uvicorn main:app --host 0.0.0.0 --port 8008 --reload"
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8008/health')\" || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 300s
+    command: >
+      bash -c "pip install -q -r requirements.txt && uvicorn main:app --host 0.0.0.0 --port 8008 --reload"
 
   # ============================================================================
   # SUPPORTING SERVICES
@@ -279,19 +327,26 @@ services:
     container_name: banking_embedding_service
     image: python:3.11-slim
     working_dir: /app
+    restart: unless-stopped
     volumes:
       - ./services/embedding_service:/app
       - ./services/shared:/app/shared
     ports:
       - "8009:8009"
     environment:
-      - POSTGRES_EMBEDDINGS_URL=postgresql://embedding_user:securepass123@postgres-embeddings:5432/embeddings
-      - LOG_LEVEL=INFO
+      - POSTGRES_EMBEDDINGS_URL=postgresql://${POSTGRES_EMBEDDINGS_USER:-embedding_user}:${POSTGRES_EMBEDDINGS_PASSWORD:-securepass123}@postgres-embeddings:5432/${POSTGRES_EMBEDDINGS_DB:-embeddings}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     depends_on:
       postgres-embeddings:
         condition: service_healthy
     networks:
       - banking-network
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8009/health')\" || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 180s
     command: >
       bash -c "pip install -r requirements.txt && uvicorn main:app --host 0.0.0.0 --port 8009"
 
@@ -299,15 +354,22 @@ services:
     container_name: banking_secrets
     image: python:3.11-slim
     working_dir: /app
+    restart: unless-stopped
     volumes:
       - ./services/secrets_manager:/app
       - banking_secrets_volume:/secrets
     ports:
       - "8010:8010"
     environment:
-      - LOG_LEVEL=INFO
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     networks:
       - banking-network
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8010/health')\" || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     command: >
       bash -c "pip install -r requirements.txt && python main.py"
 
@@ -319,20 +381,27 @@ services:
     container_name: banking_insights_agent
     image: python:3.11-slim
     working_dir: /app
+    restart: unless-stopped
     volumes:
       - ./services/insights_agent:/app
     ports:
       - "8013:8013"
     environment:
-      - DATABASE_URL=postgresql://banking_user:securepass123@postgres-main:5432/banking_dev
-      - MISTRAL_API_URL=http://ollama:11434
-      - MISTRAL_MODEL=mistral
-      - LOG_LEVEL=INFO
+      - DATABASE_URL=postgresql://${POSTGRES_MAIN_USER:-banking_user}:${POSTGRES_MAIN_PASSWORD:-securepass123}@postgres-main:5432/${POSTGRES_MAIN_DB:-banking_dev}
+      - MISTRAL_API_URL=${MISTRAL_API_URL:-http://ollama:11434}
+      - MISTRAL_MODEL=${MISTRAL_MODEL:-mistral}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     depends_on:
       - postgres-main
       - ollama
     networks:
       - banking-network
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8013/health')\" || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 300s
     command: >
       bash -c "pip install -q -r requirements.txt && uvicorn main:app --host 0.0.0.0 --port 8013 --reload"
 
@@ -340,18 +409,25 @@ services:
     container_name: banking_compliance_agent
     image: python:3.11-slim
     working_dir: /app
+    restart: unless-stopped
     volumes:
       - ./services/compliance_agent:/app
     ports:
       - "8011:8011"
     environment:
-      - DATABASE_URL=postgresql://banking_user:securepass123@postgres-main:5432/banking_dev
-      - LOG_LEVEL=INFO
+      - DATABASE_URL=postgresql://${POSTGRES_MAIN_USER:-banking_user}:${POSTGRES_MAIN_PASSWORD:-securepass123}@postgres-main:5432/${POSTGRES_MAIN_DB:-banking_dev}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     depends_on:
       postgres-main:
         condition: service_healthy
     networks:
       - banking-network
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8011/health')\" || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 300s
     command: >
       bash -c "pip install -q -r requirements.txt && uvicorn main:app --host 0.0.0.0 --port 8011 --reload"
 
@@ -359,14 +435,15 @@ services:
     container_name: banking_audit_enhancement
     image: python:3.11-slim
     working_dir: /app
+    restart: unless-stopped
     volumes:
       - ./services/audit_enhancement:/app
     ports:
       - "8012:8012"
     environment:
-      - DATABASE_URL=postgresql://banking_user:securepass123@postgres-main:5432/banking_dev
-      - AUDIT_DATABASE_URL=postgresql://audit_user:securepass123@postgres-audit:5432/audit_logs
-      - LOG_LEVEL=INFO
+      - DATABASE_URL=postgresql://${POSTGRES_MAIN_USER:-banking_user}:${POSTGRES_MAIN_PASSWORD:-securepass123}@postgres-main:5432/${POSTGRES_MAIN_DB:-banking_dev}
+      - AUDIT_DATABASE_URL=postgresql://${POSTGRES_AUDIT_USER:-audit_user}:${POSTGRES_AUDIT_PASSWORD:-securepass123}@postgres-audit:5432/${POSTGRES_AUDIT_DB:-audit_logs}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     depends_on:
       postgres-main:
         condition: service_healthy
@@ -374,6 +451,12 @@ services:
         condition: service_healthy
     networks:
       - banking-network
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8012/health')\" || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 300s
     command: >
       bash -c "pip install -q -r requirements.txt && uvicorn main:app --host 0.0.0.0 --port 8012 --reload"
 
@@ -384,10 +467,11 @@ services:
   postgres-main:
     container_name: banking_postgres_main
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
-      POSTGRES_DB: banking_dev
-      POSTGRES_USER: banking_user
-      POSTGRES_PASSWORD: securepass123
+      POSTGRES_DB: ${POSTGRES_MAIN_DB:-banking_dev}
+      POSTGRES_USER: ${POSTGRES_MAIN_USER:-banking_user}
+      POSTGRES_PASSWORD: ${POSTGRES_MAIN_PASSWORD:-securepass123}
     ports:
       - "5432:5432"
     volumes:
@@ -396,7 +480,7 @@ services:
     networks:
       - banking-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U banking_user -d banking_dev"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_MAIN_USER:-banking_user} -d ${POSTGRES_MAIN_DB:-banking_dev}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -404,10 +488,11 @@ services:
   postgres-audit:
     container_name: banking_postgres_audit
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
-      POSTGRES_DB: audit_logs
-      POSTGRES_USER: audit_user
-      POSTGRES_PASSWORD: securepass123
+      POSTGRES_DB: ${POSTGRES_AUDIT_DB:-audit_logs}
+      POSTGRES_USER: ${POSTGRES_AUDIT_USER:-audit_user}
+      POSTGRES_PASSWORD: ${POSTGRES_AUDIT_PASSWORD:-securepass123}
     ports:
       - "5433:5432"
     volumes:
@@ -416,7 +501,7 @@ services:
     networks:
       - banking-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U audit_user -d audit_logs"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_AUDIT_USER:-audit_user} -d ${POSTGRES_AUDIT_DB:-audit_logs}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -424,10 +509,11 @@ services:
   postgres-embeddings:
     container_name: banking_postgres_embeddings
     image: pgvector/pgvector:pg16
+    restart: unless-stopped
     environment:
-      POSTGRES_DB: embeddings
-      POSTGRES_USER: embedding_user
-      POSTGRES_PASSWORD: securepass123
+      POSTGRES_DB: ${POSTGRES_EMBEDDINGS_DB:-embeddings}
+      POSTGRES_USER: ${POSTGRES_EMBEDDINGS_USER:-embedding_user}
+      POSTGRES_PASSWORD: ${POSTGRES_EMBEDDINGS_PASSWORD:-securepass123}
     ports:
       - "5434:5432"
     volumes:
@@ -436,7 +522,7 @@ services:
     networks:
       - banking-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U embedding_user -d embeddings"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_EMBEDDINGS_USER:-embedding_user} -d ${POSTGRES_EMBEDDINGS_DB:-embeddings}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -448,6 +534,7 @@ services:
   redis:
     container_name: banking_redis
     image: redis:7-alpine
+    restart: unless-stopped
     ports:
       - "6379:6379"
     volumes:
@@ -468,6 +555,7 @@ services:
   ollama:
     container_name: banking_ollama
     image: ollama/ollama:latest
+    restart: unless-stopped
     ports:
       - "11434:11434"
     volumes:
@@ -476,6 +564,12 @@ services:
       - banking-network
     environment:
       - OLLAMA_HOST=0.0.0.0:11434
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/tags || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
     command: serve
 
 volumes:

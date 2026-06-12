@@ -420,6 +420,7 @@ class OrchestratorAgent:
             if "top 10 customers by balance" in q:
                 limit = 10
                 order_by = "accounts.balance DESC"
+                columns = ["customers.customer_id", "customers.name", "customers.segment", "customers.risk_score", "accounts.balance"]
                 tables = ["customers", "accounts"]
                 join_paths = [{"from_table": "customers", "to_table": "accounts", "join_type": "INNER JOIN", "join_key": "customer_id", "condition": "customers.customer_id = accounts.customer_id"}]
             elif "kyc_verified = false" in q:

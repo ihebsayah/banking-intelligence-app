@@ -1,3 +1,4 @@
+import re
 import numpy as np
 from typing import List, Dict, Any, Optional
 from models import StatisticalAnalysis
@@ -5,6 +6,24 @@ from models import StatisticalAnalysis
 
 class StatisticalAnalyzer:
     """Analyze query results for statistical patterns."""
+
+    def _is_numeric(self, val: Any) -> bool:
+        if val is None or isinstance(val, bool):
+            return False
+        if isinstance(val, (int, float)):
+            return True
+        if isinstance(val, str) and val.strip() != "":
+            try:
+                # Must be float-parsable, excluding dates, times, and alphanumeric IDs
+                float(val)
+                if "-" in val or ":" in val:
+                    return False
+                if re.match(r'^[A-Za-z]+_?\d+$', val):
+                    return False
+                return True
+            except ValueError:
+                return False
+        return False
 
     def analyze(
         self,
@@ -26,12 +45,14 @@ class StatisticalAnalyzer:
 
         # Use the first numeric column found for primary statistics
         primary_col = numeric_columns[0]
-        values = [
-            float(r[primary_col])
-            for r in results
-            if r.get(primary_col) is not None
-            and isinstance(r[primary_col], (int, float))
-        ]
+        values = []
+        for r in results:
+            val = r.get(primary_col)
+            if val is not None and not isinstance(val, bool):
+                try:
+                    values.append(float(val))
+                except (ValueError, TypeError):
+                    continue
 
         if not values:
             return StatisticalAnalysis()
@@ -69,6 +90,6 @@ class StatisticalAnalyzer:
             return []
         numeric_cols = []
         for key, val in results[0].items():
-            if isinstance(val, (int, float)) and not isinstance(val, bool):
+            if self._is_numeric(val):
                 numeric_cols.append(key)
         return numeric_cols
