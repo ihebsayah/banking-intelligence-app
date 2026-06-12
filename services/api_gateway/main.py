@@ -53,20 +53,30 @@ except Exception as e:
     raise
 
 async def apply_migrations(db: DatabaseConnector) -> None:
-    """Read the migration file and execute it against the main database."""
+    """Execute the migration SQL file against the main database.
+    Uses raw asyncpg pool so we can run a full multi-statement script at once.
+    """
     migration_path = "/app/init/02-users-kpis.sql"
     if not os.path.exists(migration_path):
-        migration_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../init/02-users-kpis.sql"))
+        migration_path = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "../../init/02-users-kpis.sql")
+        )
 
     if not os.path.exists(migration_path):
-        logger.warning(f"Migration file not found at {migration_path}")
+        logger.warning(f"Migration file not found at {migration_path} — skipping")
         return
 
     try:
         logger.info(f"Applying database migrations from {migration_path}")
         with open(migration_path, "r") as f:
             sql = f.read()
-        await db.execute(sql)
+        # Use the internal pool directly so we can execute a multi-statement script
+        pool = db._pool
+        if pool is None:
+            logger.warning("Pool not ready — skipping migration")
+            return
+        async with pool.acquire() as conn:
+            await conn.execute(sql)
         logger.info("Database migrations applied successfully")
     except Exception as exc:
         logger.error("Failed to apply database migrations", extra={"error": str(exc)})

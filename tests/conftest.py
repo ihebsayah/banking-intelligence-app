@@ -1,88 +1,153 @@
 """
 tests/conftest.py
-Installs stub modules for redis + asyncpg so execution_agent code can be
-imported without Docker dependencies. Each test file adds its own service
-path at index 0 — conftest does NOT add multiple service roots (name collision
-with models.py across services).
+Stub/patch setup for running api_gateway tests outside Docker.
+
+Without this file, pytest cannot import main.py because:
+  1. `slowapi` package is not installed locally (it's in the container image).
+  2. `main.py` tries to write `/app/startup_error.log` (container-only path).
+  3. Shared library imports assume /app/shared is mounted.
+
+This conftest:
+  a) Installs stub modules for slowapi and asyncpg.
+  b) Patches builtins.open to redirect /app/* log writes to /tmp/.
+  c) Ensures PYTHONPATH includes api_gateway/ and services/shared/.
 """
 import sys
+import os
 import types
+import asyncio
+from unittest.mock import MagicMock, AsyncMock
 
-# ── Stub: redis ───────────────────────────────────────────────────────────────
-if "redis" not in sys.modules:
-    redis_mod = types.ModuleType("redis")
-    asyncio_mod = types.ModuleType("redis.asyncio")
+# ─── PYTHONPATH ───────────────────────────────────────────────────────────────
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+GATEWAY = os.path.join(ROOT, "services/api_gateway")
+SERVICES = os.path.join(ROOT, "services")
 
-    class _FakeRedis:
-        async def get(self, key): return None
-        async def set(self, key, val, ex=None): pass
-        async def delete(self, *keys): pass
-        async def flushdb(self): pass
-        async def keys(self, pattern="*"): return []
-        async def close(self): pass
+for p in [GATEWAY, SERVICES]:
+    if p not in sys.path:
+        sys.path.insert(0, p)
 
-    asyncio_mod.Redis = _FakeRedis
-    asyncio_mod.from_url = lambda url, **kw: _FakeRedis()
-    redis_mod.asyncio = asyncio_mod
-    sys.modules["redis"] = redis_mod
-    sys.modules["redis.asyncio"] = asyncio_mod
 
-# ── Stub: asyncpg ─────────────────────────────────────────────────────────────
+# ─── Stub: slowapi ────────────────────────────────────────────────────────────
+
+def _build_slowapi_stub():
+    slowapi = types.ModuleType("slowapi")
+    errors = types.ModuleType("slowapi.errors")
+    util = types.ModuleType("slowapi.util")
+
+    class RateLimitExceeded(Exception):
+        pass
+
+    class Limiter:
+        def __init__(self, *a, **kw):
+            pass
+        def limit(self, *a, **kw):
+            def decorator(fn):
+                return fn
+            return decorator
+
+    def _rate_limit_exceeded_handler(request, exc):
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=429, content={"error": "RATE_LIMIT_EXCEEDED"})
+
+    def get_remote_address(request):
+        return "127.0.0.1"
+
+    slowapi.Limiter = Limiter
+    slowapi._rate_limit_exceeded_handler = _rate_limit_exceeded_handler
+    errors.RateLimitExceeded = RateLimitExceeded
+    util.get_remote_address = get_remote_address
+
+    slowapi.errors = errors
+    slowapi.util = util
+    return slowapi, errors, util
+
+
+_slowapi, _slowapi_errors, _slowapi_util = _build_slowapi_stub()
+sys.modules.setdefault("slowapi", _slowapi)
+sys.modules.setdefault("slowapi.errors", _slowapi_errors)
+sys.modules.setdefault("slowapi.util", _slowapi_util)
+
+
 if "asyncpg" not in sys.modules:
-    asyncpg_mod = types.ModuleType("asyncpg")
+    asyncpg = types.ModuleType("asyncpg")
+    asyncpg.create_pool = AsyncMock()
+    asyncpg.Record = dict
+    class MockPool:
+        pass
+    class MockConnection:
+        pass
+    asyncpg.Pool = MockPool
+    asyncpg.Connection = MockConnection
+    sys.modules["asyncpg"] = asyncpg
 
-    class _FakePool:
-        async def acquire(self): return self
-        async def release(self, conn): pass
-        async def close(self): pass
-        async def __aenter__(self): return self
-        async def __aexit__(self, *a): pass
-        async def fetch(self, sql, *args): return []
 
-    async def _fake_create_pool(*a, **kw): return _FakePool()
-    asyncpg_mod.create_pool = _fake_create_pool
-    asyncpg_mod.Pool = _FakePool
-    sys.modules["asyncpg"] = asyncpg_mod
+# ─── Patch: redirect /app/*.log writes to /tmp/ ───────────────────────────────
+import builtins as _builtins
 
-# ── Stub: spacy (optional — intent_agent loads it lazily) ─────────────────────
-if "spacy" not in sys.modules:
-    spacy_mod = types.ModuleType("spacy")
+_real_open = _builtins.open
 
-    class _FakeTok:
-        """Mimics a spaCy Token — iterable by NLP pipeline code."""
-        def __init__(self, text):
-            self.text = text
-            self.is_alpha = text.isalpha()
-            self.is_punct = not text.isalpha() and not text.isdigit()
-            self.is_digit = text.isdigit()
-            self.is_stop = text.lower() in {
-                "the", "a", "an", "by", "in", "of", "and", "or", "with",
-                "for", "to", "from", "is", "are", "at", "me", "show", "i",
-            }
-            self.lemma_ = text.lower()
-            self.lower_ = text.lower()
-            self.pos_ = "NOUN" if text.isalpha() else "PUNCT"
-            self.tag_ = "NN"
-            self.ent_type_ = ""
 
-    class _FakeDoc:
-        """Mimics a spaCy Doc — iterable, has .ents."""
-        def __init__(self, text):
-            self._tokens = [_FakeTok(w) for w in text.split()]
-            self.ents = []
+def _safe_open(file, mode="r", *args, **kwargs):
+    if isinstance(file, str) and file.startswith("/app/") and file.endswith(".log"):
+        file = "/tmp/" + os.path.basename(file)
+    return _real_open(file, mode, *args, **kwargs)
 
-        def __iter__(self):
-            return iter(self._tokens)
 
-        def __len__(self):
-            return len(self._tokens)
+_builtins.open = _safe_open
 
-    class _FakeNLP:
-        def __call__(self, text):
-            return _FakeDoc(text)
 
-    def _load(model, **kw):
-        return _FakeNLP()
+# ─── Ensure shared/ stubs are loaded before main.py import ───────────────────
+# The shared package has its own imports; this seeds them so import doesn't fail.
 
-    spacy_mod.load = _load
-    sys.modules["spacy"] = spacy_mod
+def _ensure_shared_importable():
+    """Make sure `from shared.X import Y` resolves to our local shared/ dir."""
+    if "shared" not in sys.modules:
+        import importlib
+        try:
+            importlib.import_module("shared.config")
+        except Exception:
+            pass
+
+_ensure_shared_importable()
+
+
+# ─── Stub: PyJWT ──────────────────────────────────────────────────────────────
+if "jwt" not in sys.modules:
+    import json
+    import base64
+
+    class ExpiredSignatureError(Exception):
+        pass
+
+    class InvalidTokenError(Exception):
+        pass
+
+    def encode(payload, key, algorithm=None):
+        payload_json = json.dumps(payload)
+        # return token encoded in base64 without padding
+        return base64.urlsafe_b64encode(payload_json.encode()).decode().rstrip("=")
+
+    def decode(token, key, algorithms=None):
+        try:
+            # Re-add base64 padding
+            padded = token + "=" * (4 - len(token) % 4)
+            payload_json = base64.urlsafe_b64decode(padded.encode()).decode()
+            payload = json.loads(payload_json)
+            if "exp" in payload:
+                import time
+                if payload["exp"] < time.time():
+                    raise ExpiredSignatureError()
+            return payload
+        except ExpiredSignatureError:
+            raise
+        except Exception:
+            raise InvalidTokenError()
+
+    jwt_stub = types.ModuleType("jwt")
+    jwt_stub.ExpiredSignatureError = ExpiredSignatureError
+    jwt_stub.InvalidTokenError = InvalidTokenError
+    jwt_stub.encode = encode
+    jwt_stub.decode = decode
+    sys.modules["jwt"] = jwt_stub
+

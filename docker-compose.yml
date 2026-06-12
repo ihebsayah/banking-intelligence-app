@@ -34,6 +34,7 @@ services:
     volumes:
       - ./services/api_gateway:/app
       - ./services/shared:/app/shared
+      - ./init:/app/init
     ports:
       - "8000:8000"
     restart: unless-stopped

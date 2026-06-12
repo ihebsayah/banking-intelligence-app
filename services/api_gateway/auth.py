@@ -1,7 +1,8 @@
 """
 services/api_gateway/auth.py
 JWT token generation and verification.
-Mock user database for MVP — replace with real DB lookup in production.
+Authentication now queries the real `users` table.
+Falls back to the mock store if the database is unavailable (dev safety).
 
 WARNING: JWT_SECRET_KEY must be rotated in production.
          The default key is for DEMO PURPOSES ONLY.
@@ -20,9 +21,9 @@ from shared.models import User, UserRole
 logger = get_logger(__name__, "api-gateway")
 settings = get_settings()
 
-# ─── Mock User Store ──────────────────────────────────────────────────────────
-# In production: replace with async DB lookup + bcrypt password hashing.
-# For MVP: plaintext passwords acceptable ONLY in demo environments.
+# ─── Fallback Mock User Store ─────────────────────────────────────────────────
+# Used ONLY when the database is unreachable (e.g., during cold start).
+# Production: every login goes through the real `users` table.
 
 MOCK_USERS: dict = {
     "analyst_001": {
@@ -53,7 +54,7 @@ MOCK_USERS: dict = {
             "read:transactions",
             "read:risk_flags",
             "read:audit_logs",
-            "read:pii",  # compliance can see unmasked PII
+            "read:pii",
         ],
     },
     "manager_001": {
@@ -65,6 +66,20 @@ MOCK_USERS: dict = {
             "read:transactions",
             "read:branch_data",
             "read:risk_summary",
+        ],
+    },
+    "admin_001": {
+        "password": "password",
+        "role": UserRole.ADMIN,
+        "permissions": [
+            "read:customers",
+            "read:accounts",
+            "read:transactions",
+            "read:risk_flags",
+            "read:audit_logs",
+            "read:pii",
+            "admin:users",
+            "admin:roles",
         ],
     },
 }
@@ -144,30 +159,95 @@ def verify_token(token: str) -> Tuple[str, str]:
 
 # ─── User Authentication ──────────────────────────────────────────────────────
 
-def authenticate_user(username: str, password: str) -> Optional[User]:
+async def authenticate_user_db(
+    username: str,
+    password: str,
+    db,  # DatabaseConnector | None
+) -> Optional[User]:
     """
-    Validate credentials against the mock user store.
+    Validate credentials against the real `users` table.
+    Falls back to MOCK_USERS if db is None (dev/test safety).
 
     Args:
         username: Submitted username.
-        password: Submitted password (plaintext — MVP only).
+        password: Submitted password (plaintext — MVP; use bcrypt in production).
+        db:       DatabaseConnector instance, or None to use mock store.
 
     Returns:
         User object if credentials are valid, None otherwise.
     """
-    user_data = MOCK_USERS.get(username)
+    if db is None:
+        logger.warning("DB unavailable — using mock user store fallback")
+        return _authenticate_mock(username, password)
 
+    try:
+        row = await db.fetch_one(
+            """
+            SELECT user_id, role, permissions, status
+              FROM users
+             WHERE user_id = $1
+               AND password = $2
+               AND status = 'active'
+            """,
+            [username, password],
+        )
+
+        if not row:
+            logger.warning("Login attempt failed (DB)", extra={"username": username})
+            return None
+
+        # Update last_login (non-fatal)
+        try:
+            await db.execute(
+                "UPDATE users SET last_login = NOW() WHERE user_id = $1",
+                [username],
+            )
+        except Exception:
+            pass
+
+        permissions = row.get("permissions") or []
+        if isinstance(permissions, str):
+            import json
+            try:
+                permissions = json.loads(permissions)
+            except Exception:
+                permissions = [permissions]
+
+        return User(
+            user_id=row["user_id"],
+            user_role=row["role"],
+            permissions=list(permissions),
+        )
+
+    except Exception as exc:
+        logger.error(
+            "DB authentication query failed — falling back to mock store",
+            extra={"error": str(exc)},
+        )
+        return _authenticate_mock(username, password)
+
+
+def _authenticate_mock(username: str, password: str) -> Optional[User]:
+    """Fallback: validate against in-memory mock user store."""
+    user_data = MOCK_USERS.get(username)
     if not user_data:
         logger.warning("Login attempt for unknown user", extra={"username": username})
         return None
-
-    # MVP: direct string comparison. Production: bcrypt.checkpw()
     if user_data["password"] != password:
         logger.warning("Invalid password for user", extra={"username": username})
         return None
-
     return User(
         user_id=username,
         user_role=user_data["role"],
         permissions=user_data["permissions"],
     )
+
+
+# ─── Sync wrapper kept for backward compatibility ─────────────────────────────
+
+def authenticate_user(username: str, password: str) -> Optional[User]:
+    """
+    Synchronous fallback used only in tests / non-async contexts.
+    Real login path uses `authenticate_user_db` (async).
+    """
+    return _authenticate_mock(username, password)

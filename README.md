@@ -45,7 +45,9 @@ curl -X POST http://localhost:8000/query \
 ┌─────────────────────▼───────────────────────────────────────────┐
 │  API Gateway  (FastAPI)                       :8000              │
 │  JWT auth · Rate limiting (100/min) · Audit middleware           │
-│  Routes: POST /auth/login · POST /query · GET /health            │
+│  Routes: POST /auth/login · POST /query · GET /health · /users/me │
+│          /dashboard/* · /kpi/* · /risk/* · /compliance/*         │
+│          /audit/logs · /reports/* · /admin/*                    │
 └─────────────────────┬───────────────────────────────────────────┘
                       │ HTTP
 ┌─────────────────────▼───────────────────────────────────────────┐
@@ -107,32 +109,34 @@ Support:
 
 ---
 
-## Mock Users (MVP)
+## Mock & DB Users
+
+The API Gateway queries the real `users` table populated by `init/02-users-kpis.sql` for active users. If the database is temporarily unreachable, it falls back to the local mock user store.
 
 | Username | Password | Role | Permissions |
 |---|---|---|---|
+| admin_001 | password | admin | read: customers, accounts, transactions, risk_flags, audit_logs, pii, admin:users, admin:roles |
+| compliance_001 | password | compliance | read: customers, accounts, transactions, risk_flags, audit_logs, pii |
+| manager_001 | password | manager | read: customers, accounts, transactions, branch_data, risk_summary |
 | analyst_001 | password | analyst | read: customers, accounts, transactions, risk_flags |
 | analyst_002 | password | analyst | read: customers, accounts, transactions |
-| compliance_001 | password | compliance | all above + audit_logs + PII (unmasked) |
-| manager_001 | password | manager | read: customers, accounts, transactions, branches, risk_summary |
 
-> **Warning:** Plaintext passwords for demo only. Do not use in production.
+> **Warning:** Plaintext passwords for demo/testing only. Use hashed passwords (e.g. bcrypt) in production.
 
 ---
 
 ## Running Tests
 
 ```bash
-# Unit + integration tests (no Docker needed — stubs in conftest.py)
+# Install test requirements (no Docker needed — stubs in conftest.py)
 cd banking-intelligence-system
 pip install pytest pytest-asyncio
+
+# Run the complete Portal Endpoints test suite (52 tests)
+pytest tests/test_portal_endpoints.py -v
+
+# Run all tests
 pytest tests/ -v
-
-# Specific agent test
-pytest tests/test_compliance_agent.py -v
-
-# Security tests
-pytest tests/test_security.py -v
 ```
 
 ---
