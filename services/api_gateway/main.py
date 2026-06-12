@@ -52,6 +52,26 @@ except Exception as e:
         f.write(traceback.format_exc())
     raise
 
+async def apply_migrations(db: DatabaseConnector) -> None:
+    """Read the migration file and execute it against the main database."""
+    migration_path = "/app/init/02-users-kpis.sql"
+    if not os.path.exists(migration_path):
+        migration_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../init/02-users-kpis.sql"))
+
+    if not os.path.exists(migration_path):
+        logger.warning(f"Migration file not found at {migration_path}")
+        return
+
+    try:
+        logger.info(f"Applying database migrations from {migration_path}")
+        with open(migration_path, "r") as f:
+            sql = f.read()
+        await db.execute(sql)
+        logger.info("Database migrations applied successfully")
+    except Exception as exc:
+        logger.error("Failed to apply database migrations", extra={"error": str(exc)})
+
+
 try:
     logger = get_logger(__name__, "api-gateway")
     settings = get_settings()
@@ -71,9 +91,21 @@ try:
             app.state.db = DatabaseConnector(settings.DATABASE_URL)
             await app.state.db.initialize()
             logger.info("Database connection pool ready")
+            
+            # Apply database migrations
+            await apply_migrations(app.state.db)
         except Exception as exc:
             logger.warning("Database not available at startup", extra={"error": str(exc)})
             app.state.db = None
+
+        # Store Audit DB connector in app state
+        try:
+            app.state.audit_db = DatabaseConnector(settings.AUDIT_DATABASE_URL)
+            await app.state.audit_db.initialize()
+            logger.info("Audit Database connection pool ready")
+        except Exception as exc:
+            logger.warning("Audit Database not available at startup", extra={"error": str(exc)})
+            app.state.audit_db = None
 
         yield
 
@@ -81,6 +113,8 @@ try:
         logger.info("API Gateway shutting down")
         if getattr(app.state, "db", None):
             await app.state.db.close()
+        if getattr(app.state, "audit_db", None):
+            await app.state.audit_db.close()
 
 
     # ─── Application ──────────────────────────────────────────────────────────────
