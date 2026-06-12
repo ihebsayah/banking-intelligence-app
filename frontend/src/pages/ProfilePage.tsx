@@ -41,7 +41,7 @@ export function ProfilePage() {
       <div className="flex-1 p-6 space-y-6 overflow-y-auto max-w-[1000px] mx-auto w-full">
         {usingTokenFallback && (
           <div className="flex items-center gap-2 bg-blue-500/5 border border-blue-500/10 rounded-xl px-4 py-3 text-xs text-slate-400">
-            <span>Profile retrieved via offline JWT token validation. endpoint: <code className="text-slate-350 font-mono">GET /auth/me</code> is pending integration.</span>
+            <span>Profile retrieved via offline JWT token validation. Endpoint <code className="text-slate-350 font-mono">GET /users/me</code> is temporarily unavailable.</span>
           </div>
         )}
 

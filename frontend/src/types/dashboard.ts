@@ -7,7 +7,7 @@ export interface KPI {
   trend: number;
   trend_direction: 'up' | 'down' | 'stable';
   last_updated: string;
-  data_freshness: 'real-time' | '6-hour' | 'daily';
+  data_freshness: string;
 }
 
 export interface ChartDataPoint {
