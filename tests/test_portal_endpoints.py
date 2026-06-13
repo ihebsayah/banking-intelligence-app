@@ -34,6 +34,7 @@ for p in [GATEWAY, SHARED, "/app/shared", "/app"]:
 
 # ─── FastAPI TestClient ────────────────────────────────────────────────────────
 from fastapi.testclient import TestClient
+from shared.models import User, UserRole
 
 
 # ─── Helpers to build mock DB ─────────────────────────────────────────────────
@@ -41,7 +42,30 @@ from fastapi.testclient import TestClient
 def make_db(fetch_one_return=None, fetch_all_return=None, execute_return="OK"):
     """Return a mock DatabaseConnector with configurable return values."""
     db = MagicMock()
-    db.fetch_one = AsyncMock(return_value=fetch_one_return)
+    
+    async def mock_fetch_one(query, *args):
+        if "SELECT status, role, permissions FROM users" in query:
+            uid = args[0] if args else "admin_001"
+            role = "admin"
+            if "analyst" in uid:
+                role = "analyst"
+            elif "compliance" in uid:
+                role = "compliance"
+            elif "manager" in uid:
+                role = "manager"
+            return {
+                "user_id": uid,
+                "role": role,
+                "password_hash": "$2b$12$kc0bFMxOvWwy6Y6vd23VOeoWHSgBh3MPKUqlBiD2wmEG.nbuChW4y",
+                "permissions": [],
+                "status": "active",
+                "must_change_password": False
+            }
+        if isinstance(fetch_one_return, list):
+            return fetch_one_return.pop(0) if fetch_one_return else None
+        return fetch_one_return
+
+    db.fetch_one = AsyncMock(side_effect=mock_fetch_one)
     db.fetch_all = AsyncMock(return_value=fetch_all_return or [])
     db.execute = AsyncMock(return_value=execute_return)
     db._pool = MagicMock()
@@ -57,15 +81,44 @@ def app_and_tokens():
     Tokens are generated via create_access_token for each role.
     """
     import main as gw
-    from auth import create_access_token
-
+    from auth import create_access_token, verify_token
+    from routes import get_current_user, security
+    from fastapi import Depends, HTTPException
+    
     client = TestClient(gw.app, raise_server_exceptions=False)
-
+    
     tokens = {
         role: f"Bearer {create_access_token(f'{role}_001', role)[0]}"
         for role in ("analyst", "manager", "compliance", "admin")
     }
-    return client, tokens
+    
+    async def override_get_current_user(credentials = Depends(security)):
+        # Mirror production: no credentials → 401, invalid token → 401
+        if not credentials:
+            raise HTTPException(status_code=401, detail="Not authenticated")
+        try:
+            user_id, user_role = verify_token(credentials.credentials)
+        except Exception:
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
+        ROLE_PERMISSIONS = {
+            "analyst":    ["read:customers", "read:accounts", "read:transactions", "read:risk_flags"],
+            "manager":    ["read:customers", "read:accounts", "read:transactions", "read:branch_data", "read:risk_summary"],
+            "compliance": ["read:customers", "read:accounts", "read:transactions", "read:risk_flags", "read:audit_logs", "read:pii"],
+            "admin":      ["read:customers", "read:accounts", "read:transactions", "read:risk_flags", "read:audit_logs", "read:pii", "admin:users", "admin:roles", "write:reports"],
+        }
+        return User(
+            user_id=user_id,
+            user_role=user_role,
+            permissions=ROLE_PERMISSIONS.get(user_role, [])
+        )
+        
+    gw.app.dependency_overrides[get_current_user] = override_get_current_user
+    
+    yield client, tokens
+    
+    gw.app.dependency_overrides.pop(get_current_user, None)
 
 
 # ─── Auth header shortcuts ────────────────────────────────────────────────────
@@ -547,6 +600,7 @@ class TestReports:
         assert body["items"][0]["report_type"] == "aml_summary"
 
     def test_generate_aml_report(self, app_and_tokens):
+        # write:reports is an admin-only permission
         client, tokens = app_and_tokens
         db = make_db()
         db.fetch_all = AsyncMock(return_value=[
@@ -556,7 +610,7 @@ class TestReports:
             "report_id": "new-report-id", "generated_at": datetime.utcnow()
         })
         client.app.state.db = db
-        r = client.post("/reports/generate", headers=_h(tokens["analyst"]),
+        r = client.post("/reports/generate", headers=_h(tokens["admin"]),
             json={"report_type": "aml_summary", "regulation": "AML"})
         assert r.status_code == 201
         body = r.json()
@@ -565,6 +619,7 @@ class TestReports:
         assert "report_id" in body
 
     def test_generate_kyc_report(self, app_and_tokens):
+        # write:reports is an admin-only permission
         client, tokens = app_and_tokens
         db = make_db()
         db.fetch_all = AsyncMock(return_value=[
@@ -574,13 +629,14 @@ class TestReports:
             "report_id": "kyc-report-id", "generated_at": datetime.utcnow()
         })
         client.app.state.db = db
-        r = client.post("/reports/generate", headers=_h(tokens["analyst"]),
+        r = client.post("/reports/generate", headers=_h(tokens["admin"]),
             json={"report_type": "kyc_status", "regulation": "KYC"})
         assert r.status_code == 201
 
     def test_generate_report_missing_fields_422(self, app_and_tokens):
+        # admin has write:reports; validation (422) fires before permission check
         client, tokens = app_and_tokens
-        r = client.post("/reports/generate", headers=_h(tokens["analyst"]), json={})
+        r = client.post("/reports/generate", headers=_h(tokens["admin"]), json={})
         assert r.status_code == 422
 
 
@@ -633,55 +689,109 @@ class TestProfile:
 class TestAdmin:
     def _admin_db(self, app_and_tokens):
         client, tokens = app_and_tokens
-        client.app.state.db = make_db(fetch_all_return=[{
+        db = make_db(fetch_all_return=[{
             "user_id": "analyst_001", "email": "analyst_001@bankintel.hq",
             "name": "Analyst One", "role": "analyst", "bank_id": "hq_main",
             "created_at": datetime.utcnow(), "last_login": datetime.utcnow(), "status": "active"
         }])
+        db.fetch_one = AsyncMock(return_value={"count": 1})
+        client.app.state.db = db
         return client, tokens
 
     def test_admin_users_returns_list(self, app_and_tokens):
         client, tokens = self._admin_db(app_and_tokens)
         r = client.get("/admin/users", headers=_h(tokens["admin"]))
         assert r.status_code == 200
-        users = r.json()
-        assert isinstance(users, list)
-        assert users[0]["user_id"] == "analyst_001"
+        body = r.json()
+        assert "items" in body
+        assert isinstance(body["items"], list)
+        assert body["items"][0]["user_id"] == "analyst_001"
 
     def test_admin_users_role_filter(self, app_and_tokens):
         client, tokens = app_and_tokens
-        client.app.state.db = make_db(fetch_all_return=[])
+        db = make_db(fetch_all_return=[])
+        db.fetch_one = AsyncMock(return_value={"count": 0})
+        client.app.state.db = db
         r = client.get("/admin/users?role=analyst", headers=_h(tokens["admin"]))
         assert r.status_code == 200
 
     def test_admin_roles_returns_roles(self, app_and_tokens):
         client, tokens = app_and_tokens
-        client.app.state.db = make_db(fetch_all_return=[
-            {"role": "analyst", "user_count": 2},
-            {"role": "compliance", "user_count": 1},
-            {"role": "admin", "user_count": 1},
-        ])
+        
+        def mock_fetch_all(query, *args):
+            if "role_permissions" in query:
+                return [
+                    {"role_id": "analyst", "permission_key": "read:customers"},
+                    {"role_id": "compliance", "permission_key": "read:audit_logs"},
+                    {"role_id": "admin", "permission_key": "admin:users"},
+                ]
+            elif "users" in query:
+                return [
+                    {"role": "analyst", "user_count": 2},
+                    {"role": "compliance", "user_count": 1},
+                    {"role": "admin", "user_count": 1},
+                ]
+            return [
+                {"role_id": "analyst", "label": "Analyst", "description": "Analyst role"},
+                {"role_id": "compliance", "label": "Compliance", "description": "Compliance role"},
+                {"role_id": "admin", "label": "Admin", "description": "Admin role"},
+            ]
+            
+        db = make_db()
+        db.fetch_all = AsyncMock(side_effect=mock_fetch_all)
+        client.app.state.db = db
+        
         r = client.get("/admin/roles", headers=_h(tokens["admin"]))
         assert r.status_code == 200
         roles = r.json()
         assert len(roles) == 3
-        roles_map = {ro["role"]: ro for ro in roles}
+        roles_map = {ro["role_id"]: ro for ro in roles}
         assert "analyst" in roles_map
         assert len(roles_map["compliance"]["permissions"]) > 0
 
     def test_admin_permissions_returns_permission_list(self, app_and_tokens):
         client, tokens = app_and_tokens
+        
+        def mock_fetch_all(query, *args):
+            if "role_permissions" in query:
+                return [
+                    {"role_id": "admin", "permission_key": "admin:users"},
+                    {"role_id": "admin", "permission_key": "read:customers"},
+                ]
+            return [
+                {"permission_key": "read:customers", "label": "Read Customers", "description": "Read customers description", "category": "read"},
+                {"permission_key": "admin:users", "label": "Admin Users", "description": "Admin users description", "category": "admin"},
+            ]
+            
+        db = make_db()
+        db.fetch_all = AsyncMock(side_effect=mock_fetch_all)
+        client.app.state.db = db
+        
         r = client.get("/admin/permissions", headers=_h(tokens["admin"]))
         assert r.status_code == 200
         perms = r.json()
-        assert len(perms) >= 8
-        perm_names = [p["permission"] for p in perms]
+        assert len(perms) >= 2
+        perm_names = [p["permission_key"] for p in perms]
         assert "read:customers" in perm_names
         assert "admin:users" in perm_names
 
     def test_admin_permissions_only_admin_has_admin_role(self, app_and_tokens):
         client, tokens = app_and_tokens
+        
+        def mock_fetch_all(query, *args):
+            if "role_permissions" in query:
+                return [
+                    {"role_id": "admin", "permission_key": "admin:users"},
+                ]
+            return [
+                {"permission_key": "admin:users", "label": "Admin Users", "description": "Admin users description", "category": "admin"},
+            ]
+            
+        db = make_db()
+        db.fetch_all = AsyncMock(side_effect=mock_fetch_all)
+        client.app.state.db = db
+        
         r = client.get("/admin/permissions", headers=_h(tokens["admin"]))
         perms = r.json()
-        admin_perm = next(p for p in perms if p["permission"] == "admin:users")
+        admin_perm = next(p for p in perms if p["permission_key"] == "admin:users")
         assert admin_perm["roles"] == ["admin"]

@@ -9,3 +9,5 @@ asyncpg==0.29.0
 redis==5.0.1
 slowapi==0.1.9
 httpx==0.25.2
+passlib[bcrypt]==1.7.4
+bcrypt==4.1.2

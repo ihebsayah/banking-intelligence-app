@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
 
 import jwt  # PyJWT
+from passlib.context import CryptContext
 
 from shared.config import get_settings
 from shared.errors import AuthenticationError, TokenExpiredError, InvalidTokenError
@@ -21,13 +22,21 @@ from shared.models import User, UserRole
 logger = get_logger(__name__, "api-gateway")
 settings = get_settings()
 
+# Password hashing context using bcrypt
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def hash_password(plain: str) -> str:
+    """Generate a bcrypt hash from a plaintext password."""
+    return pwd_context.hash(plain)
+
+
 # ─── Fallback Mock User Store ─────────────────────────────────────────────────
 # Used ONLY when the database is unreachable (e.g., during cold start).
 # Production: every login goes through the real `users` table.
 
 MOCK_USERS: dict = {
     "analyst_001": {
-        "password": "password",
+        "password_hash": "$2b$12$kc0bFMxOvWwy6Y6vd23VOeoWHSgBh3MPKUqlBiD2wmEG.nbuChW4y",
         "role": UserRole.ANALYST,
         "permissions": [
             "read:customers",
@@ -37,7 +46,7 @@ MOCK_USERS: dict = {
         ],
     },
     "analyst_002": {
-        "password": "password",
+        "password_hash": "$2b$12$kc0bFMxOvWwy6Y6vd23VOeoWHSgBh3MPKUqlBiD2wmEG.nbuChW4y",
         "role": UserRole.ANALYST,
         "permissions": [
             "read:customers",
@@ -46,7 +55,7 @@ MOCK_USERS: dict = {
         ],
     },
     "compliance_001": {
-        "password": "password",
+        "password_hash": "$2b$12$kc0bFMxOvWwy6Y6vd23VOeoWHSgBh3MPKUqlBiD2wmEG.nbuChW4y",
         "role": UserRole.COMPLIANCE,
         "permissions": [
             "read:customers",
@@ -58,7 +67,7 @@ MOCK_USERS: dict = {
         ],
     },
     "manager_001": {
-        "password": "password",
+        "password_hash": "$2b$12$kc0bFMxOvWwy6Y6vd23VOeoWHSgBh3MPKUqlBiD2wmEG.nbuChW4y",
         "role": UserRole.MANAGER,
         "permissions": [
             "read:customers",
@@ -69,7 +78,7 @@ MOCK_USERS: dict = {
         ],
     },
     "admin_001": {
-        "password": "password",
+        "password_hash": "$2b$12$kc0bFMxOvWwy6Y6vd23VOeoWHSgBh3MPKUqlBiD2wmEG.nbuChW4y",
         "role": UserRole.ADMIN,
         "permissions": [
             "read:customers",
@@ -83,6 +92,7 @@ MOCK_USERS: dict = {
         ],
     },
 }
+
 
 
 # ─── Token Creation ───────────────────────────────────────────────────────────
@@ -156,7 +166,6 @@ def verify_token(token: str) -> Tuple[str, str]:
     except jwt.InvalidTokenError:
         raise InvalidTokenError()
 
-
 # ─── User Authentication ──────────────────────────────────────────────────────
 
 async def authenticate_user_db(
@@ -166,34 +175,48 @@ async def authenticate_user_db(
 ) -> Optional[User]:
     """
     Validate credentials against the real `users` table.
-    Falls back to MOCK_USERS if db is None (dev/test safety).
+    Falls back to MOCK_USERS if db is None and DEV_MODE is True.
 
     Args:
         username: Submitted username.
-        password: Submitted password (plaintext — MVP; use bcrypt in production).
+        password: Submitted password (plaintext; verified using bcrypt).
         db:       DatabaseConnector instance, or None to use mock store.
 
     Returns:
         User object if credentials are valid, None otherwise.
     """
     if db is None:
-        logger.warning("DB unavailable — using mock user store fallback")
-        return _authenticate_mock(username, password)
+        if settings.DEV_MODE:
+            logger.warning("DB unavailable — using mock user store fallback")
+            return _authenticate_mock(username, password)
+        else:
+            logger.error("DB unavailable and DEV_MODE is False")
+            return None
 
     try:
         row = await db.fetch_one(
             """
-            SELECT user_id, role, permissions, status
+            SELECT user_id, role, password_hash, permissions, status, must_change_password
               FROM users
              WHERE user_id = $1
-               AND password = $2
-               AND status = 'active'
             """,
-            [username, password],
+            [username],
         )
 
         if not row:
-            logger.warning("Login attempt failed (DB)", extra={"username": username})
+            logger.warning("Login attempt failed (DB - user not found)", extra={"username": username})
+            # To avoid timing attacks, verify a dummy hash
+            pwd_context.verify(password, "$2b$12$kc0bFMxOvWwy6Y6vd23VOeoWHSgBh3MPKUqlBiD2wmEG.nbuChW4y")
+            return None
+
+        # Verify bcrypt password hash
+        if not pwd_context.verify(password, row["password_hash"]):
+            logger.warning("Login attempt failed (DB - invalid password)", extra={"username": username})
+            return None
+
+        # Check status
+        if row["status"] != "active":
+            logger.warning("Login attempt failed (DB - user status not active)", extra={"username": username})
             return None
 
         # Update last_login (non-fatal)
@@ -205,35 +228,59 @@ async def authenticate_user_db(
         except Exception:
             pass
 
-        permissions = row.get("permissions") or []
-        if isinstance(permissions, str):
+        # Load role's dynamic permissions from the junction table
+        try:
+            role_permissions_rows = await db.fetch_all(
+                """
+                SELECT permission_key
+                  FROM role_permissions
+                 WHERE role_id = $1
+                """,
+                [row["role"]]
+            )
+            role_perms = [r["permission_key"] for r in role_permissions_rows]
+        except Exception as err:
+            logger.error("Failed to load role permissions from DB", extra={"error": str(err)})
+            role_perms = []
+
+        custom_perms = row.get("permissions") or []
+        if isinstance(custom_perms, str):
             import json
             try:
-                permissions = json.loads(permissions)
+                custom_perms = json.loads(custom_perms)
             except Exception:
-                permissions = [permissions]
+                custom_perms = [custom_perms]
+
+        # Combine role-based permissions with custom permission overrides
+        all_perms = list(set(role_perms) | set(custom_perms))
 
         return User(
             user_id=row["user_id"],
             user_role=row["role"],
-            permissions=list(permissions),
+            permissions=all_perms,
         )
 
     except Exception as exc:
         logger.error(
-            "DB authentication query failed — falling back to mock store",
+            "DB authentication query failed",
             extra={"error": str(exc)},
         )
-        return _authenticate_mock(username, password)
+        if settings.DEV_MODE:
+            logger.warning("Falling back to mock store due to DB error")
+            return _authenticate_mock(username, password)
+        return None
 
 
 def _authenticate_mock(username: str, password: str) -> Optional[User]:
     """Fallback: validate against in-memory mock user store."""
+    if not settings.DEV_MODE:
+        logger.warning("Mock auth attempted, but DEV_MODE is disabled.")
+        return None
     user_data = MOCK_USERS.get(username)
     if not user_data:
         logger.warning("Login attempt for unknown user", extra={"username": username})
         return None
-    if user_data["password"] != password:
+    if not pwd_context.verify(password, user_data["password_hash"]):
         logger.warning("Invalid password for user", extra={"username": username})
         return None
     return User(
@@ -251,3 +298,4 @@ def authenticate_user(username: str, password: str) -> Optional[User]:
     Real login path uses `authenticate_user_db` (async).
     """
     return _authenticate_mock(username, password)
+

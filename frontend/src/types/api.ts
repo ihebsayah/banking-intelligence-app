@@ -244,13 +244,92 @@ export interface AdminUserRow {
 }
 
 export interface RoleInfo {
+  role_id?: string;
   role: string;
+  label?: string;
+  description?: string;
   user_count: number;
   permissions: string[];
 }
 
 export interface PermissionInfo {
+  permission_key?: string;
   permission: string;
   roles: string[];
+  label?: string;
   description: string;
+  category?: string;
+}
+
+// ─── Admin Governance Types ───────────────────────────────────────────────────
+
+export interface PaginatedAdminUsers {
+  total: number;
+  page: number;
+  page_size: number;
+  items: AdminUserRow[];
+}
+
+export interface CreateUserRequest {
+  user_id: string;
+  email: string;
+  name: string;
+  role: string;
+  bank_id: string;
+}
+
+export interface UpdateUserRequest {
+  name?: string;
+  email?: string;
+  bank_id?: string;
+}
+
+export interface UpdateUserStatusRequest {
+  status: 'active' | 'suspended';
+}
+
+export interface UpdateUserRoleRequest {
+  role: string;
+}
+
+export interface ResetPasswordResponse {
+  user_id: string;
+  temp_password: string;
+  must_change_password: boolean;
+  message: string;
+}
+
+export interface CreateUserResponse {
+  user_id: string;
+  email: string;
+  name: string;
+  role: string;
+  bank_id: string;
+  temp_password: string;
+  must_change_password: boolean;
+}
+
+export interface ActivityLogEntry {
+  id: number;
+  actor_id: string;
+  target_id?: string;
+  action: string;
+  detail?: Record<string, any>;
+  ip_address?: string;
+  created_at: string;
+}
+
+export interface PaginatedActivityLog {
+  total: number;
+  page: number;
+  page_size: number;
+  items: ActivityLogEntry[];
+}
+
+export interface RoleDetail {
+  role_id: string;
+  label: string;
+  description?: string;
+  permissions: string[];
+  user_count: number;
 }

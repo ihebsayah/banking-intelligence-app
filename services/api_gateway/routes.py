@@ -46,8 +46,7 @@ from shared.models import (
     User,
     UserRole,
 )
-from auth import authenticate_user_db, create_access_token, verify_token
-
+from auth import authenticate_user_db, create_access_token, verify_token, MOCK_USERS, pwd_context
 logger = get_logger(__name__, "api-gateway")
 settings = get_settings()
 router = APIRouter()
@@ -267,25 +266,83 @@ class AdminUserRow(BaseModel):
     last_login: str
     status: str
 
+class CreateUserRequest(BaseModel):
+    user_id: str = Field(..., min_length=3, max_length=100)
+    email: str = Field(..., min_length=3, max_length=255)
+    name: Optional[str] = None
+    role: str = Field(..., min_length=2, max_length=50)
+    bank_id: Optional[str] = "hq_main"
 
-class RoleInfo(BaseModel):
+class CreateUserResponse(BaseModel):
+    user_id: str
+    email: str
+    name: Optional[str]
     role: str
-    user_count: int
+    bank_id: str
+    temp_password: str
+    must_change_password: bool
+    status: str
+
+class UpdateUserRequest(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+    bank_id: Optional[str] = None
+
+class UpdateUserStatusRequest(BaseModel):
+    status: str = Field(..., pattern="^(active|suspended)$")
+
+class ResetPasswordResponse(BaseModel):
+    temp_password: str
+
+class UpdateUserRolesRequest(BaseModel):
+    role: str = Field(..., min_length=2, max_length=50)
+
+class CreateRoleRequest(BaseModel):
+    role_id: str = Field(..., min_length=2, max_length=50)
+    label: str = Field(..., min_length=2, max_length=100)
+    description: Optional[str] = None
+
+class UpdateRolePermissionsRequest(BaseModel):
     permissions: List[str]
 
+class PaginatedAdminUsers(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    items: List[AdminUserRow]
+
+class RoleInfo(BaseModel):
+    role_id: str
+    label: str
+    description: Optional[str] = None
+    user_count: int
+    permissions: List[str] = Field(default_factory=list)
 
 class PermissionInfo(BaseModel):
-    permission: str
-    roles: List[str]
-    description: str
+    permission_key: str
+    label: str
+    description: Optional[str] = None
+    category: str
+    roles: List[str] = Field(default_factory=list)
+
+class AdminActivityLog(BaseModel):
+    id: int
+    actor_id: str
+    target_id: Optional[str]
+    action: str
+    detail: Optional[Dict[str, Any]] = None
+    ip_address: Optional[str] = None
+    created_at: str
+
 
 
 # ─── Auth Dependency ──────────────────────────────────────────────────────────
 
 async def get_current_user(
+    request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ) -> User:
-    """FastAPI dependency — extracts and validates Bearer JWT."""
+    """FastAPI dependency — extracts, validates Bearer JWT, and loads fresh user context."""
     if not credentials:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -294,7 +351,61 @@ async def get_current_user(
         )
     try:
         user_id, user_role = verify_token(credentials.credentials)
-        return User(user_id=user_id, user_role=user_role)
+        
+        # Load user details (including status, permissions) from DB
+        db = getattr(request.app.state, "db", None)
+        permissions = []
+        if db is not None:
+            row = await db.fetch_one(
+                "SELECT status, role, permissions FROM users WHERE user_id = $1",
+                [user_id]
+            )
+            if not row:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail={"error": "USER_NOT_FOUND", "message": "User not found in system"},
+                )
+            status_val = row.get("status") or "active"
+            if status_val != "active":
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail={"error": "USER_SUSPENDED", "message": "User is suspended/inactive"},
+                )
+            
+            # Fetch role's dynamic permissions from the junction table
+            try:
+                role_permissions_rows = await db.fetch_all(
+                    "SELECT permission_key FROM role_permissions WHERE role_id = $1",
+                    [row["role"]]
+                )
+                role_perms = [r["permission_key"] for r in role_permissions_rows]
+            except Exception as e:
+                logger.error("Failed to load role permissions in dependency", extra={"error": str(e)})
+                role_perms = []
+                
+            custom_perms = row.get("permissions") or []
+            if isinstance(custom_perms, str):
+                import json
+                try:
+                    custom_perms = json.loads(custom_perms)
+                except Exception:
+                    custom_perms = [custom_perms]
+            
+            permissions = list(set(role_perms) | set(custom_perms))
+        else:
+            # db is None, if DEV_MODE, check MOCK_USERS
+            if settings.DEV_MODE:
+                mock_user = MOCK_USERS.get(user_id)
+                if mock_user:
+                    permissions = mock_user.get("permissions") or []
+                    
+        return User(
+            user_id=user_id,
+            user_role=user_role,
+            permissions=permissions
+        )
+    except HTTPException:
+        raise
     except TokenExpiredError as e:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=e.to_dict(),
                             headers={"WWW-Authenticate": "Bearer"})
@@ -331,6 +442,38 @@ def require_roles(*roles: str):
             )
         return user
 
+    return _check
+
+
+def require_permission(permission: str):
+    """FastAPI dependency — checks user.permissions list."""
+    async def _check(user: User = Depends(get_current_user)) -> User:
+        if permission not in user.permissions:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "error": "INSUFFICIENT_PERMISSIONS",
+                    "message": f"This endpoint requires permission: {permission}",
+                },
+            )
+        return user
+    return _check
+
+
+def require_any_permission(*permissions: str):
+    """FastAPI dependency — checks user.permissions list for any of the listed permissions."""
+    async def _check(user: User = Depends(get_current_user)) -> User:
+        user_perms = set(user.permissions)
+        required_perms = set(permissions)
+        if not (user_perms & required_perms):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "error": "INSUFFICIENT_PERMISSIONS",
+                    "message": f"This endpoint requires one of the permissions: {list(permissions)}",
+                },
+            )
+        return user
     return _check
 
 
@@ -1071,7 +1214,7 @@ async def compliance_violations(
     severity: Optional[str] = Query(default=None),
     date_from: Optional[str] = Query(default=None, description="ISO date e.g. 2026-01-01"),
     date_to: Optional[str] = Query(default=None),
-    user: User = Depends(require_roles("compliance")),
+    user: User = Depends(require_permission("read:pii")),
 ) -> dict:
     db = _require_db(request)
     offset = (page - 1) * page_size
@@ -1126,7 +1269,7 @@ async def audit_logs(
     action: Optional[str] = Query(default=None),
     date_from: Optional[str] = Query(default=None, description="ISO timestamp"),
     date_to: Optional[str] = Query(default=None),
-    user: User = Depends(require_roles("compliance")),
+    user: User = Depends(require_permission("read:audit_logs")),
 ) -> PaginatedAuditLogs:
     audit_db = _require_audit_db(request)
     offset = (page - 1) * page_size
@@ -1230,7 +1373,7 @@ async def list_reports(
 async def generate_report(
     body: ReportGenerateRequest,
     request: Request,
-    user: User = Depends(require_roles("business")),
+    user: User = Depends(require_permission("write:reports")),
 ) -> dict:
     db = _require_db(request)
 
@@ -1364,9 +1507,53 @@ async def get_auth_me(request: Request, user: User = Depends(get_current_user)) 
 # ─── ADMIN CENTER ─────────────────────────────────────────════════════════════
 # ═══════════════════════════════════════════════════════════════════════════════
 
+import secrets
+import string
+
+def generate_temp_password(length: int = 12) -> str:
+    alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
+    return "".join(secrets.choice(alphabet) for _ in range(length))
+
+async def _log_admin_action(
+    db: DatabaseConnector,
+    actor_id: str,
+    action: str,
+    target_id: Optional[str] = None,
+    detail: Optional[dict] = None,
+    ip_address: Optional[str] = None,
+) -> None:
+    try:
+        import json
+        detail_json = json.dumps(detail) if detail else None
+        await db.execute(
+            """
+            INSERT INTO user_activity_log (actor_id, target_id, action, detail, ip_address)
+            VALUES ($1, $2, $3, $4, $5)
+            """,
+            [actor_id, target_id, action, detail_json, ip_address]
+        )
+    except Exception as exc:
+        logger.error("Failed to write to user_activity_log", extra={"error": str(exc)})
+
+async def _is_last_active_admin(db: DatabaseConnector, target_user_id: str) -> bool:
+    # Check if the target user is an active admin
+    row = await db.fetch_one(
+        "SELECT role, status FROM users WHERE user_id = $1",
+        [target_user_id]
+    )
+    if not row or row["role"] != "admin" or row["status"] != "active":
+        return False
+    
+    # Count how many active admins there are
+    count_row = await db.fetch_one(
+        "SELECT COUNT(*) as count FROM users WHERE role = 'admin' AND status = 'active'"
+    )
+    return (count_row["count"] if count_row else 0) <= 1
+
+
 @router.get(
     "/admin/users",
-    response_model=List[AdminUserRow],
+    response_model=PaginatedAdminUsers,
     summary="All system users (admin only)",
     tags=["admin"],
 )
@@ -1376,16 +1563,31 @@ async def admin_users(
     page_size: int = Query(default=25, ge=1, le=100),
     role_filter: Optional[str] = Query(default=None, alias="role"),
     status_filter: Optional[str] = Query(default=None, alias="status"),
+    search: Optional[str] = Query(default=None),
     user: User = Depends(require_roles("admin")),
-) -> List[AdminUserRow]:
+) -> PaginatedAdminUsers:
     db = _require_db(request)
     offset = (page - 1) * page_size
-    params, filters = [], []
+    params = []
+    filters = []
+    
     if role_filter:
-        params.append(role_filter); filters.append(f"role = ${len(params)}")
+        params.append(role_filter)
+        filters.append(f"role = ${len(params)}")
     if status_filter:
-        params.append(status_filter); filters.append(f"status = ${len(params)}")
+        params.append(status_filter)
+        filters.append(f"status = ${len(params)}")
+    if search:
+        params.append(f"%{search}%")
+        filters.append(f"(user_id ILIKE ${len(params)} OR email ILIKE ${len(params)} OR name ILIKE ${len(params)})")
+        
     where = ("WHERE " + " AND ".join(filters)) if filters else ""
+    
+    # Get total count
+    count_row = await db.fetch_one(f"SELECT COUNT(*) as count FROM users {where}", params)
+    total = count_row["count"] if count_row else 0
+    
+    # Get items
     params_paged = params + [page_size, offset]
     rows = await db.fetch_all(f"""
         SELECT user_id, email, name, role, bank_id, created_at, last_login, status
@@ -1393,13 +1595,555 @@ async def admin_users(
         ORDER BY created_at DESC
         LIMIT ${len(params_paged) - 1} OFFSET ${len(params_paged)}
     """, params_paged)
-    return [
-        AdminUserRow(user_id=r["user_id"], email=r.get("email", ""),
-            name=r.get("name"), role=r["role"], bank_id=r.get("bank_id", "hq_main"),
-            created_at=str(r.get("created_at", "")), last_login=str(r.get("last_login", "")),
-            status=r.get("status", "active"))
+    
+    items = [
+        AdminUserRow(
+            user_id=r["user_id"],
+            email=r.get("email") or "",
+            name=r.get("name"),
+            role=r["role"],
+            bank_id=r.get("bank_id") or "hq_main",
+            created_at=str(r.get("created_at") or ""),
+            last_login=str(r.get("last_login") or ""),
+            status=r.get("status") or "active"
+        )
         for r in rows
     ]
+    
+    return PaginatedAdminUsers(
+        total=total,
+        page=page,
+        page_size=page_size,
+        items=items
+    )
+
+
+@router.get(
+    "/admin/users/{user_id}",
+    response_model=AdminUserRow,
+    summary="Get user details (admin only)",
+    tags=["admin"],
+)
+async def get_admin_user_detail(
+    request: Request,
+    user_id: str,
+    user: User = Depends(require_roles("admin")),
+) -> AdminUserRow:
+    db = _require_db(request)
+    row = await db.fetch_one(
+        "SELECT user_id, email, name, role, bank_id, created_at, last_login, status FROM users WHERE user_id = $1",
+        [user_id]
+    )
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "USER_NOT_FOUND", "message": "User not found"}
+        )
+    return AdminUserRow(
+        user_id=row["user_id"],
+        email=row["email"],
+        name=row["name"],
+        role=row["role"],
+        bank_id=row["bank_id"],
+        created_at=str(row["created_at"]),
+        last_login=str(row["last_login"]),
+        status=row["status"]
+    )
+
+
+@router.post(
+    "/admin/users",
+    response_model=CreateUserResponse,
+    summary="Create a new system user (admin only)",
+    tags=["admin"],
+)
+async def create_admin_user(
+    request: Request,
+    body: CreateUserRequest,
+    user: User = Depends(require_roles("admin")),
+) -> CreateUserResponse:
+    db = _require_db(request)
+    
+    # Check if role exists
+    role_row = await db.fetch_one("SELECT role_id FROM roles WHERE role_id = $1", [body.role])
+    if not role_row:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": "INVALID_ROLE", "message": f"Role '{body.role}' does not exist"}
+        )
+        
+    # Check if user_id or email already exists
+    existing = await db.fetch_one(
+        "SELECT user_id, email FROM users WHERE user_id = $1 OR email = $2",
+        [body.user_id, body.email]
+    )
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"error": "USER_ALREADY_EXISTS", "message": "Username or email is already registered"}
+        )
+        
+    # Generate temporary password
+    temp_pw = generate_temp_password()
+    hashed_pw = pwd_context.hash(temp_pw)
+    
+    # Insert user
+    await db.execute(
+        """
+        INSERT INTO users (user_id, email, name, role, bank_id, password_hash, must_change_password, status)
+        VALUES ($1, $2, $3, $4, $5, $6, TRUE, 'active')
+        """,
+        [body.user_id, body.email, body.name, body.role, body.bank_id, hashed_pw]
+    )
+    
+    # Log audit
+    await _log_admin_action(
+        db=db,
+        actor_id=user.user_id,
+        action="user_created",
+        target_id=body.user_id,
+        detail={"email": body.email, "role": body.role, "bank_id": body.bank_id},
+        ip_address=request.client.host if request.client else None
+    )
+    
+    return CreateUserResponse(
+        user_id=body.user_id,
+        email=body.email,
+        name=body.name,
+        role=body.role,
+        bank_id=body.bank_id or "hq_main",
+        temp_password=temp_pw,
+        must_change_password=True,
+        status="active"
+    )
+
+
+@router.patch(
+    "/admin/users/{user_id}",
+    response_model=AdminUserRow,
+    summary="Update user profile details (admin only)",
+    tags=["admin"],
+)
+async def update_admin_user(
+    request: Request,
+    user_id: str,
+    body: UpdateUserRequest,
+    user: User = Depends(require_roles("admin")),
+) -> AdminUserRow:
+    db = _require_db(request)
+    
+    # Check if user exists
+    target = await db.fetch_one(
+        "SELECT user_id, email, name, role, bank_id, status, created_at, last_login FROM users WHERE user_id = $1",
+        [user_id]
+    )
+    if not target:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "USER_NOT_FOUND", "message": "User not found"}
+        )
+        
+    # Check if email duplicate
+    if body.email and body.email != target["email"]:
+        email_dup = await db.fetch_one("SELECT user_id FROM users WHERE email = $1", [body.email])
+        if email_dup:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"error": "EMAIL_ALREADY_EXISTS", "message": "Email is already in use by another user"}
+            )
+            
+    # Build update dynamic query
+    updates = []
+    params = []
+    detail = {}
+    
+    if body.name is not None:
+        params.append(body.name)
+        updates.append(f"name = ${len(params)}")
+        detail["name"] = body.name
+    if body.email is not None:
+        params.append(body.email)
+        updates.append(f"email = ${len(params)}")
+        detail["email"] = body.email
+    if body.bank_id is not None:
+        params.append(body.bank_id)
+        updates.append(f"bank_id = ${len(params)}")
+        detail["bank_id"] = body.bank_id
+        
+    if updates:
+        params.append(user_id)
+        await db.execute(
+            f"UPDATE users SET {', '.join(updates)} WHERE user_id = ${len(params)}",
+            params
+        )
+        # Log audit
+        await _log_admin_action(
+            db=db,
+            actor_id=user.user_id,
+            action="user_updated",
+            target_id=user_id,
+            detail=detail,
+            ip_address=request.client.host if request.client else None
+        )
+        
+    # Return updated user details
+    row = await db.fetch_one(
+        "SELECT user_id, email, name, role, bank_id, created_at, last_login, status FROM users WHERE user_id = $1",
+        [user_id]
+    )
+    return AdminUserRow(
+        user_id=row["user_id"],
+        email=row["email"],
+        name=row["name"],
+        role=row["role"],
+        bank_id=row["bank_id"],
+        created_at=str(row["created_at"]),
+        last_login=str(row["last_login"]),
+        status=row["status"]
+    )
+
+
+@router.patch(
+    "/admin/users/{user_id}/status",
+    response_model=AdminUserRow,
+    summary="Activate or suspend a user (admin only)",
+    tags=["admin"],
+)
+async def update_admin_user_status(
+    request: Request,
+    user_id: str,
+    body: UpdateUserStatusRequest,
+    user: User = Depends(require_roles("admin")),
+) -> AdminUserRow:
+    db = _require_db(request)
+    
+    # Check if user exists
+    target = await db.fetch_one("SELECT role, status FROM users WHERE user_id = $1", [user_id])
+    if not target:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "USER_NOT_FOUND", "message": "User not found"}
+        )
+        
+    # Safeguard: prevent disabling the last active admin
+    if body.status == "suspended":
+        if await _is_last_active_admin(db, user_id):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"error": "LAST_ADMIN_SAFEGUARD", "message": "Cannot suspend the only remaining active administrator"}
+            )
+            
+    await db.execute(
+        "UPDATE users SET status = $1 WHERE user_id = $2",
+        [body.status, user_id]
+    )
+    
+    # Log audit
+    await _log_admin_action(
+        db=db,
+        actor_id=user.user_id,
+        action="user_status_changed",
+        target_id=user_id,
+        detail={"status": body.status},
+        ip_address=request.client.host if request.client else None
+    )
+    
+    row = await db.fetch_one(
+        "SELECT user_id, email, name, role, bank_id, created_at, last_login, status FROM users WHERE user_id = $1",
+        [user_id]
+    )
+    return AdminUserRow(
+        user_id=row["user_id"],
+        email=row["email"],
+        name=row["name"],
+        role=row["role"],
+        bank_id=row["bank_id"],
+        created_at=str(row["created_at"]),
+        last_login=str(row["last_login"]),
+        status=row["status"]
+    )
+
+
+@router.post(
+    "/admin/users/{user_id}/reset-password",
+    response_model=ResetPasswordResponse,
+    summary="Reset a user's password to a secure temporary one (admin only)",
+    tags=["admin"],
+)
+async def reset_admin_user_password(
+    request: Request,
+    user_id: str,
+    user: User = Depends(require_roles("admin")),
+) -> ResetPasswordResponse:
+    db = _require_db(request)
+    
+    # Check if user exists
+    target = await db.fetch_one("SELECT user_id FROM users WHERE user_id = $1", [user_id])
+    if not target:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "USER_NOT_FOUND", "message": "User not found"}
+        )
+        
+    # Generate temporary password
+    temp_pw = generate_temp_password()
+    hashed_pw = pwd_context.hash(temp_pw)
+    
+    await db.execute(
+        "UPDATE users SET password_hash = $1, must_change_password = TRUE WHERE user_id = $2",
+        [hashed_pw, user_id]
+    )
+    
+    # Log audit
+    await _log_admin_action(
+        db=db,
+        actor_id=user.user_id,
+        action="user_password_reset",
+        target_id=user_id,
+        detail={"must_change_password": True},
+        ip_address=request.client.host if request.client else None
+    )
+    
+    return ResetPasswordResponse(temp_password=temp_pw)
+
+
+@router.patch(
+    "/admin/users/{user_id}/roles",
+    response_model=AdminUserRow,
+    summary="Change user role assignment (admin only)",
+    tags=["admin"],
+)
+async def update_admin_user_role(
+    request: Request,
+    user_id: str,
+    body: UpdateUserRolesRequest,
+    user: User = Depends(require_roles("admin")),
+) -> AdminUserRow:
+    db = _require_db(request)
+    
+    # Check if user exists
+    target = await db.fetch_one("SELECT role, status FROM users WHERE user_id = $1", [user_id])
+    if not target:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "USER_NOT_FOUND", "message": "User not found"}
+        )
+        
+    # Check if new role exists
+    role_row = await db.fetch_one("SELECT role_id FROM roles WHERE role_id = $1", [body.role])
+    if not role_row:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": "INVALID_ROLE", "message": f"Role '{body.role}' does not exist"}
+        )
+        
+    # Safeguard: prevent changing the only admin user's role to a non-admin role
+    if target["role"] == "admin" and body.role != "admin":
+        if await _is_last_active_admin(db, user_id):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"error": "LAST_ADMIN_SAFEGUARD", "message": "Cannot change the role of the only active administrator"}
+            )
+            
+    await db.execute(
+        "UPDATE users SET role = $1 WHERE user_id = $2",
+        [body.role, user_id]
+    )
+    
+    # Log audit
+    await _log_admin_action(
+        db=db,
+        actor_id=user.user_id,
+        action="user_role_changed",
+        target_id=user_id,
+        detail={"old_role": target["role"], "new_role": body.role},
+        ip_address=request.client.host if request.client else None
+    )
+    
+    row = await db.fetch_one(
+        "SELECT user_id, email, name, role, bank_id, created_at, last_login, status FROM users WHERE user_id = $1",
+        [user_id]
+    )
+    return AdminUserRow(
+        user_id=row["user_id"],
+        email=row["email"],
+        name=row["name"],
+        role=row["role"],
+        bank_id=row["bank_id"],
+        created_at=str(row["created_at"]),
+        last_login=str(row["last_login"]),
+        status=row["status"]
+    )
+
+
+@router.post(
+    "/admin/roles",
+    response_model=RoleInfo,
+    summary="Create a new custom role (admin only)",
+    tags=["admin"],
+)
+async def create_admin_role(
+    request: Request,
+    body: CreateRoleRequest,
+    user: User = Depends(require_roles("admin")),
+) -> RoleInfo:
+    db = _require_db(request)
+    
+    # Check if role already exists
+    existing = await db.fetch_one("SELECT role_id FROM roles WHERE role_id = $1", [body.role_id])
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"error": "ROLE_ALREADY_EXISTS", "message": f"Role '{body.role_id}' already exists"}
+        )
+        
+    await db.execute(
+        "INSERT INTO roles (role_id, label, description) VALUES ($1, $2, $3)",
+        [body.role_id, body.label, body.description]
+    )
+    
+    # Log audit
+    await _log_admin_action(
+        db=db,
+        actor_id=user.user_id,
+        action="role_created",
+        detail={"role_id": body.role_id, "label": body.label},
+        ip_address=request.client.host if request.client else None
+    )
+    
+    return RoleInfo(
+        role_id=body.role_id,
+        label=body.label,
+        description=body.description,
+        user_count=0,
+        permissions=[]
+    )
+
+
+@router.patch(
+    "/admin/roles/{role_id}",
+    response_model=RoleInfo,
+    summary="Update role description/label (admin only)",
+    tags=["admin"],
+)
+async def update_admin_role(
+    request: Request,
+    role_id: str,
+    label: Optional[str] = Query(default=None),
+    description: Optional[str] = Query(default=None),
+    user: User = Depends(require_roles("admin")),
+) -> RoleInfo:
+    db = _require_db(request)
+    
+    role = await db.fetch_one("SELECT role_id, label, description FROM roles WHERE role_id = $1", [role_id])
+    if not role:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "ROLE_NOT_FOUND", "message": "Role not found"}
+        )
+        
+    updates = []
+    params = []
+    detail = {}
+    if label:
+        params.append(label)
+        updates.append(f"label = ${len(params)}")
+        detail["label"] = label
+    if description:
+        params.append(description)
+        updates.append(f"description = ${len(params)}")
+        detail["description"] = description
+        
+    if updates:
+        params.append(role_id)
+        await db.execute(f"UPDATE roles SET {', '.join(updates)} WHERE role_id = ${len(params)}", params)
+        # Log audit
+        await _log_admin_action(
+            db=db,
+            actor_id=user.user_id,
+            action="role_updated",
+            detail={"role_id": role_id, **detail},
+            ip_address=request.client.host if request.client else None
+        )
+        
+    # Get details
+    users_count = await db.fetch_one("SELECT COUNT(*) as count FROM users WHERE role = $1", [role_id])
+    perm_rows = await db.fetch_all("SELECT permission_key FROM role_permissions WHERE role_id = $1", [role_id])
+    
+    updated_role = await db.fetch_one("SELECT role_id, label, description FROM roles WHERE role_id = $1", [role_id])
+    
+    return RoleInfo(
+        role_id=updated_role["role_id"],
+        label=updated_role["label"],
+        description=updated_role["description"],
+        user_count=users_count["count"] if users_count else 0,
+        permissions=[r["permission_key"] for r in perm_rows]
+    )
+
+
+@router.patch(
+    "/admin/roles/{role_id}/permissions",
+    response_model=RoleInfo,
+    summary="Update permissions list for a role (admin only)",
+    tags=["admin"],
+)
+async def update_role_permissions(
+    request: Request,
+    role_id: str,
+    body: UpdateRolePermissionsRequest,
+    user: User = Depends(require_roles("admin")),
+) -> RoleInfo:
+    db = _require_db(request)
+    
+    # Check if role exists
+    role_row = await db.fetch_one("SELECT role_id, label, description FROM roles WHERE role_id = $1", [role_id])
+    if not role_row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "ROLE_NOT_FOUND", "message": "Role not found"}
+        )
+        
+    # Verify all permission keys exist
+    if body.permissions:
+        placeholders = ", ".join(f"${i+1}" for i in range(len(body.permissions)))
+        existing_perms = await db.fetch_all(
+            f"SELECT permission_key FROM permissions WHERE permission_key IN ({placeholders})",
+            body.permissions
+        )
+        existing_keys = {r["permission_key"] for r in existing_perms}
+        invalid_keys = set(body.permissions) - existing_keys
+        if invalid_keys:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"error": "INVALID_PERMISSIONS", "message": f"Permissions do not exist: {list(invalid_keys)}"}
+            )
+            
+    # Update junction table: delete existing and insert new
+    await db.execute("DELETE FROM role_permissions WHERE role_id = $1", [role_id])
+    for pk in body.permissions:
+        await db.execute(
+            "INSERT INTO role_permissions (role_id, permission_key) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+            [role_id, pk]
+        )
+        
+    # Log audit
+    await _log_admin_action(
+        db=db,
+        actor_id=user.user_id,
+        action="role_permissions_updated",
+        detail={"role_id": role_id, "permissions": body.permissions},
+        ip_address=request.client.host if request.client else None
+    )
+    
+    users_count = await db.fetch_one("SELECT COUNT(*) as count FROM users WHERE role = $1", [role_id])
+    
+    return RoleInfo(
+        role_id=role_row["role_id"],
+        label=role_row["label"],
+        description=role_row["description"],
+        user_count=users_count["count"] if users_count else 0,
+        permissions=body.permissions
+    )
 
 
 @router.get(
@@ -1413,23 +2157,31 @@ async def admin_roles(
     user: User = Depends(require_roles("admin")),
 ) -> List[RoleInfo]:
     db = _require_db(request)
-    rows = await db.fetch_all("""
-        SELECT role, COUNT(*) AS user_count
-        FROM users
-        GROUP BY role
-        ORDER BY role
-    """)
-
-    ROLE_PERMISSIONS = {
-        "analyst":    ["read:customers", "read:accounts", "read:transactions", "read:risk_flags"],
-        "manager":    ["read:customers", "read:accounts", "read:transactions", "read:branch_data", "read:risk_summary"],
-        "compliance": ["read:customers", "read:accounts", "read:transactions", "read:risk_flags", "read:audit_logs", "read:pii"],
-        "admin":      ["read:customers", "read:accounts", "read:transactions", "read:risk_flags", "read:audit_logs", "read:pii", "admin:users", "admin:roles"],
-    }
+    
+    # Fetch roles
+    roles_rows = await db.fetch_all("SELECT role_id, label, description FROM roles ORDER BY role_id")
+    
+    # Fetch permissions per role
+    rp_rows = await db.fetch_all("SELECT role_id, permission_key FROM role_permissions")
+    permissions_by_role = {}
+    for r in rp_rows:
+        rid = r["role_id"]
+        pk = r["permission_key"]
+        permissions_by_role.setdefault(rid, []).append(pk)
+        
+    # Fetch user counts per role
+    user_counts_rows = await db.fetch_all("SELECT role, COUNT(*) as user_count FROM users GROUP BY role")
+    counts_by_role = {r["role"]: int(r["user_count"]) for r in user_counts_rows}
+    
     return [
-        RoleInfo(role=r["role"], user_count=int(r["user_count"]),
-                 permissions=ROLE_PERMISSIONS.get(r["role"], []))
-        for r in rows
+        RoleInfo(
+            role_id=r["role_id"],
+            label=r["label"],
+            description=r.get("description"),
+            user_count=counts_by_role.get(r["role_id"], 0),
+            permissions=permissions_by_role.get(r["role_id"], [])
+        )
+        for r in roles_rows
     ]
 
 
@@ -1443,16 +2195,27 @@ async def admin_permissions(
     request: Request,
     user: User = Depends(require_roles("admin")),
 ) -> List[PermissionInfo]:
-    PERMISSIONS = [
-        {"permission": "read:customers",     "roles": ["analyst", "manager", "compliance", "admin"], "description": "Read customer records"},
-        {"permission": "read:accounts",      "roles": ["analyst", "manager", "compliance", "admin"], "description": "Read account data"},
-        {"permission": "read:transactions",  "roles": ["analyst", "manager", "compliance", "admin"], "description": "Read transaction records"},
-        {"permission": "read:risk_flags",    "roles": ["analyst", "compliance", "admin"],            "description": "Read risk flag entries"},
-        {"permission": "read:branch_data",   "roles": ["manager", "admin"],                         "description": "Read branch metrics"},
-        {"permission": "read:risk_summary",  "roles": ["manager", "admin"],                         "description": "Read aggregated risk summaries"},
-        {"permission": "read:audit_logs",    "roles": ["compliance", "admin"],                       "description": "Read immutable audit logs"},
-        {"permission": "read:pii",           "roles": ["compliance", "admin"],                       "description": "Access unmasked PII fields"},
-        {"permission": "admin:users",        "roles": ["admin"],                                    "description": "Manage system users"},
-        {"permission": "admin:roles",        "roles": ["admin"],                                    "description": "Manage role assignments"},
+    db = _require_db(request)
+    
+    # Fetch permissions
+    perms_rows = await db.fetch_all("SELECT permission_key, label, description, category FROM permissions ORDER BY permission_key")
+    
+    # Fetch roles per permission
+    rp_rows = await db.fetch_all("SELECT role_id, permission_key FROM role_permissions")
+    roles_by_perm = {}
+    for r in rp_rows:
+        rid = r["role_id"]
+        pk = r["permission_key"]
+        roles_by_perm.setdefault(pk, []).append(rid)
+        
+    return [
+        PermissionInfo(
+            permission_key=p["permission_key"],
+            label=p["label"],
+            description=p.get("description"),
+            category=p["category"],
+            roles=roles_by_perm.get(p["permission_key"], [])
+        )
+        for p in perms_rows
     ]
-    return [PermissionInfo(**p) for p in PERMISSIONS]
+

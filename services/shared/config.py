@@ -84,6 +84,7 @@ class Settings(BaseSettings):
     ENABLE_INSIGHTS_AGENT: bool = Field(default=True)
     ENABLE_COMPLIANCE_AGENT: bool = Field(default=True)
     ENABLE_CACHING: bool = Field(default=True)
+    DEV_MODE: bool = Field(default=True, description="Enable development fallback/mocks")
 
 
     class Config:
