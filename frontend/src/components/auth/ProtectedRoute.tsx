@@ -19,7 +19,14 @@ export function ProtectedRoute({ children, requiredRole }: Props) {
   if (requiredRole) {
     const roles = Array.isArray(requiredRole) ? requiredRole : [requiredRole];
     if (!user || !roles.includes(user.role)) {
-      return <Navigate to="/dashboard" replace />;
+      // Pass context so UnauthorizedPage can display exactly what was needed
+      return (
+        <Navigate
+          to="/unauthorized"
+          state={{ requiredRole, from: location.pathname }}
+          replace
+        />
+      );
     }
   }
 

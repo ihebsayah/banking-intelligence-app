@@ -21,6 +21,7 @@ import { CompliancePage } from './pages/CompliancePage';
 import { ReportsPage } from './pages/ReportsPage';
 import { AdminPage } from './pages/AdminPage';
 import { ProfilePage } from './pages/ProfilePage';
+import { UnauthorizedPage } from './pages/UnauthorizedPage';
 import { useWebSocket } from './hooks/useWebSocket';
 
 function AppShell() {
@@ -33,6 +34,14 @@ function AppShell() {
     return (
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+      </Routes>
+    );
+  }
+
+  if (path === '/unauthorized') {
+    return (
+      <Routes>
+        <Route path="/unauthorized" element={<UnauthorizedPage />} />
       </Routes>
     );
   }

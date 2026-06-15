@@ -1455,7 +1455,7 @@ async def _fetch_user_profile(user_id: str, db) -> dict:
     if db:
         try:
             row = await db.fetch_one("""
-                SELECT user_id, email, name, role, bank_id, created_at, last_login, status
+                SELECT user_id, email, name, role, bank_id, created_at, last_login, status, must_change_password
                 FROM users WHERE user_id = $1
             """, [user_id])
             if row:
@@ -1468,6 +1468,7 @@ async def _fetch_user_profile(user_id: str, db) -> dict:
                     "created_at": str(row.get("created_at", "")),
                     "last_login": str(row.get("last_login", "")),
                     "status": row.get("status", "active"),
+                    "must_change_password": bool(row.get("must_change_password", False)),
                 }
         except Exception as exc:
             logger.warning("Failed to fetch user profile from DB", extra={"error": str(exc)})
@@ -1482,6 +1483,7 @@ async def _fetch_user_profile(user_id: str, db) -> dict:
         "created_at": "",
         "last_login": _now_iso(),
         "status": "active",
+        "must_change_password": False,
     }
 
 
@@ -2219,3 +2221,66 @@ async def admin_permissions(
         for p in perms_rows
     ]
 
+
+# ─── Admin Activity Log ───────────────────────────────────────────────────────
+
+@router.get(
+    "/admin/activity",
+    summary="Paginated admin action log from user_activity_log",
+    tags=["admin"],
+)
+async def admin_activity_log(
+    request: Request,
+    page: int = 1,
+    page_size: int = 50,
+    actor_id: Optional[str] = None,
+    user: User = Depends(require_roles("admin")),
+) -> dict:
+    db = _require_db(request)
+    offset = (page - 1) * page_size
+
+    where_clauses = []
+    params: list = []
+    idx = 1
+
+    if actor_id:
+        where_clauses.append(f"actor_id = ${idx}")
+        params.append(actor_id)
+        idx += 1
+
+    where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+
+    count_row = await db.fetch_one(
+        f"SELECT COUNT(*) AS n FROM user_activity_log {where_sql}", params
+    )
+    total = count_row["n"] if count_row else 0
+
+    params_page = params + [page_size, offset]
+    rows = await db.fetch_all(
+        f"""
+        SELECT id, actor_id, target_id, action, detail, ip_address, created_at
+        FROM user_activity_log
+        {where_sql}
+        ORDER BY created_at DESC
+        LIMIT ${idx} OFFSET ${idx + 1}
+        """,
+        params_page,
+    )
+
+    return {
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "items": [
+            {
+                "id": r["id"],
+                "actor_id": r["actor_id"],
+                "target_id": r.get("target_id"),
+                "action": r["action"],
+                "detail": r.get("detail"),
+                "ip_address": r.get("ip_address"),
+                "created_at": str(r["created_at"]),
+            }
+            for r in rows
+        ],
+    }

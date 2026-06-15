@@ -278,3 +278,37 @@ def test_password_never_returned_in_responses(app_and_tokens):
     body = r.json()
     assert "password" not in body
     assert "password_hash" not in body
+
+
+# 12. must_change_password is exposed in /users/me
+def test_must_change_password_exposed_in_profile(app_and_tokens):
+    client, tokens = app_and_tokens
+    user_row = {
+        "user_id": "analyst_001",
+        "email": "analyst_001@bankintel.hq",
+        "name": "Analyst One",
+        "role": "analyst",
+        "bank_id": "hq_main",
+        "created_at": datetime.utcnow(),
+        "last_login": datetime.utcnow(),
+        "status": "active",
+        "must_change_password": True
+    }
+    client.app.state.db = make_db(fetch_one_return=user_row)
+    
+    # We need to temporarily disable/bypass the override in gw.app.dependency_overrides to test /users/me DB path
+    # or ensure our mock token returns user_id and verify_token resolves it.
+    # Note: verify_token in auth expects a valid token, which our tokens dict has.
+    # But get_current_user in gw.app is overridden by app_and_tokens fixture to return a static User object.
+    # In AppShell/test client, we want to call get_user_me:
+    # let's just patch _get_db or client.app.state.db and call `/users/me`.
+    # But since dependency_overrides is active, get_current_user override will return user with permissions.
+    # The routes.py `get_user_me` uses user.user_id to call `_fetch_user_profile` against DB.
+    # Since dependency_overrides override_get_current_user returns User(user_id=user_id, ...),
+    # routes.py get_user_me does: `await _fetch_user_profile(user.user_id, _get_db(request))`.
+    # Therefore, client.app.state.db will be queried with analyst_001.
+    r = client.get("/users/me", headers=_h(tokens["analyst"]))
+    assert r.status_code == 200
+    body = r.json()
+    assert body["must_change_password"] is True
+
