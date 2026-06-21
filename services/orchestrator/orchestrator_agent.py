@@ -127,15 +127,17 @@ class OrchestratorAgent:
                 "intent": intent_data,
                 "schema": schema_data,
                 "entity": entity_data,
-                "query": user_query
+                "query": user_query,
             }
+            # Phase 6B: detected_kpis come from intent agent response
+            _detected_kpis = intent_data.get("detected_kpis", [])
             if has_debugging:
                 @trace_sql_agent
                 async def run_sql(request_id, input_data):
-                    return await self._call_sql_agent(intent_data, schema_data, entity_data, user_query)
+                    return await self._call_sql_agent(intent_data, schema_data, entity_data, user_query, _detected_kpis)
                 sql_response = await run_sql(request_id=request_id, input_data=sql_input)
             else:
-                sql_response = await self._call_sql_agent(intent_data, schema_data, entity_data, user_query)
+                sql_response = await self._call_sql_agent(intent_data, schema_data, entity_data, user_query, _detected_kpis)
             
             if not sql_response["success"]:
                 err = f"SQL generation failed: {sql_response.get('error')}"
@@ -144,6 +146,10 @@ class OrchestratorAgent:
             
             sql_data = sql_response["data"]
             logger.info(f"[ORCHESTRATOR] ← SQL generated (parameterized)")
+            sql_semantic_warnings = sql_data.get("semantic_warnings", [])
+            sql_semantic_trace = sql_data.get("semantic_trace", [])
+            if sql_semantic_warnings:
+                logger.warning("[ORCHESTRATOR] SQL semantic warnings: %s", sql_semantic_warnings)
             await self._log("sql", "SQL query successfully generated")
             
             # Step 5: Validation
@@ -157,10 +163,10 @@ class OrchestratorAgent:
             if has_debugging:
                 @trace_validation_agent
                 async def run_validation(request_id, input_data):
-                    return await self._call_validation_agent(sql_data, user_role)
+                    return await self._call_validation_agent(sql_data, user_role, sql_semantic_warnings)
                 validation_response = await run_validation(request_id=request_id, input_data=validation_input)
             else:
-                validation_response = await self._call_validation_agent(sql_data, user_role)
+                validation_response = await self._call_validation_agent(sql_data, user_role, sql_semantic_warnings)
             
             if not validation_response["success"]:
                 err = f"Validation failed: {validation_response.get('error')}"
@@ -321,7 +327,7 @@ class OrchestratorAgent:
             await self._log("audit", "Audit log saved successfully.")
             await self._log("orchestrator", "Pipeline complete. Returning results to user.")
  
-            # Return final results (Phase 2: include insights)
+            # Return final results (Phase 2 + Phase 6B: include insights + semantic trace)
             insights_data = insights_response.get("data", {})
             return {
                 "status": "success",
@@ -335,6 +341,13 @@ class OrchestratorAgent:
                     "sql": sql_data,
                     "validation": validation_data,
                     "compliance": compliance_response,
+                },
+                "semantic_layer_trace": {
+                    "enabled": getattr(self.config, "SEMANTIC_LAYER_ENABLED", False),
+                    "sql_warnings": sql_semantic_warnings,
+                    "sql_trace": sql_semantic_trace,
+                    "validation_warnings": validation_data.get("semantic_warnings", []),
+                    "entity_notes": entity_data.get("notes", ""),
                 },
                 "request_id": request_id,
                 "debug_url": f"/debug/logs/{request_id}" if request_id else None
@@ -403,7 +416,7 @@ class OrchestratorAgent:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    async def _call_sql_agent(self, intent_data: dict, schema_data: dict, entity_data: dict, user_query: str) -> dict:
+    async def _call_sql_agent(self, intent_data: dict, schema_data: dict, entity_data: dict, user_query: str, detected_kpis: list = None) -> dict:
         """Call SQL Generation Agent."""
         try:
             limit = 100
@@ -413,6 +426,8 @@ class OrchestratorAgent:
             columns = []
             tables = []
             join_paths = []
+            # Phase 6B: detected_kpis passed from orchestrator (from intent agent response)
+            detected_kpis = detected_kpis or intent_data.get("detected_kpis", [])
             
             q = user_query.strip().lower()
             
@@ -523,7 +538,9 @@ class OrchestratorAgent:
             payload = {
                 "intent": intent_data.get("primary_category", "retrieve"),
                 "primary_entity": entity_data.get("primary_entity", "customer"),
-                "limit": limit
+                "limit": limit,
+                # Phase 6B: pass detected_kpis for metric_registry formula injection
+                "detected_kpis": detected_kpis,
             }
             if is_preset:
                 payload["tables"] = tables if tables else ["customers"]
@@ -557,7 +574,7 @@ class OrchestratorAgent:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    async def _call_validation_agent(self, sql_data: dict, user_role: str) -> dict:
+    async def _call_validation_agent(self, sql_data: dict, user_role: str, upstream_semantic_warnings: list = None) -> dict:
         """Call Validation Agent."""
         try:
             # Flatten parameter values for validation
@@ -570,7 +587,9 @@ class OrchestratorAgent:
                     json={
                         "sql": sql_data.get("sql", ""),
                         "parameters": flat_params,
-                        "user_role": user_role
+                        "user_role": user_role,
+                        # Phase 6B: forward sql agent semantic warnings to validation
+                        "upstream_semantic_warnings": upstream_semantic_warnings or [],
                     },
                     timeout=10
                 )

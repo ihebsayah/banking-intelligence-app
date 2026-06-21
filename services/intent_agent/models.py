@@ -22,3 +22,4 @@ class IntentResponse(BaseModel):
     explicit_constraints: Dict
     ambiguities: List[str]
     requires_clarification: bool
+    detected_kpis: Optional[List[str]] = None

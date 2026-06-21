@@ -7,6 +7,10 @@ from __future__ import annotations
 import logging
 import os
 
+import sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../shared")))
+
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException
 from models import SchemaMappingRequest, SchemaMappingResponse
@@ -30,6 +34,22 @@ app.add_middleware(
 )
 
 matcher = SchemaMatcher()
+
+
+@app.on_event("startup")
+async def startup() -> None:
+    global matcher
+    try:
+        from shared.config import get_settings
+        from shared.database import get_connector
+        settings = get_settings()
+        if settings.SEMANTIC_LAYER_ENABLED:
+            db_connector = await get_connector(settings.DATABASE_URL)
+            matcher = SchemaMatcher(db=db_connector, semantic_layer_enabled=True)
+            await matcher.initialize_db_cache()
+            logger.info("Schema Agent DB Cache initialized successfully")
+    except Exception as exc:
+        logger.warning("Failed to initialize database cache for Schema Agent: %s", exc)
 
 
 @app.post("/map_schema", response_model=SchemaMappingResponse)
@@ -65,12 +85,15 @@ async def map_schema(request: SchemaMappingRequest) -> SchemaMappingResponse:
         primary_table = _plural_map.get(entity, entity + "s")
 
         join_paths = matcher.get_join_paths(tables, primary_table)
+        explanations, confidences = matcher.get_table_enrichment(tables, request.intent_categories)
 
         return SchemaMappingResponse(
             relevant_domains=domains,
             tables=tables,
             key_columns=key_columns,
             join_paths=join_paths,
+            table_explanations=explanations,
+            confidence_scores=confidences,
         )
 
     except Exception as exc:

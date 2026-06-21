@@ -16,7 +16,8 @@ import {
   Scale,
   FileText,
   Settings2,
-  User
+  User,
+  Shield
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { useUIStore } from '../../stores/uiStore';
@@ -26,7 +27,8 @@ const NAV_ITEMS = [
   { to: '/dashboard',  icon: LayoutDashboard, label: 'Dashboard', roles: ['analyst', 'manager', 'compliance', 'admin'] },
   { to: '/branches',   icon: GitBranch,        label: 'Branches', roles: ['analyst', 'manager', 'compliance', 'admin'] },
   { to: '/assistant',  icon: Bot,              label: 'AI Assistant', roles: ['analyst', 'manager', 'compliance', 'admin'] },
-  { to: '/kpi',        icon: BarChart3,        label: 'KPI Analytics', roles: ['analyst', 'manager', 'compliance', 'admin'] },
+  { to: '/kpi',             icon: BarChart3,   label: 'KPI Analytics',   roles: ['analyst', 'manager', 'compliance', 'admin'] },
+  { to: '/kpi-governance',  icon: Shield,      label: 'KPI Governance',  roles: ['analyst', 'manager', 'compliance', 'admin'] },
   { to: '/risk',       icon: ShieldAlert,      label: 'Risk Monitor', roles: ['analyst', 'manager', 'compliance', 'admin'] },
   { to: '/compliance', icon: Scale,            label: 'Compliance', roles: ['compliance', 'manager', 'admin'] },
   { to: '/reports',    icon: FileText,         label: 'Reports', roles: ['manager', 'admin'] },

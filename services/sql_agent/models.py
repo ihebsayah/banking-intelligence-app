@@ -1,6 +1,9 @@
 """
 services/sql_agent/models.py
 Pydantic models for SQL Generation Agent.
+
+Phase 6B: Added detected_kpis (from intent agent) + semantic_warnings + semantic_trace
+to carry metric injection results and join validation notes.
 """
 from typing import List, Optional, Any, Dict
 from pydantic import BaseModel
@@ -30,6 +33,8 @@ class SQLGenerationRequest(BaseModel):
     order_by: Optional[str] = None
     limit: Optional[int] = 100
     columns: Optional[List[str]] = None  # specific columns, or None = *
+    # Phase 6B: KPIs detected by intent agent — used to inject metric_registry formulas
+    detected_kpis: Optional[List[str]] = None
 
 
 class SQLGenerationResponse(BaseModel):
@@ -39,4 +44,7 @@ class SQLGenerationResponse(BaseModel):
     estimated_rows: int
     estimated_time_ms: int
     tables_used: List[str]
-    is_parameterized: bool = True  # always True from this service
+    is_parameterized: bool = True   # always True from this service
+    # Phase 6B: non-blocking semantic notes (never cause errors)
+    semantic_warnings: List[str] = []   # join paths skipped (not in registry), etc.
+    semantic_trace: List[str] = []      # metric formulas injected, path resolutions

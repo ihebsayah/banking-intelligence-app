@@ -6,6 +6,11 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
+
+# Add shared services path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../shared")))
 
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException
@@ -47,7 +52,25 @@ async def startup() -> None:
         except Exception as exc:
             logger.warning("Redis unavailable (%s) — running without cache", exc)
 
-    recognizer = IntentRecognizer(redis_client=redis_client)
+    # Initialize Database Connector and load settings
+    db_connector = None
+    semantic_enabled = False
+    try:
+        from shared.config import get_settings
+        from shared.database import get_connector
+        settings = get_settings()
+        semantic_enabled = settings.SEMANTIC_LAYER_ENABLED
+        if semantic_enabled:
+            db_connector = await get_connector(settings.DATABASE_URL)
+            logger.info("Semantic database connector initialized successfully")
+    except Exception as exc:
+        logger.warning("Failed to initialize database connector or settings for intent agent: %s", exc)
+
+    recognizer = IntentRecognizer(
+        redis_client=redis_client,
+        db=db_connector,
+        semantic_layer_enabled=semantic_enabled
+    )
 
     # Warm up spaCy model
     logger.info("Loading spaCy model …")

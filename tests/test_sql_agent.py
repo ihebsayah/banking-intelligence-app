@@ -142,3 +142,30 @@ def test_multiple_filters_all_parameterized(builder):
         primary_entity="account",
     ))
     assert result.is_parameterized is True
+
+
+# ── TC-11: branches column whitelist validation ──────────────────────────────
+def test_branch_columns_validation(builder):
+    """Branches query whitelists 'name' and skips invalid 'branch_name'."""
+    result = builder.build(_req(
+        tables=["branches"],
+        primary_table="branches",
+        primary_entity="branch",
+        columns=["branches.name", "branches.branch_name"]
+    ))
+    assert "branches.name" in result.sql
+    assert "branches.branch_name" not in result.sql
+
+
+# ── TC-12: risk_flags column whitelist validation ────────────────────────────
+def test_risk_flags_columns_validation(builder):
+    """Risk flags query whitelists 'id' and skips invalid 'risk_id'."""
+    result = builder.build(_req(
+        tables=["risk_flags"],
+        primary_table="risk_flags",
+        primary_entity="risk_flag",
+        columns=["risk_flags.id", "risk_flags.risk_id"]
+    ))
+    assert "risk_flags.id" in result.sql
+    assert "risk_flags.risk_id" not in result.sql
+

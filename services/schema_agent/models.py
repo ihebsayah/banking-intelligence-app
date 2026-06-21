@@ -23,3 +23,5 @@ class SchemaMappingResponse(BaseModel):
     tables: List[str]
     key_columns: Dict
     join_paths: List[JoinPath]
+    table_explanations: Optional[Dict[str, str]] = None
+    confidence_scores: Optional[Dict[str, float]] = None

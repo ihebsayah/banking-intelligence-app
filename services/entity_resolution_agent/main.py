@@ -2,10 +2,14 @@
 services/entity_resolution_agent/main.py
 Entity Resolution Agent — FastAPI app on port 8004.
 Finds semantic join paths for multi-table queries.
+
+Phase 6B: On startup, loads glossary + join_registry into memory cache
+when SEMANTIC_LAYER_ENABLED=True.
 """
 import sys
 import logging
 import os
+from contextlib import asynccontextmanager
 
 sys.path.insert(0, "/app/shared")
 sys.path.insert(0, "/app")
@@ -16,7 +20,7 @@ from fastapi.responses import JSONResponse
 import uvicorn
 
 from models import EntityResolutionRequest, EntityResolutionResponse
-from entity_resolver import EntityResolver
+from entity_resolver import EntityResolver, initialize_entity_cache, SEMANTIC_LAYER_ENABLED
 
 # ──────────────────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -25,10 +29,34 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize semantic cache on startup if feature flag is enabled."""
+    if SEMANTIC_LAYER_ENABLED:
+        try:
+            import psycopg2
+            db_url = os.getenv(
+                "DATABASE_URL",
+                "postgresql://banking_user:securepass123@db:5432/banking_dev"
+            )
+            conn = psycopg2.connect(db_url)
+            initialize_entity_cache(conn)
+            conn.close()
+        except Exception as exc:
+            logger.warning(
+                "[startup] Could not initialize entity semantic cache: %s", exc
+            )
+    else:
+        logger.info("[startup] SEMANTIC_LAYER_ENABLED=False — using hardcoded resolver")
+    yield
+
+
 app = FastAPI(
     title="Entity Resolution Agent",
-    description="Finds semantic join paths using business-key correlation. Week 3.",
-    version="0.3.0",
+    description="Finds semantic join paths using business-key correlation. Phase 6B.",
+    version="0.6b.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -51,7 +79,8 @@ async def health():
         "status": "healthy",
         "service": "entity_resolution_agent",
         "port": 8004,
-        "version": "0.3.0",
+        "version": "0.6b.0",
+        "semantic_layer": SEMANTIC_LAYER_ENABLED,
     }
 
 

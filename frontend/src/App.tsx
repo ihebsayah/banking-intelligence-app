@@ -16,6 +16,7 @@ import { Branches } from './pages/Branches';
 import { Assistant } from './pages/Assistant';
 import { DebugPage } from './pages/DebugPage';
 import { KpiPage } from './pages/KpiPage';
+import { KpiGovernancePage } from './pages/KpiGovernancePage';
 import { RiskPage } from './pages/RiskPage';
 import { CompliancePage } from './pages/CompliancePage';
 import { ReportsPage } from './pages/ReportsPage';
@@ -82,6 +83,7 @@ function AppShell() {
             <Route path="/branches"  element={<ProtectedRoute><Branches /></ProtectedRoute>} />
             <Route path="/assistant" element={<ProtectedRoute><Assistant /></ProtectedRoute>} />
             <Route path="/kpi"       element={<ProtectedRoute><KpiPage /></ProtectedRoute>} />
+            <Route path="/kpi-governance" element={<ProtectedRoute requiredRole={['analyst', 'manager', 'compliance', 'admin']}><KpiGovernancePage /></ProtectedRoute>} />
             <Route path="/risk"       element={<ProtectedRoute requiredRole={['analyst', 'manager', 'compliance', 'admin']}><RiskPage /></ProtectedRoute>} />
             <Route path="/compliance" element={<ProtectedRoute requiredRole={['compliance', 'manager', 'admin']}><CompliancePage /></ProtectedRoute>} />
             <Route path="/reports"    element={<ProtectedRoute requiredRole={['manager', 'admin']}><ReportsPage /></ProtectedRoute>} />

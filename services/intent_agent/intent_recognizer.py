@@ -11,13 +11,13 @@ import hashlib
 import json
 import logging
 import re
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 
 logger = logging.getLogger(__name__)
 
-# ── Category keyword tables ──────────────────────────────────────────────────
+# ── Original Category keyword tables (Fallback mode) ───────────────────────
 
-CATEGORY_KEYWORDS: Dict[str, List[str]] = {
+ORIGINAL_CATEGORY_KEYWORDS: Dict[str, List[str]] = {
     "customer_analysis": [
         "customer", "client", "segment", "demographic", "profile",
         "balance", "account_holder", "retail", "holder", "member", "user",
@@ -54,6 +54,79 @@ CATEGORY_KEYWORDS: Dict[str, List[str]] = {
         "transaction", "payment", "transfer", "wire", "ach", "movement",
         "flow", "settlement", "posting", "clearing", "remittance",
     ],
+}
+
+# ── Semantic Category keyword tables (French + English) ───────────────────────
+
+SEMANTIC_CATEGORY_KEYWORDS: Dict[str, List[str]] = {
+    "customer_analysis": [
+        "customer", "client", "segment", "demographic", "profile",
+        "balance", "account_holder", "retail", "holder", "member", "user",
+        "tiers", "particulier", "entreprise", "profil", "clientèle"
+    ],
+    "loan_analysis": [
+        "loan", "loans", "credit", "prêt", "crédit", "mensualité", "outstanding",
+        "amortissement", "échéancier", "remboursement", "contrat", "prêts", "crédits"
+    ],
+    "kyc_analysis": [
+        "kyc", "know your customer", "connaissance client", "diligence", "verified",
+        "unverified", "vérification", "pièce d'identité", "pep", "politically exposed"
+    ],
+    "aml_analysis": [
+        "aml", "anti-money laundering", "blanchiment", "lbc", "declaration de soupcon",
+        "sar", "ctaf", "suspicious", "fraude", "blanchiment d'argent"
+    ],
+    "risk_analysis": [
+        "risk", "fraud", "default", "violation", "aml", "kyc", "suspicious",
+        "flag", "compliance", "sanction", "exposure", "credit_risk",
+        "delinquent", "watchlist", "alert", "risque", "défaut", "npl", "provision",
+        "sinistre", "créances douteuses", "créance", "compromise", "défaillance"
+    ],
+    "profitability_analysis": [
+        "revenue", "income", "profit", "fee", "commission", "earning",
+        "sale", "performance", "margin", "gross", "yield", "return",
+        "interest", "net", "pnb", "net banking income", "roe", "roa",
+        "rentabilité", "rendement", "bénéfice", "produit net bancaire",
+        "coefficient d'exploitation", "cir", "charges d'exploitation"
+    ],
+    "liquidity_analysis": [
+        "liquidity", "liquidité", "lcr", "nsfr", "deposit", "dépôt", "epargne",
+        "solde", "ldr", "loan to deposit", "avoirs", "placements", "tresorerie"
+    ],
+    "transaction_analysis": [
+        "transaction", "payment", "transfer", "wire", "ach", "movement",
+        "flow", "settlement", "posting", "clearing", "remittance",
+        "virement", "paiement", "flux", "transfert", "mouvement"
+    ],
+    "operational_analysis": [
+        "volume", "count", "speed", "efficiency", "throughput",
+        "latency", "queue", "processing", "rate", "capacity", "load",
+    ],
+    "geographic_analysis": [
+        "region", "branch", "location", "state", "city", "geographic",
+        "area", "territory", "district", "zone", "country", "market",
+        "agence", "succursale", "ville", "région"
+    ],
+    "product_analysis": [
+        "product", "account_type", "service", "loan", "deposit", "credit",
+        "investment", "insurance", "checking", "saving", "mortgage",
+        "card", "portfolio", "produit", "type de compte"
+    ],
+    "compliance_analysis": [
+        "compliance", "regulatory", "audit", "requirement",
+        "regulation", "control", "policy", "gdpr", "sox", "sec",
+        "report", "filing", "conformité", "réglementaire"
+    ]
+}
+
+# Static fallback KPIs for offline/disabled mode
+STATIC_KPIS: Dict[str, List[str]] = {
+    "npl_ratio": ["npl ratio", "taux de créances classées", "créances classées", "non-performing loan ratio", "npl"],
+    "roe": ["roe", "return on equity", "rentabilité des fonds propres", "rentabilité des capitaux propres"],
+    "roa": ["roa", "return on assets", "rentabilité des actifs"],
+    "kyc_compliance_rate": ["kyc compliance rate", "taux de conformité kyc", "conformité kyc"],
+    "aml_alert_rate": ["aml alert rate", "taux d'alertes aml", "alertes aml"],
+    "loan_to_deposit": ["loan to deposit", "ldr", "ratio crédits / dépôts", "ratio crédits/dépôts"]
 }
 
 # Shared / ambiguous words that belong to multiple categories
@@ -127,10 +200,13 @@ class IntentRecognizer:
     Redis is used for result caching (TTL 24 h).
     """
 
-    def __init__(self, redis_client=None):
+    def __init__(self, redis_client=None, db=None, semantic_layer_enabled=False):
         self._nlp = None          # loaded lazily or passed in
         self._redis = redis_client
+        self._db = db
+        self._semantic_layer_enabled = semantic_layer_enabled
         self._CACHE_TTL = 86_400  # 24 h
+        self._kpi_cache = None    # Cache for registered KPIs
 
     # ── spaCy bootstrap ──────────────────────────────────────────────────────
 
@@ -186,9 +262,10 @@ class IntentRecognizer:
         ]
 
     def _score_categories(self, tokens: List[str]) -> Dict[str, int]:
-        scores: Dict[str, int] = {cat: 0 for cat in CATEGORY_KEYWORDS}
+        kws_map = SEMANTIC_CATEGORY_KEYWORDS if self._semantic_layer_enabled else ORIGINAL_CATEGORY_KEYWORDS
+        scores: Dict[str, int] = {cat: 0 for cat in kws_map}
         for token in tokens:
-            for cat, kws in CATEGORY_KEYWORDS.items():
+            for cat, kws in kws_map.items():
                 if token in kws:
                     scores[cat] += 1
         return scores
@@ -225,7 +302,23 @@ class IntentRecognizer:
 
         return list(dict.fromkeys(ambiguities))  # dedupe, preserve order
 
-    def recognize_sync(self, query: str) -> dict:
+    async def _fetch_kpi_registry(self) -> List[Dict[str, Any]]:
+        """Fetch active KPIs from metric_registry database table with in-memory lazy caching."""
+        if not self._semantic_layer_enabled or not self._db:
+            return []
+        if self._kpi_cache is None:
+            try:
+                rows = await self._db.fetch_all(
+                    "SELECT metric_id, metric_name_fr, metric_name_en FROM metric_registry"
+                )
+                self._kpi_cache = [dict(r) for r in rows]
+                logger.info("Loaded %d KPIs from metric_registry into memory cache", len(self._kpi_cache))
+            except Exception as exc:
+                logger.warning("Failed to fetch metric_registry from database: %s. Using static fallback.", exc)
+                self._kpi_cache = []
+        return self._kpi_cache
+
+    def recognize_sync(self, query: str, detected_kpis: Optional[List[str]] = None) -> dict:
         """
         Synchronous recognition (used internally and by tests).
         Returns a plain dict matching IntentResponse schema.
@@ -260,7 +353,7 @@ class IntentRecognizer:
         # Force clarification when confidence low OR ambiguities present
         requires_clarification = confidence < 0.85 or len(ambiguities) > 0
 
-        return {
+        res: Dict[str, Any] = {
             "primary_category": primary_cat,
             "secondary_categories": secondary_cats,
             "confidence": confidence,
@@ -268,6 +361,10 @@ class IntentRecognizer:
             "ambiguities": ambiguities,
             "requires_clarification": requires_clarification,
         }
+        if self._semantic_layer_enabled:
+            res["detected_kpis"] = detected_kpis or []
+
+        return res
 
     async def recognize(self, query: str) -> dict:
         """Async wrapper with Redis cache."""
@@ -276,6 +373,27 @@ class IntentRecognizer:
             logger.debug("Intent cache hit: %s", query[:40])
             return cached
 
-        result = self.recognize_sync(query)
+        # Detect KPIs dynamically or statically under semantic mode
+        detected_kpis: List[str] = []
+        if self._semantic_layer_enabled:
+            q_lower = query.lower()
+            db_kpis = await self._fetch_kpi_registry()
+            
+            if db_kpis:
+                for kpi in db_kpis:
+                    metric_id = kpi["metric_id"]
+                    name_fr = kpi.get("metric_name_fr") or ""
+                    name_en = kpi.get("metric_name_en") or ""
+                    if (metric_id.lower() in q_lower or 
+                        (name_fr and name_fr.lower() in q_lower) or 
+                        (name_en and name_en.lower() in q_lower)):
+                        detected_kpis.append(metric_id)
+            else:
+                # Static patterns fallback
+                for metric_id, synonyms in STATIC_KPIS.items():
+                    if any(syn in q_lower for syn in synonyms):
+                        detected_kpis.append(metric_id)
+
+        result = self.recognize_sync(query, detected_kpis=detected_kpis)
         await self._to_cache(query, result)
         return result

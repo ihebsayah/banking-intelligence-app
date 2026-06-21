@@ -45,6 +45,7 @@ services:
       - AUDIT_AGENT_URL=http://audit-agent:8008
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-change-this-in-production}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - SEMANTIC_LAYER_ENABLED=false
     depends_on:
       postgres-main:
         condition: service_healthy
@@ -93,6 +94,7 @@ services:
       - COMPLIANCE_AGENT_URL=http://compliance-agent:8011
       - QUERY_SIGNING_KEY=${QUERY_SIGNING_KEY:-CHANGE_IN_PRODUCTION}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - SEMANTIC_LAYER_ENABLED=false
     depends_on:
       - postgres-main
       - redis
@@ -172,6 +174,7 @@ services:
       - EMBEDDING_SERVICE_URL=http://embedding-service:8009
       - REDIS_URL=redis://redis:6379/2
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - SEMANTIC_LAYER_ENABLED=false
     depends_on:
       - redis
     networks:
@@ -200,6 +203,7 @@ services:
       - POSTGRES_EMBEDDINGS_URL=postgresql://${POSTGRES_EMBEDDINGS_USER:-embedding_user}:${POSTGRES_EMBEDDINGS_PASSWORD:-securepass123}@postgres-embeddings:5432/${POSTGRES_EMBEDDINGS_DB:-embeddings}
       - REDIS_URL=redis://redis:6379/3
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - SEMANTIC_LAYER_ENABLED=false
     depends_on:
       - postgres-embeddings
       - redis
@@ -227,6 +231,7 @@ services:
     environment:
       - REDIS_URL=redis://redis:6379/4
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - SEMANTIC_LAYER_ENABLED=false
     depends_on:
       - redis
     networks:
@@ -252,6 +257,7 @@ services:
       - "8006:8006"
     environment:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - SEMANTIC_LAYER_ENABLED=false
     networks:
       - banking-network
     healthcheck:
@@ -478,6 +484,13 @@ services:
     volumes:
       - postgres_main_data:/var/lib/postgresql/data
       - ./init/postgres-main-init.sql:/docker-entrypoint-initdb.d/01-init.sql
+      - ./init/02-users-kpis.sql:/docker-entrypoint-initdb.d/02-users-kpis.sql
+      - ./init/03-semantic-layer.sql:/docker-entrypoint-initdb.d/03-semantic-layer.sql
+      - ./init/04-loan-domain.sql:/docker-entrypoint-initdb.d/04-loan-domain.sql
+      - ./init/05-kyc-aml-domain.sql:/docker-entrypoint-initdb.d/05-kyc-aml.sql
+      - ./init/06-finance-gl-domain.sql:/docker-entrypoint-initdb.d/06-finance-gl.sql
+      - ./init/07-org-customer-ext.sql:/docker-entrypoint-initdb.d/07-org-customer.sql
+      - ./init/08-semantic-layer-seed.sql:/docker-entrypoint-initdb.d/08-sem-seed.sql
     networks:
       - banking-network
     healthcheck:

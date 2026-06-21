@@ -11,6 +11,12 @@ Five checks (all must pass):
   5. pattern_check   — no suspicious injection patterns
 
 Also signs safe queries with HMAC to detect tampering.
+
+Phase 6B additions (SEMANTIC_LAYER_ENABLED=True, non-blocking):
+  - Warns if SQL references unknown tables (not in KNOWN_TABLES)
+  - Warns on unsupported aggregate formulas
+  - Carries upstream_semantic_warnings through to response
+  IMPORTANT: semantic checks are WARNINGS only — they never set safe=False.
 """
 import hashlib
 import hmac
@@ -29,6 +35,18 @@ except ImportError:
 from models import QueryValidationRequest, QueryValidationResponse
 
 logger = logging.getLogger(__name__)
+
+SEMANTIC_LAYER_ENABLED = os.getenv("SEMANTIC_LAYER_ENABLED", "false").lower() == "true"
+
+# Phase 6B: known safe tables (used for semantic unknown-table warning only)
+KNOWN_TABLES = {
+    "customers", "accounts", "transactions", "branches", "products",
+    "risk_flags", "loans", "employees", "cards", "beneficiaries",
+    "fees", "exchange_rates", "compliance_checks", "audit_log",
+    # semantic layer tables (read-only metadata — allowed in SELECT)
+    "table_metadata", "column_metadata", "metric_registry",
+    "business_glossary", "join_registry",
+}
 
 # ──────────────────────────────────────────────────────────────────────────────
 # WARNING: Demo signing key — replace with secrets manager in production!
@@ -195,7 +213,7 @@ class QueryValidator:
         else:
             checks_passed.append("pattern_check")
 
-        # ── VERDICT ────────────────────────────────────────────────────────────
+        # ── VERDICT ────────────────────────────────────────────────────────────────────
         safe = len(checks_failed) == 0
         confidence = len(checks_passed) / (len(checks_passed) + len(checks_failed))
 
@@ -210,9 +228,33 @@ class QueryValidator:
             # Simple fallback: strip leading/trailing whitespace
             sanitized = " ".join(sql.split())
 
+        # ── Phase 6B: Semantic checks (WARNING level — never affect safe verdict) ──
+        semantic_warnings: List[str] = list(request.upstream_semantic_warnings)
+
+        if SEMANTIC_LAYER_ENABLED and safe:
+            # Check 6: unknown table references
+            table_refs = re.findall(r'\bFROM\s+(\w+)|\bJOIN\s+(\w+)', sql, re.IGNORECASE)
+            for match in table_refs:
+                tbl = (match[0] or match[1]).lower()
+                if tbl and tbl not in KNOWN_TABLES:
+                    msg = f"[semantic] Unknown table '{tbl}' referenced — not in known banking schema"
+                    semantic_warnings.append(msg)
+                    logger.warning("[Validator] %s", msg)
+
+            # Check 7: unsupported formula pattern (raw math in SELECT without aggregation)
+            if re.search(r'SELECT\s+[^,]+[*/][^,]+FROM', sql, re.IGNORECASE):
+                msg = "[semantic] Possible raw arithmetic in SELECT — consider using metric_registry formulas"
+                semantic_warnings.append(msg)
+                logger.info("[Validator] %s", msg)
+
+        if semantic_warnings:
+            logger.info(
+                "[Validator] Semantic warnings (%d): %s", len(semantic_warnings), semantic_warnings
+            )
+
         logger.info(
-            "Validation: safe=%s confidence=%.2f checks_failed=%s",
-            safe, confidence, checks_failed
+            "Validation: safe=%s confidence=%.2f checks_failed=%s semantic_warnings=%d",
+            safe, confidence, checks_failed, len(semantic_warnings)
         )
 
         return QueryValidationResponse(
@@ -223,6 +265,7 @@ class QueryValidator:
             checks_failed=checks_failed,
             signature=signature,
             sanitized_sql=sanitized if safe else None,
+            semantic_warnings=semantic_warnings,
         )
 
     def _sign_query(self, sql: str, parameters: list) -> str:

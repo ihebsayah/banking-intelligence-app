@@ -118,7 +118,7 @@ export function KpiPage() {
                       <div key={kpi.kpi_id} className="rounded-xl border border-[#0f2040] bg-[#050b14]/50 p-4 relative group hover:border-[#1e3459] transition-all">
                         <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider truncate mb-2">{kpi.name}</p>
                         <p className="text-2xl font-bold text-white tracking-tight mb-2">
-                          {formatKPIValue(kpi.value, kpi.metric_type)}
+                          {formatKPIValue(kpi.value ?? 0, kpi.metric_type)}
                         </p>
                         <div className="flex items-center gap-1">
                           <TrendIcon size={12} className={trendColor} />

@@ -2,10 +2,14 @@
 services/sql_agent/main.py
 SQL Generation Agent — FastAPI app on port 8005.
 Generates safe, parameterized SQL queries.
+
+Phase 6B: On startup, loads metric_registry formulas and join_registry safe pairs
+into memory when SEMANTIC_LAYER_ENABLED=True.
 """
 import sys
 import logging
 import os
+from contextlib import asynccontextmanager
 
 sys.path.insert(0, "/app/shared")
 sys.path.insert(0, "/app")
@@ -15,7 +19,7 @@ from fastapi import FastAPI, HTTPException
 import uvicorn
 
 from models import SQLGenerationRequest, SQLGenerationResponse, JoinPathInput
-from sql_builder import SQLBuilder
+from sql_builder import SQLBuilder, initialize_sql_semantic_cache, SEMANTIC_LAYER_ENABLED
 
 # ──────────────────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -24,10 +28,34 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize semantic metric/join cache on startup when flag is enabled."""
+    if SEMANTIC_LAYER_ENABLED:
+        try:
+            import psycopg2
+            db_url = os.getenv(
+                "DATABASE_URL",
+                "postgresql://banking_user:securepass123@db:5432/banking_dev"
+            )
+            conn = psycopg2.connect(db_url)
+            initialize_sql_semantic_cache(conn)
+            conn.close()
+        except Exception as exc:
+            logger.warning(
+                "[startup] Could not initialize SQL semantic cache: %s", exc
+            )
+    else:
+        logger.info("[startup] SEMANTIC_LAYER_ENABLED=False — using hardcoded SQL builder")
+    yield
+
+
 app = FastAPI(
     title="SQL Generation Agent",
-    description="Generates safe, parameterized SQL. All values use ? placeholders. Week 3.",
-    version="0.3.0",
+    description="Generates safe, parameterized SQL. Phase 6B.",
+    version="0.6b.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -50,8 +78,9 @@ async def health():
         "status": "healthy",
         "service": "sql_agent",
         "port": 8005,
-        "version": "0.3.0",
+        "version": "0.6b.0",
         "security": "all queries parameterized",
+        "semantic_layer": SEMANTIC_LAYER_ENABLED,
     }
 
 

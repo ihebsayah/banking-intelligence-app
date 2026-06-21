@@ -47,6 +47,12 @@ from shared.models import (
     UserRole,
 )
 from auth import authenticate_user_db, create_access_token, verify_token, MOCK_USERS, pwd_context
+
+try:
+    from kpi_service import KPIService
+except ImportError:
+    KPIService = None
+
 logger = get_logger(__name__, "api-gateway")
 settings = get_settings()
 router = APIRouter()
@@ -95,12 +101,20 @@ class QueryRequest(BaseModel):
 class KPIMetric(BaseModel):
     kpi_id: str
     name: str
-    value: float
+    value: Optional[float] = None
     metric_type: str  # currency | percentage | count | ratio
     trend: float = 0.0
     trend_direction: str = "stable"  # up | down | stable
     last_updated: str
     data_freshness: str = "real-time"
+    status: str = "active"
+    reason: Optional[str] = None
+    formula: Optional[str] = None
+    owner_name: Optional[str] = None
+    owner_email: Optional[str] = None
+    refresh_frequency: Optional[str] = None
+    threshold_evaluation: Optional[str] = "unknown"
+    source_tables: Optional[List[str]] = []
 
 
 class ChartDataPoint(BaseModel):
@@ -848,32 +862,88 @@ async def dashboard_chart(
             "message": f"Unknown chart_id '{chart_id}'. Valid: revenue_trend, risk_levels, concentration, growth_rate"})
 
 
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
-# ─── KPI CENTER ───────────────────────────────────────────────────────────────
+# ─── KPI GOVERNANCE CENTER ────────────────────────────────────────────────────
 # ═══════════════════════════════════════════════════════════════════════════════
 
-@router.get("/kpi/catalog", summary="List KPI definitions", tags=["kpi"])
+@router.get("/kpi/catalog", summary="KPI governance catalog — definitions, formulas, owners, thresholds", tags=["kpi"])
 async def kpi_catalog(
     request: Request,
+    category: Optional[str] = Query(default=None, description="Filter by category ID"),
+    status_filter: Optional[str] = Query(default=None, alias="status", description="Filter: active | unavailable"),
     user: User = Depends(require_roles("business")),
 ) -> List[dict]:
     db = _require_db(request)
-    rows = await db.fetch_all("SELECT * FROM kpi_definitions ORDER BY category, kpi_id")
+    params, filters = [], []
+    if category:
+        params.append(category)
+        filters.append(f"d.category = ${len(params)}")
+    if status_filter:
+        params.append(status_filter)
+        filters.append(f"d.status = ${len(params)}")
+    where = ("WHERE " + " AND ".join(filters)) if filters else ""
+    rows = await db.fetch_all(f"""
+        SELECT d.*,
+               c.name AS category_name,
+               o.name AS owner_name, o.email AS owner_email, o.role AS owner_role,
+               t.healthy_min, t.healthy_max, t.warning_min, t.warning_max,
+               t.critical_min, t.critical_max, t.healthy_label, t.warning_label, t.critical_label
+        FROM kpi_definitions d
+        LEFT JOIN kpi_categories c ON c.category_id = d.category
+        LEFT JOIN kpi_owners o ON o.owner_id = d.owner_id
+        LEFT JOIN kpi_thresholds t ON t.kpi_id = d.kpi_id
+        {where}
+        ORDER BY d.category, d.kpi_id
+    """, params)
     return [dict(r) for r in rows]
+
+
+@router.get(
+    "/kpi/dashboard",
+    summary="KPI dashboard summary — computed card-level KPIs",
+    tags=["kpi"],
+)
+async def kpi_dashboard(
+    request: Request,
+    user: User = Depends(require_roles("business")),
+) -> dict:
+    db = _require_db(request)
+    if KPIService:
+        all_kpis = await KPIService.get_all_kpis(db)
+        active = [k for k in all_kpis if k.get("status") == "active"]
+        unavailable = [k for k in all_kpis if k.get("status") == "unavailable"]
+        critical = [k for k in all_kpis if k.get("threshold_evaluation") == "critical"]
+        warning = [k for k in all_kpis if k.get("threshold_evaluation") == "warning"]
+        return {
+            "total_kpis": len(all_kpis),
+            "active_kpis": len(active),
+            "unavailable_kpis": len(unavailable),
+            "critical_kpis": len(critical),
+            "warning_kpis": len(warning),
+            "kpis": all_kpis,
+            "last_updated": _now_iso(),
+        }
+    # Fallback without KPIService
+    return {"total_kpis": 0, "active_kpis": 0, "unavailable_kpis": 0, "critical_kpis": 0, "warning_kpis": 0, "kpis": [], "last_updated": _now_iso()}
 
 
 @router.get(
     "/kpi/values",
     response_model=List[KPIMetric],
-    summary="Current computed values for all KPIs",
+    summary="Current computed values for all active KPIs with governance metadata",
     tags=["kpi"],
 )
 async def kpi_values(
     request: Request,
     user: User = Depends(require_roles("business")),
 ) -> List[KPIMetric]:
-    """Re-uses the same logic as /dashboard/kpis but adds KYC rate and risk flag count."""
     db = _require_db(request)
+    if KPIService:
+        all_kpis = await KPIService.get_all_kpis(db)
+        return [KPIMetric(**{k: v for k, v in kpi.items() if k in KPIMetric.model_fields}) for kpi in all_kpis]
+    # Legacy fallback (pre-governance)
     stats = await db.fetch_one("""
         SELECT
             COALESCE(SUM(a.balance), 0)                                              AS total_deposits,
@@ -926,9 +996,14 @@ async def kpi_metrics(request: Request, user: User = Depends(require_roles("busi
 async def kpi_trends(
     request: Request,
     months: int = Query(default=12, ge=1, le=24),
+    kpi_id: Optional[str] = Query(default=None, description="Specific KPI ID for targeted trends"),
     user: User = Depends(require_roles("business")),
 ) -> dict:
     db = _require_db(request)
+    if kpi_id and KPIService:
+        trend_data = await KPIService.get_kpi_trends(db, kpi_id, months)
+        return {"kpi_id": kpi_id, "months": months, "trends": trend_data, "last_updated": _now_iso()}
+    # Legacy aggregate trends
     rows = await db.fetch_all("""
         SELECT
             TO_CHAR(DATE_TRUNC('month', transaction_date), 'YYYY-MM') AS month,
@@ -942,6 +1017,61 @@ async def kpi_trends(
     """, [months])
     return {"months": months, "trends": [dict(r) for r in rows], "last_updated": _now_iso()}
 
+
+@router.get(
+    "/kpi/{kpi_id}/insights",
+    summary="AI-powered insight explanation for a specific KPI",
+    tags=["kpi"],
+)
+async def kpi_insights(
+    kpi_id: str,
+    request: Request,
+    user: User = Depends(require_roles("business")),
+) -> dict:
+    db = _require_db(request)
+    if KPIService:
+        explanation = await KPIService.get_kpi_explanation(db, kpi_id)
+        return explanation
+    return {"kpi_id": kpi_id, "explanation": "Insight service not available."}
+
+
+@router.get(
+    "/kpi/{kpi_id}",
+    summary="Governance detail for a single KPI — value, formula, threshold, owner, trend",
+    tags=["kpi"],
+)
+async def kpi_detail(
+    kpi_id: str,
+    request: Request,
+    user: User = Depends(require_roles("business")),
+) -> dict:
+    db = _require_db(request)
+    if KPIService:
+        try:
+            kpi = await KPIService.compute_kpi(db, kpi_id)
+            # Also fetch threshold row
+            threshold_row = None
+            try:
+                threshold_row = await db.fetch_one("SELECT * FROM kpi_thresholds WHERE kpi_id = $1", [kpi_id])
+            except Exception:
+                pass
+            if threshold_row:
+                kpi["thresholds"] = dict(threshold_row)
+            # Fetch history
+            history = []
+            try:
+                hist_rows = await db.fetch_all("""
+                    SELECT changed_by, change_type, old_value, new_value, changed_at
+                    FROM kpi_history WHERE kpi_id = $1 ORDER BY changed_at DESC LIMIT 10
+                """, [kpi_id])
+                history = [dict(r) for r in hist_rows]
+            except Exception:
+                pass
+            kpi["history"] = history
+            return kpi
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail={"error": "KPI_NOT_FOUND", "message": str(exc)})
+    raise HTTPException(status_code=503, detail={"error": "KPI_SERVICE_UNAVAILABLE", "message": "KPI service not initialized."})
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # ─── RISK CENTER ──────────────────────────────────────────────────────────────

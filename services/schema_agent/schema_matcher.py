@@ -1,29 +1,36 @@
 """
 services/schema_agent/schema_matcher.py
 
-Hardcoded domain/table/join mappings for MVP.
-No ML; pure lookup tables (fast, predictable, auditable).
+Pattern-based and semantic-layer-based domain/table/join mappings.
 """
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+import logging
+from typing import Dict, List, Optional, Tuple, Any
 
 from models import JoinPath
 
-# ── Intent → Domains ─────────────────────────────────────────────────────────
+logger = logging.getLogger(__name__)
+
+# ── Fallback Intent → Domains ─────────────────────────────────────────────────
 
 INTENT_TO_DOMAINS: Dict[str, List[str]] = {
-    "customer_analysis":    ["customer_analysis", "account_analysis"],
-    "risk_analysis":        ["risk_analysis", "customer_analysis"],
-    "revenue_analysis":     ["revenue_analysis", "account_analysis"],
-    "operational_analysis": ["operational_analysis", "transaction_analysis"],
-    "geographic_analysis":  ["geographic_analysis", "branch_analysis"],
-    "product_analysis":     ["product_analysis", "revenue_analysis"],
-    "compliance_analysis":  ["compliance_analysis", "risk_analysis"],
-    "transaction_analysis": ["transaction_analysis", "account_analysis"],
+    "customer_analysis":    ["customer_analysis", "account_analysis", "customer"],
+    "risk_analysis":        ["risk_analysis", "customer_analysis", "risk", "loan"],
+    "revenue_analysis":     ["revenue_analysis", "account_analysis", "finance"],
+    "operational_analysis": ["operational_analysis", "transaction_analysis", "payment"],
+    "geographic_analysis":  ["geographic_analysis", "branch_analysis", "organization"],
+    "product_analysis":     ["product_analysis", "revenue_analysis", "product"],
+    "compliance_analysis":  ["compliance_analysis", "risk_analysis", "compliance", "kyc"],
+    "transaction_analysis": ["transaction_analysis", "account_analysis", "payment"],
+    "loan_analysis":        ["loan", "risk"],
+    "kyc_analysis":         ["kyc", "compliance"],
+    "aml_analysis":         ["compliance", "risk"],
+    "profitability_analysis": ["finance"],
+    "liquidity_analysis":   ["liquidity", "finance"]
 }
 
-# ── Domains → Tables ──────────────────────────────────────────────────────────
+# ── Fallback Domains → Tables ──────────────────────────────────────────────────
 
 DOMAIN_TO_TABLES: Dict[str, List[str]] = {
     "customer_analysis":    ["customers"],
@@ -33,12 +40,12 @@ DOMAIN_TO_TABLES: Dict[str, List[str]] = {
     "operational_analysis": ["transactions"],
     "geographic_analysis":  ["branches"],
     "product_analysis":     ["products"],
-    "compliance_analysis":  ["risk_flags"],
+    "compliance_analysis":  ["risk_flags", "kyc_status", "audit_logs"],
     "transaction_analysis": ["transactions"],
     "branch_analysis":      ["branches"],
 }
 
-# ── Entity → primary key ──────────────────────────────────────────────────────
+# ── Fallback Entity → primary key ──────────────────────────────────────────────
 
 PRIMARY_ENTITY_KEYS: Dict[str, str] = {
     "customer":    "customer_id",
@@ -49,7 +56,7 @@ PRIMARY_ENTITY_KEYS: Dict[str, str] = {
     "region":      "region_id",
 }
 
-# ── Table → filtering columns ─────────────────────────────────────────────────
+# ── Fallback Table → filtering columns ─────────────────────────────────────────
 
 TABLE_FILTER_COLUMNS: Dict[str, List[str]] = {
     "customers":            ["segment", "kyc_verified", "risk_score", "name", "email", "phone"],
@@ -60,7 +67,7 @@ TABLE_FILTER_COLUMNS: Dict[str, List[str]] = {
     "branches":             ["state", "city", "name"],
 }
 
-# ── Hardcoded join graph (source → list of join specs) ────────────────────────
+# ── Fallback join graph (source → list of join specs) ────────────────────────
 
 JoinSpec = Dict  # {"to": str, "key": str, "type": str}
 
@@ -92,7 +99,38 @@ JOIN_GRAPH: Dict[str, List[JoinSpec]] = {
 class SchemaMatcher:
     """Maps intent categories → database domains → tables → join paths."""
 
-    # ── Public API ────────────────────────────────────────────────────────────
+    def __init__(self, db=None, semantic_layer_enabled=False):
+        self._db = db
+        self._semantic_layer_enabled = semantic_layer_enabled
+        self._table_metadata_cache: Dict[str, Dict[str, Any]] = {}
+        self._column_metadata_cache: Dict[Tuple[str, str], Dict[str, Any]] = {}
+        self._join_registry_cache: List[Dict[str, Any]] = []
+        self._is_initialized = False
+
+    async def initialize_db_cache(self) -> None:
+        """Fetch all semantic metadata from database and cache in memory."""
+        if not self._semantic_layer_enabled or not self._db:
+            return
+        try:
+            tbl_rows = await self._db.fetch_all("SELECT * FROM table_metadata")
+            self._table_metadata_cache = {r["table_name"].lower(): dict(r) for r in tbl_rows}
+
+            col_rows = await self._db.fetch_all("SELECT * FROM column_metadata")
+            self._column_metadata_cache = {
+                (r["table_name"].lower(), r["column_name"].lower()): dict(r)
+                for r in col_rows
+            }
+
+            join_rows = await self._db.fetch_all("SELECT * FROM join_registry")
+            self._join_registry_cache = [dict(r) for r in join_rows]
+
+            self._is_initialized = True
+            logger.info(
+                "SchemaMatcher cache initialized: %d tables, %d columns, %d joins",
+                len(self._table_metadata_cache), len(self._column_metadata_cache), len(self._join_registry_cache)
+            )
+        except Exception as exc:
+            logger.warning("Failed to populate SchemaMatcher DB cache: %s. Falling back to static mappings.", exc)
 
     def match_domains(self, intent_categories: List[str]) -> List[str]:
         """Map a list of intent categories to relevant database domains."""
@@ -103,10 +141,44 @@ class SchemaMatcher:
 
     def get_tables(self, domains: List[str]) -> List[str]:
         """Return sorted, deduplicated table list for the given domains."""
+        if self._semantic_layer_enabled and self._is_initialized:
+            # Domain-based table selection
+            matched = []
+            for t_name, meta in self._table_metadata_cache.items():
+                t_dom = meta.get("domain") or ""
+                # Also support substring matching for domains
+                if t_dom in domains or any(d in t_dom or t_dom in d for d in domains):
+                    matched.append(t_name)
+            if matched:
+                return sorted(list(set(matched)))
+
+        # Fallback
         tables: set = set()
         for domain in domains:
             tables.update(DOMAIN_TO_TABLES.get(domain, []))
         return sorted(tables)
+
+    def get_table_enrichment(self, tables: List[str], intent_categories: List[str]) -> Tuple[Dict[str, str], Dict[str, float]]:
+        """Compute table explanations and confidence scores based on semantic ranking."""
+        explanations = {}
+        confidence_scores = {}
+        for t in tables:
+            if self._semantic_layer_enabled and self._is_initialized and t in self._table_metadata_cache:
+                meta = self._table_metadata_cache[t]
+                desc = meta.get("business_description") or "Database table"
+                explanations[t] = f"{desc} (Domain: {meta.get('domain')})"
+                
+                # Confidence score based on intent match
+                score = 0.85
+                t_dom = meta.get("domain") or ""
+                for intent in intent_categories:
+                    if t_dom in intent or intent in t_dom:
+                        score = 1.0
+                confidence_scores[t] = score
+            else:
+                explanations[t] = f"Fallback table mapping for {t}"
+                confidence_scores[t] = 0.75
+        return explanations, confidence_scores
 
     def get_key_columns(
         self,
@@ -115,8 +187,14 @@ class SchemaMatcher:
     ) -> Dict:
         """Determine filtering columns and joining key for the given tables."""
         filtering: set = set()
-        for table in tables:
-            filtering.update(TABLE_FILTER_COLUMNS.get(table, []))
+        
+        if self._semantic_layer_enabled and self._is_initialized:
+            for (t_name, col_name), meta in self._column_metadata_cache.items():
+                if t_name in tables:
+                    filtering.add(col_name)
+        else:
+            for table in tables:
+                filtering.update(TABLE_FILTER_COLUMNS.get(table, []))
 
         entity = (primary_entity or "customer").lower()
         join_key = PRIMARY_ENTITY_KEYS.get(entity, "id")
@@ -131,10 +209,18 @@ class SchemaMatcher:
         tables: List[str],
         primary_table: str,
     ) -> List[JoinPath]:
-        """
-        Build join paths from primary_table to all other tables,
-        traversing the static join graph (one-hop only for MVP).
-        """
+        """Build join paths from primary_table to all other tables."""
+        if self._semantic_layer_enabled and self._is_initialized:
+            join_paths = []
+            for target in tables:
+                if target == primary_table:
+                    continue
+                path = self._bfs_join_path(primary_table, target)
+                if path:
+                    join_paths.extend(path)
+            return join_paths
+
+        # Fallback
         table_set = set(tables)
         paths: List[JoinPath] = []
         joined_tables: set = {primary_table}
@@ -151,11 +237,76 @@ class SchemaMatcher:
                         join_type=spec["type"],
                     ))
 
-        # Start from primary table
         _add(primary_table)
-
-        # Then crawl one level deeper for reachable tables
         for table in list(table_set - {primary_table}):
             _add(table)
-
         return paths
+
+    # Sensitive log and compliance tables that are excluded from auto-reversal
+    SENSITIVE_LOG_TABLES = {
+        "audit_log", "user_activity_log", "compliance_events", "compliance_rules",
+        "compliance_violations", "compliance_cases", "compliance_reviews", "regulatory_reports"
+    }
+
+    def _bfs_join_path(self, from_table: str, to_table: str) -> List[JoinPath]:
+        """BFS graph traversal to discover the shortest join path using join_registry."""
+        queue = [[from_table]]
+        visited = {from_table}
+
+        while queue:
+            path = queue.pop(0)
+            curr = path[-1]
+            if curr == to_table:
+                join_paths = []
+                for i in range(len(path) - 1):
+                    s = path[i]
+                    t = path[i+1]
+                    edge = self._find_edge(s, t)
+                    if edge:
+                        join_paths.append(JoinPath(
+                            from_table=edge["source_table"],
+                            to_table=edge["target_table"],
+                            join_key=edge["source_column"],
+                            join_type=edge.get("join_type", "LEFT JOIN")
+                        ))
+                return join_paths
+
+            # Limit depth of search: MAX_JOIN_PATH_DEPTH = 3.
+            # Number of joins (edges) is len(path) - 1. If it's already 3 joins, do not expand.
+            if len(path) >= 4:
+                continue
+
+            # Neighbors
+            for edge in self._join_registry_cache:
+                src = edge["source_table"].lower()
+                tgt = edge["target_table"].lower()
+                
+                # Check for bidirectional permission
+                is_bidirectional = edge.get("is_bidirectional", True)
+                if is_bidirectional is not False: # True or None or other truthy
+                    if src in self.SENSITIVE_LOG_TABLES or tgt in self.SENSITIVE_LOG_TABLES:
+                        is_bidirectional = False
+
+                if src == curr and tgt not in visited:
+                    visited.add(tgt)
+                    queue.append(path + [tgt])
+                elif tgt == curr and is_bidirectional and src not in visited:
+                    visited.add(src)
+                    queue.append(path + [src])
+        return []
+
+    def _find_edge(self, s: str, t: str) -> Optional[Dict[str, Any]]:
+        for edge in self._join_registry_cache:
+            src = edge["source_table"].lower()
+            tgt = edge["target_table"].lower()
+            
+            is_bidirectional = edge.get("is_bidirectional", True)
+            if is_bidirectional is not False:
+                if src in self.SENSITIVE_LOG_TABLES or tgt in self.SENSITIVE_LOG_TABLES:
+                    is_bidirectional = False
+                    
+            if src == s and tgt == t:
+                return edge
+            if src == t and tgt == s and is_bidirectional:
+                return edge
+        return None

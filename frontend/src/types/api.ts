@@ -35,12 +35,18 @@ export interface QueryApiResponse {
 export interface KpiMetric {
   kpi_id: string;
   name: string;
-  value: number;
+  value: number | null;
   metric_type: 'currency' | 'percentage' | 'count' | 'ratio';
   trend: number;
   trend_direction: 'up' | 'down' | 'stable';
   last_updated: string;
-  data_freshness: string;
+  data_freshness?: string;
+  status?: 'active' | 'unavailable';
+  unavailable_reason?: string;
+  threshold_evaluation?: 'healthy' | 'warning' | 'critical' | 'unknown';
+  formula?: string;
+  category?: string;
+  owner_name?: string;
 }
 
 export interface KpiDefinition {
@@ -49,6 +55,95 @@ export interface KpiDefinition {
   category: string;
   description?: string;
   metric_type: string;
+  formula?: string;
+  status?: string;
+}
+
+// ─── KPI Governance Types ─────────────────────────────────────────────────────
+
+export interface KpiOwner {
+  name: string;
+  email: string;
+  role: string;
+}
+
+export interface KpiThreshold {
+  healthy_min: number | null;
+  healthy_max: number | null;
+  warning_min: number | null;
+  warning_max: number | null;
+  critical_min: number | null;
+  critical_max: number | null;
+  healthy_label: string;
+  warning_label: string;
+  critical_label: string;
+}
+
+export interface KpiCatalogEntry {
+  kpi_id: string;
+  name: string;
+  category: string;
+  category_name?: string;
+  description?: string;
+  metric_type: string;
+  formula?: string;
+  formula_display?: string;
+  status: 'active' | 'unavailable';
+  unavailable_reason?: string;
+  owner_name?: string;
+  owner_email?: string;
+  owner_role?: string;
+  healthy_min?: number | null;
+  healthy_max?: number | null;
+  warning_min?: number | null;
+  warning_max?: number | null;
+  critical_min?: number | null;
+  critical_max?: number | null;
+  healthy_label?: string;
+  warning_label?: string;
+  critical_label?: string;
+}
+
+export interface KpiDashboard {
+  total_kpis: number;
+  active_kpis: number;
+  unavailable_kpis: number;
+  critical_kpis: number;
+  warning_kpis: number;
+  kpis: KpiMetric[];
+  last_updated: string;
+}
+
+export interface KpiInsight {
+  kpi_id: string;
+  name?: string;
+  explanation: string;
+  current_value?: number | null;
+  threshold_evaluation?: string;
+  suggested_actions?: string[];
+  risk_level?: string;
+}
+
+export interface KpiDetail {
+  kpi_id: string;
+  name: string;
+  value: number | null;
+  metric_type: string;
+  formula?: string;
+  formula_display?: string;
+  status: string;
+  unavailable_reason?: string;
+  threshold_evaluation?: string;
+  category?: string;
+  owner_name?: string;
+  thresholds?: KpiThreshold;
+  history?: Array<{
+    changed_by: string;
+    change_type: string;
+    old_value: string;
+    new_value: string;
+    changed_at: string;
+  }>;
 }
 
 export interface DashboardOverview {

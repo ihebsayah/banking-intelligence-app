@@ -8,9 +8,16 @@ RULES (non-negotiable):
   - ALWAYS add LIMIT clause
   - ALWAYS validate columns against whitelist
   - NEVER concatenate user-supplied data into SQL string
+
+Phase 6B additions (SEMANTIC_LAYER_ENABLED=True only):
+  - Inject metric_registry SQL formulas into SELECT (e.g. total_deposits formula)
+  - Validate join conditions against join_registry safe-join set
+  - Return structured error if a requested join has no safe registry path
+  - All metadata loaded once at startup (in-memory cache, no per-request DB hits)
 """
 import logging
-from typing import List, Tuple, Any, Optional, Dict
+import os
+from typing import List, Tuple, Any, Optional, Dict, Set
 
 from models import (
     SQLGenerationRequest,
@@ -21,44 +28,96 @@ from models import (
 
 logger = logging.getLogger(__name__)
 
+SEMANTIC_LAYER_ENABLED = os.getenv("SEMANTIC_LAYER_ENABLED", "false").lower() == "true"
+
 # ──────────────────────────────────────────────────────────────────────────────
 # COLUMN WHITELIST — only these columns may appear in SELECT / WHERE / GROUP BY
+# Expanded in Phase 6B to cover all Tunisian banking tables.
 # Any column not in this set is rejected / ignored.
 # ──────────────────────────────────────────────────────────────────────────────
 ALLOWED_COLUMNS: Dict[str, List[str]] = {
+    # Core tables (original)
     "customers": [
         "customer_id", "name", "email", "phone",
         "kyc_verified", "risk_score", "segment", "created_at",
+        # Extended Tunisian fields
+        "cin_number", "nationality", "date_of_birth", "gender",
+        "address", "city", "governorate", "postal_code", "country",
+        "customer_type", "occupation", "annual_income",
+        "onboarding_date", "relationship_manager_id",
     ],
     "accounts": [
         "account_id", "customer_id", "account_type",
         "balance", "available_balance", "currency", "status", "branch_id",
         "created_at",
+        # Extended
+        "account_number", "iban", "product_id", "interest_rate",
+        "overdraft_limit", "last_transaction_date", "account_officer_id",
     ],
     "transactions": [
         "transaction_id", "account_id", "customer_id", "amount",
         "transaction_type", "status", "description", "transaction_date",
         "created_at",
+        # Extended
+        "reference_number", "channel", "currency", "exchange_rate",
+        "fee_amount", "beneficiary_account", "beneficiary_bank", "direction",
     ],
     "branches": [
-        "branch_id", "branch_name", "city", "country", "region",
-        "manager_id", "opened_at", "status",
+        "branch_id", "name", "state", "city", "manager_id", "created_at",
+        # Extended
+        "branch_code", "address", "region", "governorate", "phone",
+        "is_active", "opened_date",
     ],
     "products": [
-        "product_id", "name", "category", "description", "created_at"
+        "product_id", "name", "category", "description", "created_at",
+        # Extended
+        "product_code", "interest_rate", "min_balance", "max_balance",
+        "fee_structure", "currency", "is_active", "launch_date",
     ],
     "risk_flags": [
-        "risk_id", "customer_id", "account_id", "flag_type", "severity",
-        "description", "flagged_at", "resolved_at", "status",
+        "id", "customer_id", "flag_type", "severity",
+        "description", "resolved", "created_at",
+        # Extended
+        "account_id", "transaction_id", "resolved_at", "resolved_by",
+        "risk_category", "source",
     ],
+    # Tunisian banking extended tables
     "loans": [
-        "loan_id", "customer_id", "account_id", "branch_id", "loan_type",
-        "principal_amount", "interest_rate", "term_months", "status",
-        "disbursed_at", "due_date",
+        "loan_id", "customer_id", "account_id", "branch_id",
+        "loan_type", "principal_amount", "outstanding_balance",
+        "interest_rate", "monthly_payment", "start_date", "end_date",
+        "status", "collateral_type", "collateral_value",
+        "credit_score", "created_at",
     ],
     "employees": [
-        "employee_id", "branch_id", "first_name", "last_name", "role",
-        "hired_at", "status",
+        "employee_id", "branch_id", "name", "role", "email",
+        "hire_date", "is_active", "department", "salary_band", "created_at",
+    ],
+    "cards": [
+        "card_id", "account_id", "customer_id", "card_type",
+        "card_number_masked", "expiry_date", "status",
+        "daily_limit", "monthly_limit", "issued_date", "created_at",
+    ],
+    "beneficiaries": [
+        "beneficiary_id", "customer_id", "beneficiary_name",
+        "bank_name", "account_number", "iban", "currency",
+        "country", "is_active", "created_at",
+    ],
+    "fees": [
+        "fee_id", "account_id", "transaction_id", "fee_type",
+        "amount", "currency", "fee_date", "status", "created_at",
+    ],
+    "exchange_rates": [
+        "rate_id", "from_currency", "to_currency", "rate",
+        "effective_date", "source", "created_at",
+    ],
+    "compliance_checks": [
+        "check_id", "customer_id", "check_type", "result",
+        "checked_at", "checked_by", "notes", "next_review_date", "created_at",
+    ],
+    "audit_log": [
+        "log_id", "user_id", "action", "table_name", "record_id",
+        "old_values", "new_values", "ip_address", "created_at",
     ],
 }
 
@@ -74,6 +133,88 @@ ALLOWED_OPERATORS = {">", "<", ">=", "<=", "=", "!=", "LIKE", "IN", "BETWEEN"}
 MAX_LIMIT = 10_000
 DEFAULT_LIMIT = 100
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Semantic layer in-memory caches
+# ──────────────────────────────────────────────────────────────────────────────
+_metric_cache: Dict[str, dict] = {}      # metric_name → {sql_formula, unit, description}
+_safe_joins: Set[Tuple[str, str]] = set()  # {(from_table, to_table)} from join_registry
+_semantic_cache_ready: bool = False
+
+SENSITIVE_LOG_TABLES = {
+    "audit_log", "user_activity_log", "compliance_events", "compliance_rules",
+    "compliance_violations", "compliance_cases", "compliance_reviews", "regulatory_reports"
+}
+
+
+def initialize_sql_semantic_cache(db_conn) -> None:
+    """
+    Load metric_registry formulas + join_registry safe pairs into memory.
+    Called once at startup when SEMANTIC_LAYER_ENABLED=True.
+    Idempotent — safe to call multiple times.
+    """
+    global _metric_cache, _safe_joins, _semantic_cache_ready
+    if _semantic_cache_ready:
+        return
+    try:
+        with db_conn.cursor() as cur:
+            # metric_registry
+            cur.execute(
+                "SELECT metric_name, sql_formula, unit, description FROM metric_registry WHERE is_active = TRUE"
+            )
+            metrics: Dict[str, dict] = {}
+            for row in cur.fetchall():
+                metrics[row[0].lower()] = {
+                    "sql_formula": row[1],
+                    "unit": row[2],
+                    "description": row[3],
+                }
+            _metric_cache = metrics
+
+            # join_registry safe pairs
+            cur.execute("SELECT * FROM join_registry")
+            colnames = [desc[0].lower() for desc in cur.description]
+            
+            src_idx = colnames.index("source_table")
+            tgt_idx = colnames.index("target_table")
+            conf_idx = colnames.index("confidence") if "confidence" in colnames else -1
+            bidir_idx = colnames.index("is_bidirectional") if "is_bidirectional" in colnames else -1
+            
+            safe: Set[Tuple[str, str]] = set()
+            for row in cur.fetchall():
+                from_t = row[src_idx].lower()
+                to_t = row[tgt_idx].lower()
+                
+                # Check confidence threshold
+                if conf_idx != -1 and row[conf_idx] is not None:
+                    if float(row[conf_idx]) < 0.8:
+                        continue
+                
+                is_bidirectional = True
+                if bidir_idx != -1 and row[bidir_idx] is not None:
+                    is_bidirectional = bool(row[bidir_idx])
+                    
+                # Exclude sensitive log/compliance tables from auto-reversal
+                if from_t in SENSITIVE_LOG_TABLES or to_t in SENSITIVE_LOG_TABLES:
+                    is_bidirectional = False
+                    
+                safe.add((from_t, to_t))
+                if is_bidirectional:
+                    safe.add((to_t, from_t))  # bidirectional
+            _safe_joins = safe
+
+        _semantic_cache_ready = True
+        logger.info(
+            "[SQLBuilder] Semantic cache ready: %d metrics, %d safe join pairs",
+            len(_metric_cache), len(_safe_joins)
+        )
+    except Exception as exc:
+        logger.warning("[SQLBuilder] Semantic cache init failed — using legacy builder: %s", exc)
+        _semantic_cache_ready = False
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Internal helpers
+# ──────────────────────────────────────────────────────────────────────────────
 
 def _extract_table_and_column(col_expr: str) -> Tuple[Optional[str], str]:
     """
@@ -86,18 +227,18 @@ def _extract_table_and_column(col_expr: str) -> Tuple[Optional[str], str]:
       "COUNT(customer_id)" -> (None, "customer_id")
     """
     expr = col_expr.strip()
-    
+
     # Strip AS alias
     alias_match = re.search(r'\s+AS\s+\w+', expr, re.IGNORECASE)
     if alias_match:
         expr = expr[:alias_match.start()].strip()
-        
+
     # Strip aggregate function: e.g. AVG(...)
     for agg in ALLOWED_AGGREGATES:
         if expr.upper().startswith(f"{agg}("):
             expr = expr[len(agg)+1:].rstrip(")").strip()
             break
-            
+
     # Now check for table prefix
     parts = expr.split(".")
     if len(parts) == 2:
@@ -136,6 +277,155 @@ def _safe_columns(tables: List[str], requested: Optional[List[str]]) -> str:
                 logger.warning("Column not whitelisted: %s (col %s) — skipped", col, colname)
 
     return ", ".join(valid_cols) if valid_cols else f"{tables[0]}.*"
+
+
+def _validate_joins_against_registry(join_paths: List[JoinPathInput]) -> Tuple[List[JoinPathInput], List[str]]:
+    """
+    Phase 6B: Validate each join against the safe join pairs from join_registry.
+    Returns (safe_joins, warning_messages).
+    NEVER invents a join — if not in registry and SEMANTIC_LAYER_ENABLED, it is skipped with a warning.
+    """
+    if not SEMANTIC_LAYER_ENABLED or not _semantic_cache_ready:
+        return join_paths, []  # pass-through in legacy mode
+
+    safe: List[JoinPathInput] = []
+    warnings: List[str] = []
+    for jp in join_paths:
+        pair = (jp.from_table.lower(), jp.to_table.lower())
+        if pair in _safe_joins:
+            safe.append(jp)
+        else:
+            msg = (
+                f"Join '{jp.from_table}' → '{jp.to_table}' not found in join_registry "
+                f"(is_safe=TRUE) — skipped to prevent unsafe join"
+            )
+            warnings.append(msg)
+            logger.warning("[SQLBuilder] %s", msg)
+
+    return safe, warnings
+
+
+def _sanitize_metric_formula(formula: str) -> Tuple[bool, str]:
+    """
+    Validates a metric_registry SQL formula.
+    Allows only whitelisted aggregate/logical functions, table.column identifiers,
+    basic arithmetic, numbers, and basic comparison operators.
+    Rejects dangerous SQL commands, semicolons, comments, etc.
+    """
+    if not formula:
+        return False, "Formula is empty"
+        
+    # 1. Quick blocklist checks
+    formula_lower = formula.lower()
+    for block in [";", "--", "/*", "*/"]:
+        if block in formula:
+            return False, f"Contains forbidden sequence '{block}'"
+            
+    # Standalone blocklist keywords
+    blocked_words = {"drop", "delete", "insert", "update", "union", "create", "alter", "truncate", "grant", "revoke"}
+    # Tokenize by word boundaries to find exact keyword matches
+    words = re.findall(r'\b[a-z_]+\b', formula_lower)
+    for w in words:
+        if w in blocked_words:
+            return False, f"Contains forbidden keyword '{w}'"
+
+    # 2. Tokenizer check: check every token against a strict whitelist
+    # Token regex extracts:
+    # - float/int numbers: \d+(?:\.\d+)?
+    # - single-quoted strings: '[^']*'
+    # - word tokens: [a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)?
+    # - operators and punctuation: <=|>=|!=|<>|[-+*/().,=<>]
+    token_pattern = re.compile(
+        r"(\d+(?:\.\d+)?|'[^']*'|[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)?|<=|>=|!=|<>|[-+*/().,=<>]|\s+)"
+    )
+    
+    tokens = token_pattern.findall(formula)
+    reconstructed = "".join(tokens)
+    if reconstructed.strip() != formula.strip():
+        return False, "Contains invalid/unparsed characters"
+
+    allowed_funcs = {"sum", "avg", "count", "min", "max", "round", "coalesce", "case", "when", "then", "else", "end"}
+    safe_keywords = {"as", "and", "or", "not", "is", "null", "true", "false", "like", "distinct", "where", "filter"}
+    
+    non_empty_tokens = [t.strip() for t in tokens if t.strip()]
+    allowed_funcs = {"sum", "avg", "count", "min", "max", "round", "coalesce", "case", "when", "then", "else", "end"}
+    safe_keywords = {"as", "and", "or", "not", "is", "null", "true", "false", "like", "distinct", "where", "filter"}
+    
+    for i, token_strip in enumerate(non_empty_tokens):
+        # Is it a number?
+        if re.match(r'^\d+(?:\.\d+)?$', token_strip):
+            continue
+        # Is it a string literal?
+        if token_strip.startswith("'") and token_strip.endswith("'"):
+            continue
+        # Is it an operator or punctuation?
+        if token_strip in {"+", "-", "*", "/", "(", ")", ".", ",", "=", "<", ">", "<=", ">=", "!=", "<>"}:
+            continue
+        # Is it a word token?
+        if re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)?$', token_strip):
+            parts = token_strip.lower().split('.')
+            if len(parts) == 1:
+                word = parts[0]
+                if word in allowed_funcs or word in safe_keywords:
+                    continue
+                # If this word is followed by an opening parenthesis, it is a function call
+                if i + 1 < len(non_empty_tokens) and non_empty_tokens[i+1] == "(":
+                    return False, f"Disallowed function call '{token_strip}'"
+                # Otherwise assume it's a column name (e.g. risk_score)
+                continue
+            elif len(parts) == 2:
+                # table.column
+                continue
+            else:
+                return False, f"Malformed identifier '{token_strip}'"
+        
+        return False, f"Disallowed token/operator '{token_strip}'"
+
+    return True, ""
+
+
+def _inject_metric_formulas(
+    columns: Optional[List[str]],
+    detected_kpis: Optional[List[str]],
+    tables: List[str],
+) -> Tuple[Optional[List[str]], List[str]]:
+    """
+    Phase 6B: Replace KPI references in columns with metric_registry SQL formulas.
+    Returns (updated_columns, trace_notes).
+    """
+    if not SEMANTIC_LAYER_ENABLED or not _semantic_cache_ready or not detected_kpis:
+        return columns, []
+
+    updated = list(columns) if columns else []
+    notes: List[str] = []
+
+    for kpi in detected_kpis:
+        kpi_lower = kpi.lower()
+        if kpi_lower in _metric_cache:
+            formula_info = _metric_cache[kpi_lower]
+            formula = formula_info["sql_formula"]
+            
+            # Sanitize formula before injection
+            is_safe, reason = _sanitize_metric_formula(formula)
+            if not is_safe:
+                msg = f"KPI '{kpi}' formula is unsafe and was rejected: {reason}"
+                logger.warning("[SQLBuilder] %s", msg)
+                notes.append(msg)
+                continue
+                
+            alias = kpi_lower.replace(" ", "_")
+            col_entry = f"{formula} AS {alias}"
+            # Avoid duplicates
+            if col_entry not in updated:
+                updated.append(col_entry)
+                notes.append(
+                    f"KPI '{kpi}' resolved via metric_registry: {formula}"
+                )
+                logger.info("[SQLBuilder] Injected metric formula for '%s': %s", kpi, formula)
+        else:
+            notes.append(f"KPI '{kpi}' not found in metric_registry — ignored")
+
+    return updated if updated else columns, notes
 
 
 def _build_joins(join_paths: List[JoinPathInput]) -> str:
@@ -250,7 +540,7 @@ def _build_order_by(order_by: Optional[str], tables: List[str]) -> str:
     direction = parts[1].upper() if len(parts) > 1 else "ASC"
     if direction not in ALLOWED_ORDER_DIRS:
         direction = "ASC"
-    
+
     tbl, colname = _extract_table_and_column(col)
     if tbl:
         if tbl not in tables or not _validate_column(tbl, colname):
@@ -265,6 +555,11 @@ class SQLBuilder:
     """
     Builds safe, parameterized SQL queries.
     All user-supplied values become ? placeholders.
+
+    Phase 6B additions (when SEMANTIC_LAYER_ENABLED=True):
+      - Injects metric_registry SQL formulas for detected KPIs
+      - Validates join paths against join_registry safe pairs
+      - Attaches semantic_warnings and semantic_trace to response metadata
     """
 
     def build(self, request: SQLGenerationRequest) -> SQLGenerationResponse:
@@ -272,23 +567,40 @@ class SQLBuilder:
         if not tables:
             raise ValueError("No tables specified")
 
+        semantic_warnings: List[str] = []
+        semantic_trace: List[str] = []
+
         # Determine true primary table instead of just using alphabetical tables[0]
         primary_table = tables[0]
         if request.join_paths:
             primary_table = request.join_paths[0].from_table
         else:
-            # simple pluralization fallback
             derived = f"{request.primary_entity.lower()}s"
             if derived in tables:
                 primary_table = derived
             elif request.primary_entity.lower() in tables:
                 primary_table = request.primary_entity.lower()
 
+        # Phase 6B: Validate join paths against join_registry (non-blocking)
+        validated_joins = request.join_paths
+        if SEMANTIC_LAYER_ENABLED and _semantic_cache_ready and request.join_paths:
+            validated_joins, join_warnings = _validate_joins_against_registry(request.join_paths)
+            semantic_warnings.extend(join_warnings)
+            if join_warnings:
+                semantic_trace.append(f"join_validation: {len(join_warnings)} join(s) skipped (not in registry)")
+
+        # Phase 6B: Inject metric_registry formulas for detected KPIs
+        columns = request.columns
+        detected_kpis = getattr(request, "detected_kpis", None)
+        if SEMANTIC_LAYER_ENABLED and _semantic_cache_ready and detected_kpis:
+            columns, metric_notes = _inject_metric_formulas(columns, detected_kpis, tables)
+            semantic_trace.extend(metric_notes)
+
         # SELECT columns
-        select_cols = _safe_columns(tables, request.columns)
+        select_cols = _safe_columns(tables, columns)
 
         # FROM + JOINs
-        join_sql = _build_joins(request.join_paths)
+        join_sql = _build_joins(validated_joins)
 
         # WHERE (parameterized)
         where_sql, raw_params = _build_where(request.filters, tables)
@@ -332,9 +644,14 @@ class SQLBuilder:
         estimated_time_ms = 50 + len(tables) * 20 + len(parameters) * 5
 
         logger.info(
-            "SQL built: tables=%s params=%d limit=%d",
-            tables, len(parameters), limit_val
+            "SQL built: tables=%s params=%d limit=%d semantic=%s",
+            tables, len(parameters), limit_val, SEMANTIC_LAYER_ENABLED
         )
+
+        if semantic_warnings:
+            logger.warning("[SQLBuilder] Semantic warnings: %s", semantic_warnings)
+        if semantic_trace:
+            logger.info("[SQLBuilder] Semantic trace: %s", semantic_trace)
 
         return SQLGenerationResponse(
             sql=sql,
@@ -344,6 +661,8 @@ class SQLBuilder:
             estimated_time_ms=estimated_time_ms,
             tables_used=tables,
             is_parameterized=True,
+            semantic_warnings=semantic_warnings,
+            semantic_trace=semantic_trace,
         )
 
     def _describe(self, req: SQLGenerationRequest, tables: List[str], param_count: int) -> str:
