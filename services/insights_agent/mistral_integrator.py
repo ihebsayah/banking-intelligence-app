@@ -128,7 +128,7 @@ class MistralIntegrator:
                     "temperature": 0.6,
                     "num_predict": max_tokens,
                 },
-                timeout=120,
+                timeout=180,
             )
             if resp.status_code == 200:
                 return resp.json().get("response", "").strip()

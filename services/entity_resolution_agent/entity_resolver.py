@@ -43,6 +43,7 @@ def initialize_entity_cache(db_conn) -> None:
     Load business_glossary synonyms + join_registry graph into memory.
     Called once at startup when SEMANTIC_LAYER_ENABLED is True.
     Must be idempotent — safe to call multiple times.
+    Cache ready=True ONLY if both glossary and join graph are non-empty.
     """
     global _glossary_cache, _join_graph, _cache_ready
     if _cache_ready:
@@ -50,8 +51,9 @@ def initialize_entity_cache(db_conn) -> None:
     try:
         with db_conn.cursor() as cur:
             # --- business_glossary: build synonym → canonical map ---
+            # ponytail: no is_active column in schema — load all rows
             cur.execute(
-                "SELECT term, synonyms FROM business_glossary WHERE is_active = TRUE"
+                "SELECT term, synonyms FROM business_glossary"
             )
             glossary: Dict[str, str] = {}
             for row in cur.fetchall():
@@ -65,7 +67,7 @@ def initialize_entity_cache(db_conn) -> None:
             # --- join_registry: build adjacency graph ---
             cur.execute("SELECT * FROM join_registry")
             colnames = [desc[0].lower() for desc in cur.description]
-            
+
             src_idx = colnames.index("source_table")
             src_col_idx = colnames.index("source_column")
             tgt_idx = colnames.index("target_table")
@@ -80,26 +82,26 @@ def initialize_entity_cache(db_conn) -> None:
                 key = row[src_col_idx]
                 to_t = row[tgt_idx].lower()
                 target_col = row[tgt_col_idx]
-                
+
                 # Check confidence threshold
                 if conf_idx != -1 and row[conf_idx] is not None:
                     if float(row[conf_idx]) < 0.8:
                         continue
-                
+
                 jtype = row[jtype_idx] if jtype_idx != -1 else "LEFT JOIN"
                 if not jtype:
                     jtype = "LEFT JOIN"
-                    
+
                 cond = f"{from_t}.{key} = {to_t}.{target_col}"
-                
+
                 is_bidirectional = True
                 if bidir_idx != -1 and row[bidir_idx] is not None:
                     is_bidirectional = bool(row[bidir_idx])
-                
+
                 # Apply sensitive tables policy
                 if from_t in SENSITIVE_LOG_TABLES or to_t in SENSITIVE_LOG_TABLES:
                     is_bidirectional = False
-                    
+
                 graph.setdefault(from_t, []).append(
                     {"to_table": to_t, "join_key": key, "condition": cond, "join_type": jtype}
                 )
@@ -110,6 +112,20 @@ def initialize_entity_cache(db_conn) -> None:
                         {"to_table": from_t, "join_key": target_col, "condition": rev_cond, "join_type": jtype}
                     )
             _join_graph = graph
+
+        # Cache ready ONLY if minimum metadata present — prevents silent empty-cache mode
+        if not _glossary_cache:
+            logger.warning(
+                "[EntityResolver] business_glossary is empty — semantic cache NOT ready; falling back to legacy"
+            )
+            _cache_ready = False
+            return
+        if not _join_graph:
+            logger.warning(
+                "[EntityResolver] join_registry has no entries — semantic cache NOT ready; falling back to legacy"
+            )
+            _cache_ready = False
+            return
 
         _cache_ready = True
         logger.info(

@@ -20,6 +20,7 @@ import uvicorn
 
 from models import SQLGenerationRequest, SQLGenerationResponse, JoinPathInput
 from sql_builder import SQLBuilder, initialize_sql_semantic_cache, SEMANTIC_LAYER_ENABLED
+import sql_builder as _sb_module
 
 # ──────────────────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -28,25 +29,35 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Readiness state (populated in lifespan)
+_fallback_reason: str = "not yet initialized"
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize semantic metric/join cache on startup when flag is enabled."""
+    global _fallback_reason
     if SEMANTIC_LAYER_ENABLED:
         try:
             import psycopg2
             db_url = os.getenv(
                 "DATABASE_URL",
-                "postgresql://banking_user:securepass123@db:5432/banking_dev"
+                "postgresql://banking_user:securepass123@postgres-main:5432/banking_dev"
             )
             conn = psycopg2.connect(db_url)
             initialize_sql_semantic_cache(conn)
             conn.close()
+            if _sb_module._semantic_cache_ready:
+                _fallback_reason = ""
+            else:
+                _fallback_reason = "metric_registry or join_registry empty after load"
         except Exception as exc:
+            _fallback_reason = f"DB connection failed: {exc}"
             logger.warning(
                 "[startup] Could not initialize SQL semantic cache: %s", exc
             )
     else:
+        _fallback_reason = "SEMANTIC_LAYER_ENABLED=false"
         logger.info("[startup] SEMANTIC_LAYER_ENABLED=False — using hardcoded SQL builder")
     yield
 
@@ -74,13 +85,41 @@ builder = SQLBuilder()
 # ──────────────────────────────────────────────────────────────────────────────
 @app.get("/health")
 async def health():
+    cache_ready = _sb_module._semantic_cache_ready
     return {
         "status": "healthy",
         "service": "sql_agent",
         "port": 8005,
         "version": "0.6b.0",
         "security": "all queries parameterized",
-        "semantic_layer": SEMANTIC_LAYER_ENABLED,
+        "semantic_layer_enabled": SEMANTIC_LAYER_ENABLED,
+        "semantic_cache_ready": cache_ready,
+        "fallback_active": not cache_ready,
+        "fallback_reason": _fallback_reason if not cache_ready else None,
+        "metadata_counts": {
+            "metric_registry": len(_sb_module._metric_cache),
+            "join_registry_safe_pairs": len(_sb_module._safe_joins),
+        },
+    }
+
+
+@app.get("/semantic/health")
+async def semantic_health():
+    """Detailed semantic layer health."""
+    cache_ready = _sb_module._semantic_cache_ready
+    return {
+        "semantic_layer_enabled": SEMANTIC_LAYER_ENABLED,
+        "semantic_cache_ready": cache_ready,
+        "fallback_active": not cache_ready,
+        "fallback_reason": _fallback_reason if not cache_ready else None,
+        "metadata_counts": {
+            "metric_registry": len(_sb_module._metric_cache),
+            "join_registry_safe_pairs": len(_sb_module._safe_joins),
+        },
+        "readiness_requirements": {
+            "metric_registry": "must contain at least one valid formula",
+            "join_registry": "must contain at least one safe join pair",
+        },
     }
 
 

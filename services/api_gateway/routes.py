@@ -617,7 +617,7 @@ async def submit_query(
             pipeline_steps.append({"agent": step_name, "status": "success" if is_success else "error", "response": step_data})
     if "results" in pipeline_result:
         pipeline_steps.append({"agent": "execution", "status": "success" if pipeline_result.get("status") == "success" else "error",
-            "response": {"rows_returned": len(pipeline_result.get("results", []))}})
+            "response": {"rows_returned": len(pipeline_result.get("results") or [])}})
     if "insights" in pipeline_result and pipeline_result.get("insights"):
         pipeline_steps.append({"agent": "insights", "status": "success", "response": pipeline_result.get("insights")})
 

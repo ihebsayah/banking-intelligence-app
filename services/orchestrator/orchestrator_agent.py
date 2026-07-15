@@ -48,9 +48,12 @@ class OrchestratorAgent:
         except ImportError:
             has_debugging = False
 
+        import uuid
         request_id = None
         if has_debugging:
             request_id = debug_logger.start_request(user_query, {"user_id": "unknown", "role": user_role})
+        if not request_id:
+            request_id = str(uuid.uuid4())
 
         try:
             logger.info(f"[ORCHESTRATOR] Processing query: {user_query[:50]}...")
@@ -163,10 +166,10 @@ class OrchestratorAgent:
             if has_debugging:
                 @trace_validation_agent
                 async def run_validation(request_id, input_data):
-                    return await self._call_validation_agent(sql_data, user_role, sql_semantic_warnings)
+                    return await self._call_validation_agent(sql_data, user_role, sql_semantic_warnings, request_id=request_id)
                 validation_response = await run_validation(request_id=request_id, input_data=validation_input)
             else:
-                validation_response = await self._call_validation_agent(sql_data, user_role, sql_semantic_warnings)
+                validation_response = await self._call_validation_agent(sql_data, user_role, sql_semantic_warnings, request_id=request_id)
             
             if not validation_response["success"]:
                 err = f"Validation failed: {validation_response.get('error')}"
@@ -327,8 +330,64 @@ class OrchestratorAgent:
             await self._log("audit", "Audit log saved successfully.")
             await self._log("orchestrator", "Pipeline complete. Returning results to user.")
  
-            # Return final results (Phase 2 + Phase 6B: include insights + semantic trace)
-            insights_data = insights_response.get("data", {})
+            # Build enriched semantic_layer_trace (section E)
+            _sem_enabled = getattr(self.config, "SEMANTIC_LAYER_ENABLED", False)
+            _detected_kpis_list = intent_data.get("detected_kpis", [])
+            _selected_tables = schema_data.get("tables", [])
+            _join_paths_used = [
+                f"{jp.get('from_table','?')}→{jp.get('to_table','?')}"
+                for jp in entity_data.get("join_structure", [])
+                if isinstance(jp, dict)
+            ] if entity_data.get("join_structure") else []
+            _all_warnings = (
+                sql_semantic_warnings
+                + validation_data.get("semantic_warnings", [])
+            )
+
+            if not _sem_enabled:
+                _trace = {
+                    "enabled": False,
+                    "ready": False,
+                    "path_used": "legacy",
+                    "fallback_used": True,
+                    "fallback_reason": "feature flag disabled",
+                    "detected_kpis": [],
+                    "selected_tables": _selected_tables,
+                    "join_paths_used": [],
+                    "warnings": [],
+                }
+            elif sql_semantic_warnings or not _detected_kpis_list:
+                # Enabled but may have fallen back inside agents
+                _trace = {
+                    "enabled": True,
+                    "ready": True,
+                    "path_used": "semantic" if not sql_semantic_warnings else "legacy",
+                    "fallback_used": bool(sql_semantic_warnings),
+                    "fallback_reason": sql_semantic_warnings[0] if sql_semantic_warnings else None,
+                    "detected_kpis": _detected_kpis_list,
+                    "selected_tables": _selected_tables,
+                    "join_paths_used": _join_paths_used,
+                    "warnings": _all_warnings,
+                    "sql_trace": sql_semantic_trace,
+                    "entity_notes": entity_data.get("notes", ""),
+                    "validation_warnings": validation_data.get("semantic_warnings", []),
+                }
+            else:
+                _trace = {
+                    "enabled": True,
+                    "ready": True,
+                    "path_used": "semantic",
+                    "fallback_used": False,
+                    "fallback_reason": None,
+                    "detected_kpis": _detected_kpis_list,
+                    "selected_tables": _selected_tables,
+                    "join_paths_used": _join_paths_used,
+                    "warnings": _all_warnings,
+                    "sql_trace": sql_semantic_trace,
+                    "entity_notes": entity_data.get("notes", ""),
+                    "validation_warnings": validation_data.get("semantic_warnings", []),
+                }
+
             return {
                 "status": "success",
                 "results": execution_data.get("data", []),
@@ -342,13 +401,7 @@ class OrchestratorAgent:
                     "validation": validation_data,
                     "compliance": compliance_response,
                 },
-                "semantic_layer_trace": {
-                    "enabled": getattr(self.config, "SEMANTIC_LAYER_ENABLED", False),
-                    "sql_warnings": sql_semantic_warnings,
-                    "sql_trace": sql_semantic_trace,
-                    "validation_warnings": validation_data.get("semantic_warnings", []),
-                    "entity_notes": entity_data.get("notes", ""),
-                },
+                "semantic_layer_trace": _trace,
                 "request_id": request_id,
                 "debug_url": f"/debug/logs/{request_id}" if request_id else None
             }
@@ -574,12 +627,15 @@ class OrchestratorAgent:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    async def _call_validation_agent(self, sql_data: dict, user_role: str, upstream_semantic_warnings: list = None) -> dict:
+    async def _call_validation_agent(self, sql_data: dict, user_role: str, upstream_semantic_warnings: list = None, request_id: str = None) -> dict:
         """Call Validation Agent."""
         try:
             # Flatten parameter values for validation
             params = sql_data.get("parameters", [])
             flat_params = [p.get("value", p) if isinstance(p, dict) else p for p in params]
+            
+            import secrets
+            nonce = secrets.token_hex(8)
             
             async with httpx.AsyncClient() as client:
                 response = await client.post(
@@ -590,6 +646,8 @@ class OrchestratorAgent:
                         "user_role": user_role,
                         # Phase 6B: forward sql agent semantic warnings to validation
                         "upstream_semantic_warnings": upstream_semantic_warnings or [],
+                        "request_id": request_id,
+                        "nonce": nonce,
                     },
                     timeout=10
                 )
@@ -684,7 +742,7 @@ class OrchestratorAgent:
                         "results": results,
                         "metadata": metadata,
                     },
-                    timeout=45,
+                    timeout=180,
                 )
             if response.status_code == 200:
                 return {"success": True, "data": response.json()}

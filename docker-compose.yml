@@ -93,6 +93,7 @@ services:
       - INSIGHTS_AGENT_URL=http://insights-agent:8013
       - COMPLIANCE_AGENT_URL=http://compliance-agent:8011
       - QUERY_SIGNING_KEY=${QUERY_SIGNING_KEY:-CHANGE_IN_PRODUCTION}
+      - QUERY_SIGNATURE_MAX_AGE_SECONDS=${QUERY_SIGNATURE_MAX_AGE_SECONDS:-60}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - SEMANTIC_LAYER_ENABLED=false
     depends_on:
@@ -256,6 +257,8 @@ services:
     ports:
       - "8006:8006"
     environment:
+      - QUERY_SIGNING_KEY=${QUERY_SIGNING_KEY:-CHANGE_IN_PRODUCTION}
+      - QUERY_SIGNATURE_MAX_AGE_SECONDS=${QUERY_SIGNATURE_MAX_AGE_SECONDS:-60}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - SEMANTIC_LAYER_ENABLED=false
     networks:
@@ -283,6 +286,7 @@ services:
       - DATABASE_URL=postgresql://${POSTGRES_MAIN_USER:-banking_user}:${POSTGRES_MAIN_PASSWORD:-securepass123}@postgres-main:5432/${POSTGRES_MAIN_DB:-banking_dev}
       - REDIS_URL=redis://redis:6379/5
       - QUERY_SIGNING_KEY=${QUERY_SIGNING_KEY:-CHANGE_IN_PRODUCTION}
+      - QUERY_SIGNATURE_MAX_AGE_SECONDS=${QUERY_SIGNATURE_MAX_AGE_SECONDS:-60}
       - AUDIT_SERVICE_URL=http://audit-agent:8008
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     depends_on:
@@ -396,7 +400,7 @@ services:
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_MAIN_USER:-banking_user}:${POSTGRES_MAIN_PASSWORD:-securepass123}@postgres-main:5432/${POSTGRES_MAIN_DB:-banking_dev}
       - MISTRAL_API_URL=${MISTRAL_API_URL:-http://ollama:11434}
-      - MISTRAL_MODEL=${MISTRAL_MODEL:-mistral}
+      - MISTRAL_MODEL=${INSIGHTS_LLM_MODEL:-tinyllama}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     depends_on:
       - postgres-main
@@ -579,7 +583,7 @@ services:
     environment:
       - OLLAMA_HOST=0.0.0.0:11434
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/tags || exit 1"]
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/11434' || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5

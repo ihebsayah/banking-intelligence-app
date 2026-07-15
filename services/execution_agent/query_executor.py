@@ -43,21 +43,22 @@ CACHE_TTL = 3600  # 1 hour
 
 def _verify_signature(sql: str, parameters: list, signature: str) -> bool:
     """
-    HMAC-SHA256 verification.
-    Signature format: sha256:{hex_sig}:{timestamp}
+    HMAC-SHA256 verification (backward compatibility fallback).
     """
     try:
-        parts = signature.split(":")
-        if len(parts) != 3 or parts[0] != "sha256":
-            return False
-        expected_sig = parts[1]
-        message = sql + "|" + str(sorted(str(p) for p in parameters))
-        actual_sig = hmac.new(
-            SIGNING_KEY.encode("utf-8"),
-            message.encode("utf-8"),
-            hashlib.sha256,
-        ).hexdigest()
-        return hmac.compare_digest(expected_sig, actual_sig)
+        import sys
+        import os
+        shared_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "shared"))
+        if shared_path not in sys.path:
+            sys.path.insert(0, shared_path)
+        from query_signing import verify_query_signature
+        return verify_query_signature(
+            sql=sql,
+            parameters=parameters,
+            signature=signature,
+            key=SIGNING_KEY,
+            max_age_seconds=int(os.getenv("QUERY_SIGNATURE_MAX_AGE_SECONDS", "60"))
+        )
     except Exception:
         return False
 
@@ -191,8 +192,19 @@ class QueryExecutor:
           RuntimeError — DB error
         """
         # 1. Verify signature — CRITICAL security check
-        if not _verify_signature(sql, parameters, signature):
-            raise ValueError("SIGNATURE_INVALID: Query signature verification failed — possible tampering detected")
+        import sys
+        import os
+        shared_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "shared"))
+        if shared_path not in sys.path:
+            sys.path.insert(0, shared_path)
+        from query_signing import verify_query_signature
+        verify_query_signature(
+            sql=sql,
+            parameters=parameters,
+            signature=signature,
+            key=SIGNING_KEY,
+            max_age_seconds=int(os.getenv("QUERY_SIGNATURE_MAX_AGE_SECONDS", "60"))
+        )
 
         q_hash = _query_hash(sql, parameters)
 

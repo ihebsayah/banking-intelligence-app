@@ -54,14 +54,15 @@ async def startup() -> None:
 
     # Initialize Database Connector and load settings
     db_connector = None
-    semantic_enabled = False
+    semantic_enabled = os.getenv("SEMANTIC_LAYER_ENABLED", "false").lower() == "true"
     try:
-        from shared.config import get_settings
         from shared.database import get_connector
-        settings = get_settings()
-        semantic_enabled = settings.SEMANTIC_LAYER_ENABLED
         if semantic_enabled:
-            db_connector = await get_connector(settings.DATABASE_URL)
+            db_url = os.getenv(
+                "DATABASE_URL",
+                "postgresql://banking_user:securepass123@postgres-main:5432/banking_dev"
+            )
+            db_connector = await get_connector(db_url)
             logger.info("Semantic database connector initialized successfully")
     except Exception as exc:
         logger.warning("Failed to initialize database connector or settings for intent agent: %s", exc)
@@ -93,7 +94,44 @@ async def process_intent(request: IntentRequest) -> IntentResponse:
 
 @app.get("/health")
 async def health() -> dict:
-    return {"status": "healthy", "service": "intent_agent"}
+    kpi_count = len(recognizer._kpi_cache) if recognizer and recognizer._kpi_cache is not None else 0
+    semantic_enabled = recognizer._semantic_layer_enabled if recognizer else False
+    # Intent agent uses lazy KPI loading: cache populated on first request
+    # ready=True if flag enabled; kpi_count=0 means next request will load from DB
+    return {
+        "status": "healthy",
+        "service": "intent_agent",
+        "semantic_layer_enabled": semantic_enabled,
+        "kpi_cache_loaded": recognizer._kpi_cache is not None if recognizer else False,
+        "kpi_count": kpi_count,
+    }
+
+
+@app.get("/semantic/health")
+async def semantic_health() -> dict:
+    """Semantic layer health for intent agent."""
+    if not recognizer:
+        return {"semantic_layer_enabled": False, "semantic_cache_ready": False, "kpi_count": 0}
+    semantic_enabled = recognizer._semantic_layer_enabled
+    kpi_count = len(recognizer._kpi_cache) if recognizer._kpi_cache is not None else 0
+    # Readiness: flag enabled AND db connector present
+    cache_ready = semantic_enabled and recognizer._db is not None
+    return {
+        "semantic_layer_enabled": semantic_enabled,
+        "semantic_cache_ready": cache_ready,
+        "fallback_active": not cache_ready,
+        "fallback_reason": (
+            None if cache_ready
+            else ("feature flag disabled" if not semantic_enabled else "db connector unavailable")
+        ),
+        "metadata_counts": {
+            "metric_registry_kpis": kpi_count,
+            "kpi_cache_loaded": recognizer._kpi_cache is not None,
+        },
+        "readiness_requirements": {
+            "metric_registry": "loaded lazily on first request",
+        },
+    }
 
 
 @app.get("/categories")

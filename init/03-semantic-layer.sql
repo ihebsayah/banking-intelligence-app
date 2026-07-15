@@ -86,3 +86,6 @@ CREATE TABLE IF NOT EXISTS join_registry (
 );
 
 CREATE INDEX IF NOT EXISTS idx_join_registry_lookup ON join_registry(source_table, target_table);
+
+-- Migration-safe: add is_bidirectional if it was created before this column was in the DDL
+ALTER TABLE join_registry ADD COLUMN IF NOT EXISTS is_bidirectional BOOLEAN DEFAULT TRUE;

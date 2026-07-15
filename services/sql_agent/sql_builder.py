@@ -151,56 +151,73 @@ def initialize_sql_semantic_cache(db_conn) -> None:
     Load metric_registry formulas + join_registry safe pairs into memory.
     Called once at startup when SEMANTIC_LAYER_ENABLED=True.
     Idempotent — safe to call multiple times.
+    Cache ready=True ONLY if both metrics AND joins are non-empty.
     """
     global _metric_cache, _safe_joins, _semantic_cache_ready
     if _semantic_cache_ready:
         return
     try:
         with db_conn.cursor() as cur:
-            # metric_registry
+            # metric_registry — actual columns: metric_id, formula, unit, description
+            # ponytail: no is_active col in schema — load all rows
             cur.execute(
-                "SELECT metric_name, sql_formula, unit, description FROM metric_registry WHERE is_active = TRUE"
+                "SELECT metric_id, formula, unit, description FROM metric_registry"
             )
             metrics: Dict[str, dict] = {}
             for row in cur.fetchall():
-                metrics[row[0].lower()] = {
-                    "sql_formula": row[1],
-                    "unit": row[2],
-                    "description": row[3],
-                }
+                if row[0] and row[1]:  # skip rows with null metric_id or null formula
+                    metrics[row[0].lower()] = {
+                        "sql_formula": row[1],
+                        "unit": row[2],
+                        "description": row[3],
+                    }
             _metric_cache = metrics
 
             # join_registry safe pairs
             cur.execute("SELECT * FROM join_registry")
             colnames = [desc[0].lower() for desc in cur.description]
-            
+
             src_idx = colnames.index("source_table")
             tgt_idx = colnames.index("target_table")
             conf_idx = colnames.index("confidence") if "confidence" in colnames else -1
             bidir_idx = colnames.index("is_bidirectional") if "is_bidirectional" in colnames else -1
-            
+
             safe: Set[Tuple[str, str]] = set()
             for row in cur.fetchall():
                 from_t = row[src_idx].lower()
                 to_t = row[tgt_idx].lower()
-                
-                # Check confidence threshold
+
+                # Skip low-confidence joins
                 if conf_idx != -1 and row[conf_idx] is not None:
                     if float(row[conf_idx]) < 0.8:
                         continue
-                
+
                 is_bidirectional = True
                 if bidir_idx != -1 and row[bidir_idx] is not None:
                     is_bidirectional = bool(row[bidir_idx])
-                    
+
                 # Exclude sensitive log/compliance tables from auto-reversal
                 if from_t in SENSITIVE_LOG_TABLES or to_t in SENSITIVE_LOG_TABLES:
                     is_bidirectional = False
-                    
+
                 safe.add((from_t, to_t))
                 if is_bidirectional:
-                    safe.add((to_t, from_t))  # bidirectional
+                    safe.add((to_t, from_t))
             _safe_joins = safe
+
+        # Cache ready ONLY if minimum metadata present — prevents silent empty-cache mode
+        if not _metric_cache:
+            logger.warning(
+                "[SQLBuilder] metric_registry is empty — semantic cache NOT ready; falling back to legacy"
+            )
+            _semantic_cache_ready = False
+            return
+        if not _safe_joins:
+            logger.warning(
+                "[SQLBuilder] join_registry has no safe pairs — semantic cache NOT ready; falling back to legacy"
+            )
+            _semantic_cache_ready = False
+            return
 
         _semantic_cache_ready = True
         logger.info(
@@ -344,13 +361,10 @@ def _sanitize_metric_formula(formula: str) -> Tuple[bool, str]:
     if reconstructed.strip() != formula.strip():
         return False, "Contains invalid/unparsed characters"
 
-    allowed_funcs = {"sum", "avg", "count", "min", "max", "round", "coalesce", "case", "when", "then", "else", "end"}
-    safe_keywords = {"as", "and", "or", "not", "is", "null", "true", "false", "like", "distinct", "where", "filter"}
+    allowed_funcs = {"sum", "avg", "count", "min", "max", "round", "coalesce", "case", "when", "then", "else", "end", "abs", "now", "in"}
+    safe_keywords = {"as", "and", "or", "not", "is", "null", "true", "false", "like", "distinct", "where", "filter", "interval"}
     
     non_empty_tokens = [t.strip() for t in tokens if t.strip()]
-    allowed_funcs = {"sum", "avg", "count", "min", "max", "round", "coalesce", "case", "when", "then", "else", "end"}
-    safe_keywords = {"as", "and", "or", "not", "is", "null", "true", "false", "like", "distinct", "where", "filter"}
-    
     for i, token_strip in enumerate(non_empty_tokens):
         # Is it a number?
         if re.match(r'^\d+(?:\.\d+)?$', token_strip):
@@ -403,8 +417,8 @@ def _inject_metric_formulas(
         kpi_lower = kpi.lower()
         if kpi_lower in _metric_cache:
             formula_info = _metric_cache[kpi_lower]
-            formula = formula_info["sql_formula"]
-            
+            formula = formula_info["sql_formula"]  # key set in initialize_sql_semantic_cache
+
             # Sanitize formula before injection
             is_safe, reason = _sanitize_metric_formula(formula)
             if not is_safe:
@@ -412,15 +426,13 @@ def _inject_metric_formulas(
                 logger.warning("[SQLBuilder] %s", msg)
                 notes.append(msg)
                 continue
-                
+
             alias = kpi_lower.replace(" ", "_")
             col_entry = f"{formula} AS {alias}"
             # Avoid duplicates
             if col_entry not in updated:
                 updated.append(col_entry)
-                notes.append(
-                    f"KPI '{kpi}' resolved via metric_registry: {formula}"
-                )
+                notes.append(f"KPI '{kpi}' resolved via metric_registry: {formula}")
                 logger.info("[SQLBuilder] Injected metric formula for '%s': %s", kpi, formula)
         else:
             notes.append(f"KPI '{kpi}' not found in metric_registry — ignored")

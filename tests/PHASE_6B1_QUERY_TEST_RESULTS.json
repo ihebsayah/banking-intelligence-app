@@ -1,0 +1,3392 @@
+{
+  "legacy_queries": [
+    {
+      "query_name": "KPI Formula Resolution",
+      "query_text": "What is our average portfolio risk score?",
+      "status": 200,
+      "response": {
+        "status": "error",
+        "results": [],
+        "metadata": {},
+        "pipeline_steps": [
+          {
+            "agent": "execution",
+            "status": "error",
+            "response": {
+              "rows_returned": 0
+            }
+          }
+        ],
+        "insights": null,
+        "message": null,
+        "error": "Execution failed: {\"detail\":\"DB_ERROR: missing FROM-clause entry for table \\\"customers\\\"\"}",
+        "request_id": null,
+        "debug_url": null
+      }
+    },
+    {
+      "query_name": "Safe Entity Join Discovery",
+      "query_text": "Show customer names and their account balance",
+      "status": 200,
+      "response": {
+        "status": "success",
+        "results": [
+          {
+            "id": "3532c5ee-00c2-42b6-9c40-477caad52726",
+            "account_id": "ACC_00001",
+            "customer_id": "CUST_00001",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "1774.52",
+            "available_balance": "1774.52",
+            "currency": "TND",
+            "branch_id": "BR_021",
+            "created_at": "2025-11-12T17:43:34"
+          },
+          {
+            "id": "f38f88e6-92c6-4a2a-bca0-e21a22200e5b",
+            "account_id": "ACC_00002",
+            "customer_id": "CUST_00001",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "751.21",
+            "available_balance": "751.21",
+            "currency": "TND",
+            "branch_id": "BR_009",
+            "created_at": "2025-10-04T17:43:34"
+          },
+          {
+            "id": "5b7ef95e-d4bf-4496-b370-b7520b2546ab",
+            "account_id": "ACC_00003",
+            "customer_id": "CUST_00001",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "3342.52",
+            "available_balance": "3342.52",
+            "currency": "TND",
+            "branch_id": "BR_022",
+            "created_at": "2025-12-07T17:43:34"
+          },
+          {
+            "id": "d0c5e7df-e2c4-4e74-916f-74422c6187e0",
+            "account_id": "ACC_00004",
+            "customer_id": "CUST_00001",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "1827.48",
+            "available_balance": "1827.48",
+            "currency": "TND",
+            "branch_id": "BR_030",
+            "created_at": "2024-09-26T17:43:34"
+          },
+          {
+            "id": "dd1c61c3-2ab5-4f1a-b27d-9f46d055e4b1",
+            "account_id": "ACC_00005",
+            "customer_id": "CUST_00002",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "4247.46",
+            "available_balance": "4247.46",
+            "currency": "TND",
+            "branch_id": "BR_022",
+            "created_at": "2025-03-04T17:43:34"
+          },
+          {
+            "id": "46b9f8dd-623c-45ad-bd04-1c66c80edbcf",
+            "account_id": "ACC_00006",
+            "customer_id": "CUST_00002",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "3776.11",
+            "available_balance": "3776.11",
+            "currency": "TND",
+            "branch_id": "BR_020",
+            "created_at": "2025-09-27T17:43:34"
+          },
+          {
+            "id": "c0c535f5-d824-4f2b-b225-54c3955bd89e",
+            "account_id": "ACC_00007",
+            "customer_id": "CUST_00002",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "4041.79",
+            "available_balance": "4041.79",
+            "currency": "TND",
+            "branch_id": "BR_007",
+            "created_at": "2025-11-08T17:43:34"
+          },
+          {
+            "id": "bffe45e2-805b-485c-b433-e1548ddac07c",
+            "account_id": "ACC_00008",
+            "customer_id": "CUST_00003",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "4290.57",
+            "available_balance": "4290.57",
+            "currency": "TND",
+            "branch_id": "BR_010",
+            "created_at": "2024-08-03T17:43:34"
+          },
+          {
+            "id": "2a3d47e3-c750-412e-8e26-73007ed8bf53",
+            "account_id": "ACC_00009",
+            "customer_id": "CUST_00003",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "4903.03",
+            "available_balance": "4903.03",
+            "currency": "TND",
+            "branch_id": "BR_013",
+            "created_at": "2025-08-19T17:43:34"
+          },
+          {
+            "id": "14febe41-863b-4738-b294-1ec21837a686",
+            "account_id": "ACC_00010",
+            "customer_id": "CUST_00004",
+            "account_type": "checking",
+            "status": "closed",
+            "balance": "0.00",
+            "available_balance": "0.00",
+            "currency": "TND",
+            "branch_id": "BR_013",
+            "created_at": "2024-07-10T17:43:34"
+          },
+          {
+            "id": "a2e7a133-5661-4b9f-8ae8-084ec1bccade",
+            "account_id": "ACC_00011",
+            "customer_id": "CUST_00004",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "4537.85",
+            "available_balance": "4537.85",
+            "currency": "TND",
+            "branch_id": "BR_005",
+            "created_at": "2024-11-22T17:43:34"
+          },
+          {
+            "id": "8dd002b1-cd12-46cc-8116-a39b903f9f27",
+            "account_id": "ACC_00012",
+            "customer_id": "CUST_00004",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "4042.86",
+            "available_balance": "4042.86",
+            "currency": "TND",
+            "branch_id": "BR_013",
+            "created_at": "2025-09-28T17:43:34"
+          },
+          {
+            "id": "1befda05-3d17-4b85-ac0b-0f305fc5e44e",
+            "account_id": "ACC_00013",
+            "customer_id": "CUST_00005",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "1965.38",
+            "available_balance": "1965.38",
+            "currency": "TND",
+            "branch_id": "BR_025",
+            "created_at": "2024-11-10T17:43:34"
+          },
+          {
+            "id": "32df35d0-e83f-4418-91e1-421bff418c5e",
+            "account_id": "ACC_00014",
+            "customer_id": "CUST_00005",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "3851.57",
+            "available_balance": "3851.57",
+            "currency": "TND",
+            "branch_id": "BR_010",
+            "created_at": "2024-07-07T17:43:34"
+          },
+          {
+            "id": "c0ff6de7-a132-4059-8903-8050d96c9668",
+            "account_id": "ACC_00015",
+            "customer_id": "CUST_00006",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "4709.08",
+            "available_balance": "4709.08",
+            "currency": "TND",
+            "branch_id": "BR_029",
+            "created_at": "2024-10-27T17:43:34"
+          },
+          {
+            "id": "818d4d89-9b65-44af-9e08-e69d844ee275",
+            "account_id": "ACC_00016",
+            "customer_id": "CUST_00006",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "277.57",
+            "available_balance": "277.57",
+            "currency": "TND",
+            "branch_id": "BR_013",
+            "created_at": "2024-12-10T17:43:34"
+          },
+          {
+            "id": "87d80236-5380-4f57-9bab-d8b17d5c7aa5",
+            "account_id": "ACC_00017",
+            "customer_id": "CUST_00007",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "2513.30",
+            "available_balance": "2513.30",
+            "currency": "TND",
+            "branch_id": "BR_016",
+            "created_at": "2025-02-24T17:43:34"
+          },
+          {
+            "id": "d1145a21-e318-4244-bb02-ecb4ba81964c",
+            "account_id": "ACC_00018",
+            "customer_id": "CUST_00007",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "361.38",
+            "available_balance": "361.38",
+            "currency": "TND",
+            "branch_id": "BR_012",
+            "created_at": "2024-08-01T17:43:34"
+          },
+          {
+            "id": "0a028aa0-af45-4334-b1fe-ae4a148fdd27",
+            "account_id": "ACC_00019",
+            "customer_id": "CUST_00007",
+            "account_type": "checking",
+            "status": "dormant",
+            "balance": "1071.09",
+            "available_balance": "1071.09",
+            "currency": "TND",
+            "branch_id": "BR_023",
+            "created_at": "2025-07-25T17:43:34"
+          },
+          {
+            "id": "eaa012e4-b37c-4e9d-84e3-e6f3607a24e9",
+            "account_id": "ACC_00020",
+            "customer_id": "CUST_00008",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "937.59",
+            "available_balance": "937.59",
+            "currency": "TND",
+            "branch_id": "BR_007",
+            "created_at": "2025-01-09T17:43:34"
+          },
+          {
+            "id": "714a3b7b-b385-4bc7-b417-e84fb5bd9050",
+            "account_id": "ACC_00021",
+            "customer_id": "CUST_00008",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "4147.63",
+            "available_balance": "4147.63",
+            "currency": "TND",
+            "branch_id": "BR_013",
+            "created_at": "2025-11-19T17:43:34"
+          },
+          {
+            "id": "cec44c5b-ee29-4f8a-aa5f-3d68a60edfb0",
+            "account_id": "ACC_00022",
+            "customer_id": "CUST_00008",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "1639.09",
+            "available_balance": "1639.09",
+            "currency": "TND",
+            "branch_id": "BR_027",
+            "created_at": "2024-07-06T17:43:34"
+          },
+          {
+            "id": "6bf024bd-3e4e-4c7d-b2a4-37eef4b01366",
+            "account_id": "ACC_00023",
+            "customer_id": "CUST_00009",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "1982.87",
+            "available_balance": "1982.87",
+            "currency": "TND",
+            "branch_id": "BR_003",
+            "created_at": "2024-09-16T17:43:34"
+          },
+          {
+            "id": "f4aac8e5-2b8b-4148-af28-02f7a42f1a7d",
+            "account_id": "ACC_00024",
+            "customer_id": "CUST_00009",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "1841.73",
+            "available_balance": "1841.73",
+            "currency": "TND",
+            "branch_id": "BR_028",
+            "created_at": "2025-10-27T17:43:34"
+          },
+          {
+            "id": "85264728-8d64-4d72-81d7-f6e33df33d14",
+            "account_id": "ACC_00025",
+            "customer_id": "CUST_00009",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "793.48",
+            "available_balance": "793.48",
+            "currency": "TND",
+            "branch_id": "BR_021",
+            "created_at": "2024-12-20T17:43:34"
+          },
+          {
+            "id": "3e231faa-17df-4baa-8f45-19e1375ef854",
+            "account_id": "ACC_00026",
+            "customer_id": "CUST_00009",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "4490.62",
+            "available_balance": "4490.62",
+            "currency": "TND",
+            "branch_id": "BR_011",
+            "created_at": "2025-06-03T17:43:34"
+          },
+          {
+            "id": "d479e3ed-7930-433f-ba13-4b4df337a270",
+            "account_id": "ACC_00027",
+            "customer_id": "CUST_00010",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "639.18",
+            "available_balance": "639.18",
+            "currency": "TND",
+            "branch_id": "BR_009",
+            "created_at": "2024-12-08T17:43:34"
+          },
+          {
+            "id": "0b112e07-3616-47d4-b652-5baccec57719",
+            "account_id": "ACC_00028",
+            "customer_id": "CUST_00010",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "132.46",
+            "available_balance": "132.46",
+            "currency": "TND",
+            "branch_id": "BR_020",
+            "created_at": "2025-05-02T17:43:34"
+          },
+          {
+            "id": "2ea5c683-6999-4dce-89df-541b1a20f07e",
+            "account_id": "ACC_00029",
+            "customer_id": "CUST_00011",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "1248.89",
+            "available_balance": "1248.89",
+            "currency": "TND",
+            "branch_id": "BR_005",
+            "created_at": "2025-08-19T17:43:34"
+          },
+          {
+            "id": "7cf4f231-93b2-4528-b337-6c2f415a9823",
+            "account_id": "ACC_00030",
+            "customer_id": "CUST_00011",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "471.73",
+            "available_balance": "471.73",
+            "currency": "TND",
+            "branch_id": "BR_005",
+            "created_at": "2025-03-21T17:43:34"
+          },
+          {
+            "id": "97e66ba1-2a26-4c57-9ca7-92e80dc4c756",
+            "account_id": "ACC_00031",
+            "customer_id": "CUST_00011",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "4451.07",
+            "available_balance": "4451.07",
+            "currency": "TND",
+            "branch_id": "BR_008",
+            "created_at": "2025-09-03T17:43:34"
+          },
+          {
+            "id": "504bd391-a58c-4fea-8a02-76a82ca75a36",
+            "account_id": "ACC_00032",
+            "customer_id": "CUST_00012",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "3221.34",
+            "available_balance": "3221.34",
+            "currency": "TND",
+            "branch_id": "BR_003",
+            "created_at": "2025-03-11T17:43:34"
+          },
+          {
+            "id": "59bec45c-db09-4966-9fcf-eab0ff17af93",
+            "account_id": "ACC_00033",
+            "customer_id": "CUST_00012",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "4046.86",
+            "available_balance": "4046.86",
+            "currency": "TND",
+            "branch_id": "BR_018",
+            "created_at": "2024-08-13T17:43:34"
+          },
+          {
+            "id": "fd7b6f93-c24e-488b-ac27-5864bbe1b2e3",
+            "account_id": "ACC_00034",
+            "customer_id": "CUST_00012",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "1362.93",
+            "available_balance": "1362.93",
+            "currency": "TND",
+            "branch_id": "BR_030",
+            "created_at": "2025-06-05T17:43:34"
+          },
+          {
+            "id": "bd89c24d-2f0c-4a27-9b58-bfd839cfbd37",
+            "account_id": "ACC_00035",
+            "customer_id": "CUST_00013",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "2354.60",
+            "available_balance": "2354.60",
+            "currency": "TND",
+            "branch_id": "BR_027",
+            "created_at": "2024-08-17T17:43:34"
+          },
+          {
+            "id": "31211d50-7fa9-457d-a54f-9eae9161743f",
+            "account_id": "ACC_00036",
+            "customer_id": "CUST_00013",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "2742.76",
+            "available_balance": "2742.76",
+            "currency": "TND",
+            "branch_id": "BR_023",
+            "created_at": "2025-02-15T17:43:34"
+          },
+          {
+            "id": "c4dc8a24-d422-49ba-a33b-f2b90432e238",
+            "account_id": "ACC_00037",
+            "customer_id": "CUST_00013",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "785.51",
+            "available_balance": "785.51",
+            "currency": "TND",
+            "branch_id": "BR_030",
+            "created_at": "2025-08-28T17:43:34"
+          },
+          {
+            "id": "09fb8350-032b-4689-b2e9-873a8ebb03bc",
+            "account_id": "ACC_00038",
+            "customer_id": "CUST_00013",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "2677.97",
+            "available_balance": "2677.97",
+            "currency": "TND",
+            "branch_id": "BR_008",
+            "created_at": "2025-09-20T17:43:34"
+          },
+          {
+            "id": "64855968-e739-4a0a-b026-80a46efef797",
+            "account_id": "ACC_00039",
+            "customer_id": "CUST_00014",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "4704.60",
+            "available_balance": "4704.60",
+            "currency": "TND",
+            "branch_id": "BR_028",
+            "created_at": "2024-07-12T17:43:34"
+          },
+          {
+            "id": "3e59549d-3666-40be-93f7-acc954d82999",
+            "account_id": "ACC_00040",
+            "customer_id": "CUST_00014",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "589.79",
+            "available_balance": "589.79",
+            "currency": "TND",
+            "branch_id": "BR_001",
+            "created_at": "2025-11-10T17:43:34"
+          },
+          {
+            "id": "8e95983f-0d0e-4a58-aea1-f88e34493380",
+            "account_id": "ACC_00041",
+            "customer_id": "CUST_00015",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "795.49",
+            "available_balance": "795.49",
+            "currency": "TND",
+            "branch_id": "BR_010",
+            "created_at": "2025-07-10T17:43:34"
+          },
+          {
+            "id": "658bce1d-1a57-4cd8-8e3a-e05030f12127",
+            "account_id": "ACC_00042",
+            "customer_id": "CUST_00015",
+            "account_type": "checking",
+            "status": "dormant",
+            "balance": "1751.83",
+            "available_balance": "1751.83",
+            "currency": "TND",
+            "branch_id": "BR_015",
+            "created_at": "2024-07-10T17:43:34"
+          },
+          {
+            "id": "0c5fc61a-3819-4d29-b6c9-561d55e193f9",
+            "account_id": "ACC_00043",
+            "customer_id": "CUST_00015",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "3786.36",
+            "available_balance": "3786.36",
+            "currency": "TND",
+            "branch_id": "BR_014",
+            "created_at": "2025-05-15T17:43:34"
+          },
+          {
+            "id": "f56d8bd0-c31b-4769-bc97-44cb34d55b17",
+            "account_id": "ACC_00044",
+            "customer_id": "CUST_00015",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "1840.03",
+            "available_balance": "1840.03",
+            "currency": "TND",
+            "branch_id": "BR_016",
+            "created_at": "2024-09-17T17:43:34"
+          },
+          {
+            "id": "66fe1e83-3ee1-4c8c-b69f-e2fdd53fe5ab",
+            "account_id": "ACC_00045",
+            "customer_id": "CUST_00016",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "4361.17",
+            "available_balance": "4361.17",
+            "currency": "TND",
+            "branch_id": "BR_028",
+            "created_at": "2025-08-15T17:43:34"
+          },
+          {
+            "id": "78676d14-6bfd-408d-8410-56665bb16ca7",
+            "account_id": "ACC_00046",
+            "customer_id": "CUST_00016",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "3847.86",
+            "available_balance": "3847.86",
+            "currency": "TND",
+            "branch_id": "BR_010",
+            "created_at": "2024-07-27T17:43:34"
+          },
+          {
+            "id": "b5b27394-c02e-44c7-b5a8-be16f6af4cb6",
+            "account_id": "ACC_00047",
+            "customer_id": "CUST_00016",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "2689.27",
+            "available_balance": "2689.27",
+            "currency": "TND",
+            "branch_id": "BR_007",
+            "created_at": "2024-08-05T17:43:34"
+          },
+          {
+            "id": "b4cc9bd7-91f9-42bd-acde-1db0a2e3aa22",
+            "account_id": "ACC_00048",
+            "customer_id": "CUST_00017",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "1588.54",
+            "available_balance": "1588.54",
+            "currency": "TND",
+            "branch_id": "BR_024",
+            "created_at": "2025-06-16T17:43:34"
+          },
+          {
+            "id": "d7699e5d-3d0a-4d0b-81ce-57b462ff9d80",
+            "account_id": "ACC_00049",
+            "customer_id": "CUST_00017",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "1643.55",
+            "available_balance": "1643.55",
+            "currency": "TND",
+            "branch_id": "BR_011",
+            "created_at": "2025-08-26T17:43:34"
+          },
+          {
+            "id": "c79d0ffe-0b24-423b-9f96-1572e5ce6ba4",
+            "account_id": "ACC_00050",
+            "customer_id": "CUST_00017",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "2356.41",
+            "available_balance": "2356.41",
+            "currency": "TND",
+            "branch_id": "BR_017",
+            "created_at": "2025-06-15T17:43:34"
+          },
+          {
+            "id": "95eb2e23-b0ff-403f-9045-f3589876ba9e",
+            "account_id": "ACC_00051",
+            "customer_id": "CUST_00017",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "1689.04",
+            "available_balance": "1689.04",
+            "currency": "TND",
+            "branch_id": "BR_008",
+            "created_at": "2025-04-10T17:43:34"
+          },
+          {
+            "id": "fca88a3b-1062-40b2-8fc3-02d4dd100192",
+            "account_id": "ACC_00052",
+            "customer_id": "CUST_00018",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "2792.39",
+            "available_balance": "2792.39",
+            "currency": "TND",
+            "branch_id": "BR_017",
+            "created_at": "2025-06-15T17:43:34"
+          },
+          {
+            "id": "a04048a6-3356-476b-b71d-c33d7a9a6178",
+            "account_id": "ACC_00053",
+            "customer_id": "CUST_00018",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "2385.05",
+            "available_balance": "2385.05",
+            "currency": "TND",
+            "branch_id": "BR_001",
+            "created_at": "2025-03-30T17:43:34"
+          },
+          {
+            "id": "bd41db35-651f-49d6-a5e3-02bef5bde5c1",
+            "account_id": "ACC_00054",
+            "customer_id": "CUST_00018",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "2390.43",
+            "available_balance": "2390.43",
+            "currency": "TND",
+            "branch_id": "BR_013",
+            "created_at": "2024-12-01T17:43:34"
+          },
+          {
+            "id": "b1c4cc32-2438-4d24-b122-2eea6f421a0c",
+            "account_id": "ACC_00055",
+            "customer_id": "CUST_00019",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "686.10",
+            "available_balance": "686.10",
+            "currency": "TND",
+            "branch_id": "BR_018",
+            "created_at": "2024-08-03T17:43:34"
+          },
+          {
+            "id": "5d24f6c0-d3b3-4a96-9cec-fbe97e994b39",
+            "account_id": "ACC_00056",
+            "customer_id": "CUST_00019",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "3548.51",
+            "available_balance": "3548.51",
+            "currency": "TND",
+            "branch_id": "BR_027",
+            "created_at": "2024-07-29T17:43:34"
+          },
+          {
+            "id": "9b8f6831-b826-4d8f-aaaa-80e7390ca585",
+            "account_id": "ACC_00057",
+            "customer_id": "CUST_00019",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "3628.65",
+            "available_balance": "3628.65",
+            "currency": "TND",
+            "branch_id": "BR_005",
+            "created_at": "2025-10-28T17:43:34"
+          },
+          {
+            "id": "4df1f9f2-c83f-45b7-a2ab-87629679ed38",
+            "account_id": "ACC_00058",
+            "customer_id": "CUST_00019",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "1601.36",
+            "available_balance": "1601.36",
+            "currency": "TND",
+            "branch_id": "BR_003",
+            "created_at": "2025-05-17T17:43:34"
+          },
+          {
+            "id": "dbd0307c-ec04-41da-a717-bc6b4ee4718b",
+            "account_id": "ACC_00059",
+            "customer_id": "CUST_00020",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "2799.45",
+            "available_balance": "2799.45",
+            "currency": "TND",
+            "branch_id": "BR_020",
+            "created_at": "2025-06-12T17:43:34"
+          },
+          {
+            "id": "62ed2083-189f-49bd-b75a-a2c1516d4c3c",
+            "account_id": "ACC_00060",
+            "customer_id": "CUST_00020",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "3896.82",
+            "available_balance": "3896.82",
+            "currency": "TND",
+            "branch_id": "BR_023",
+            "created_at": "2025-08-06T17:43:34"
+          },
+          {
+            "id": "3f986dc0-c797-4f2a-8c9f-e31ddaf50e8d",
+            "account_id": "ACC_00061",
+            "customer_id": "CUST_00020",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "521.64",
+            "available_balance": "521.64",
+            "currency": "TND",
+            "branch_id": "BR_021",
+            "created_at": "2025-11-18T17:43:34"
+          },
+          {
+            "id": "974b9948-9686-4905-88a6-a77ba2831b57",
+            "account_id": "ACC_00062",
+            "customer_id": "CUST_00020",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "1512.89",
+            "available_balance": "1512.89",
+            "currency": "TND",
+            "branch_id": "BR_029",
+            "created_at": "2025-09-30T17:43:34"
+          },
+          {
+            "id": "c8ce879f-5ca6-4217-9621-4f3e6ef250e2",
+            "account_id": "ACC_00063",
+            "customer_id": "CUST_00021",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "1353.47",
+            "available_balance": "1353.47",
+            "currency": "TND",
+            "branch_id": "BR_001",
+            "created_at": "2025-08-21T17:43:34"
+          },
+          {
+            "id": "7c6e230a-a5de-4a1d-817a-3a6d366a59e6",
+            "account_id": "ACC_00064",
+            "customer_id": "CUST_00021",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "1969.06",
+            "available_balance": "1969.06",
+            "currency": "TND",
+            "branch_id": "BR_009",
+            "created_at": "2025-03-05T17:43:34"
+          },
+          {
+            "id": "cd932058-963c-4245-9dce-576aad6b90a3",
+            "account_id": "ACC_00065",
+            "customer_id": "CUST_00021",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "2974.86",
+            "available_balance": "2974.86",
+            "currency": "TND",
+            "branch_id": "BR_028",
+            "created_at": "2024-11-27T17:43:34"
+          },
+          {
+            "id": "cd915c64-5189-46ae-ab7d-339d4e4e6f64",
+            "account_id": "ACC_00066",
+            "customer_id": "CUST_00022",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "2333.74",
+            "available_balance": "2333.74",
+            "currency": "TND",
+            "branch_id": "BR_009",
+            "created_at": "2025-05-28T17:43:34"
+          },
+          {
+            "id": "3388fc93-5ff3-47e5-b4b1-81a3a721c766",
+            "account_id": "ACC_00067",
+            "customer_id": "CUST_00022",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "2996.04",
+            "available_balance": "2996.04",
+            "currency": "TND",
+            "branch_id": "BR_020",
+            "created_at": "2024-08-20T17:43:34"
+          },
+          {
+            "id": "f79d75af-2b3c-4845-8aa1-22125e1700fe",
+            "account_id": "ACC_00068",
+            "customer_id": "CUST_00022",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "656.29",
+            "available_balance": "656.29",
+            "currency": "TND",
+            "branch_id": "BR_028",
+            "created_at": "2024-12-17T17:43:34"
+          },
+          {
+            "id": "28b0e2c3-5d1b-48e3-9818-c2c4099e5f69",
+            "account_id": "ACC_00069",
+            "customer_id": "CUST_00023",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "1253.04",
+            "available_balance": "1253.04",
+            "currency": "TND",
+            "branch_id": "BR_009",
+            "created_at": "2024-09-18T17:43:34"
+          },
+          {
+            "id": "e56475f5-29a6-46bd-a4d2-bfb7e15e3c99",
+            "account_id": "ACC_00070",
+            "customer_id": "CUST_00023",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "2189.07",
+            "available_balance": "2189.07",
+            "currency": "TND",
+            "branch_id": "BR_020",
+            "created_at": "2024-09-01T17:43:34"
+          },
+          {
+            "id": "efb68475-08ba-4d83-8700-4df3564c18d7",
+            "account_id": "ACC_00071",
+            "customer_id": "CUST_00024",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "3762.53",
+            "available_balance": "3762.53",
+            "currency": "TND",
+            "branch_id": "BR_024",
+            "created_at": "2025-05-27T17:43:34"
+          },
+          {
+            "id": "120db58b-edca-4c6d-8153-28720e365d12",
+            "account_id": "ACC_00072",
+            "customer_id": "CUST_00024",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "1547.60",
+            "available_balance": "1547.60",
+            "currency": "TND",
+            "branch_id": "BR_010",
+            "created_at": "2025-02-18T17:43:34"
+          },
+          {
+            "id": "697e8df2-b32b-460f-a46f-1ed997037d20",
+            "account_id": "ACC_00073",
+            "customer_id": "CUST_00025",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "1853.27",
+            "available_balance": "1853.27",
+            "currency": "TND",
+            "branch_id": "BR_023",
+            "created_at": "2024-12-24T17:43:34"
+          },
+          {
+            "id": "ff163180-1835-4c66-bf64-0542dd6a7684",
+            "account_id": "ACC_00074",
+            "customer_id": "CUST_00025",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "3598.86",
+            "available_balance": "3598.86",
+            "currency": "TND",
+            "branch_id": "BR_021",
+            "created_at": "2025-10-14T17:43:34"
+          },
+          {
+            "id": "45c28cf0-451a-45ca-b891-548f140987ad",
+            "account_id": "ACC_00075",
+            "customer_id": "CUST_00025",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "2641.29",
+            "available_balance": "2641.29",
+            "currency": "TND",
+            "branch_id": "BR_003",
+            "created_at": "2024-08-23T17:43:34"
+          },
+          {
+            "id": "45865cc6-27d9-436b-a432-2dfcce50d16b",
+            "account_id": "ACC_00076",
+            "customer_id": "CUST_00025",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "315.75",
+            "available_balance": "315.75",
+            "currency": "TND",
+            "branch_id": "BR_023",
+            "created_at": "2025-08-12T17:43:34"
+          },
+          {
+            "id": "e39918f7-56a2-4219-bb71-5e08b0e78396",
+            "account_id": "ACC_00077",
+            "customer_id": "CUST_00026",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "2974.28",
+            "available_balance": "2974.28",
+            "currency": "TND",
+            "branch_id": "BR_016",
+            "created_at": "2025-04-06T17:43:34"
+          },
+          {
+            "id": "284f63fc-f81c-4805-b3f9-3018b1b0751b",
+            "account_id": "ACC_00078",
+            "customer_id": "CUST_00026",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "2213.67",
+            "available_balance": "2213.67",
+            "currency": "TND",
+            "branch_id": "BR_030",
+            "created_at": "2025-05-13T17:43:34"
+          },
+          {
+            "id": "f4972913-a245-48e2-b4df-0f011b42825a",
+            "account_id": "ACC_00079",
+            "customer_id": "CUST_00027",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "4519.96",
+            "available_balance": "4519.96",
+            "currency": "TND",
+            "branch_id": "BR_019",
+            "created_at": "2025-11-07T17:43:34"
+          },
+          {
+            "id": "1aa09e89-d025-4776-8255-9675b114a05f",
+            "account_id": "ACC_00080",
+            "customer_id": "CUST_00027",
+            "account_type": "checking",
+            "status": "dormant",
+            "balance": "1092.75",
+            "available_balance": "1092.75",
+            "currency": "TND",
+            "branch_id": "BR_004",
+            "created_at": "2025-07-12T17:43:34"
+          },
+          {
+            "id": "24a20322-0c06-453c-8233-c3c3ed80b2cd",
+            "account_id": "ACC_00081",
+            "customer_id": "CUST_00027",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "1184.10",
+            "available_balance": "1184.10",
+            "currency": "TND",
+            "branch_id": "BR_020",
+            "created_at": "2025-01-28T17:43:34"
+          },
+          {
+            "id": "6fcbc70e-f9df-4c96-a607-bbd8c0fc1cae",
+            "account_id": "ACC_00082",
+            "customer_id": "CUST_00027",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "252.74",
+            "available_balance": "252.74",
+            "currency": "TND",
+            "branch_id": "BR_029",
+            "created_at": "2024-09-30T17:43:34"
+          },
+          {
+            "id": "35d5dfe1-d2a9-4de1-80a8-93e77ed39e90",
+            "account_id": "ACC_00083",
+            "customer_id": "CUST_00028",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "1073.36",
+            "available_balance": "1073.36",
+            "currency": "TND",
+            "branch_id": "BR_004",
+            "created_at": "2025-02-07T17:43:34"
+          },
+          {
+            "id": "1b2f64b7-55a3-4e0e-857f-c7b58aae42fc",
+            "account_id": "ACC_00084",
+            "customer_id": "CUST_00028",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "4397.97",
+            "available_balance": "4397.97",
+            "currency": "TND",
+            "branch_id": "BR_029",
+            "created_at": "2024-07-04T17:43:34"
+          },
+          {
+            "id": "ac3e257f-75d2-44d6-886f-8df7d851583f",
+            "account_id": "ACC_00085",
+            "customer_id": "CUST_00029",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "2800.10",
+            "available_balance": "2800.10",
+            "currency": "TND",
+            "branch_id": "BR_010",
+            "created_at": "2024-09-09T17:43:34"
+          },
+          {
+            "id": "316e39bf-1903-4ff9-adfe-3c93f78cd22b",
+            "account_id": "ACC_00086",
+            "customer_id": "CUST_00029",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "4299.59",
+            "available_balance": "4299.59",
+            "currency": "TND",
+            "branch_id": "BR_009",
+            "created_at": "2025-12-17T17:43:34"
+          },
+          {
+            "id": "407222a8-8946-4a44-bb2d-5e9823fc6a56",
+            "account_id": "ACC_00087",
+            "customer_id": "CUST_00030",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "2043.31",
+            "available_balance": "2043.31",
+            "currency": "TND",
+            "branch_id": "BR_014",
+            "created_at": "2024-12-27T17:43:34"
+          },
+          {
+            "id": "5eb178c3-82b5-4685-9fcc-39e0b3a6c45a",
+            "account_id": "ACC_00088",
+            "customer_id": "CUST_00030",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "68.47",
+            "available_balance": "68.47",
+            "currency": "TND",
+            "branch_id": "BR_015",
+            "created_at": "2024-12-02T17:43:34"
+          },
+          {
+            "id": "f5843da7-6c0e-4a46-a418-5a5a1f3176e2",
+            "account_id": "ACC_00089",
+            "customer_id": "CUST_00030",
+            "account_type": "checking",
+            "status": "dormant",
+            "balance": "739.29",
+            "available_balance": "739.29",
+            "currency": "TND",
+            "branch_id": "BR_028",
+            "created_at": "2025-07-18T17:43:34"
+          },
+          {
+            "id": "b2775151-bf4e-4eb9-be48-c232ad9c2d4f",
+            "account_id": "ACC_00090",
+            "customer_id": "CUST_00031",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "945.88",
+            "available_balance": "945.88",
+            "currency": "TND",
+            "branch_id": "BR_022",
+            "created_at": "2025-08-15T17:43:34"
+          },
+          {
+            "id": "91d10b42-9595-4010-92e9-ade5457ec13c",
+            "account_id": "ACC_00091",
+            "customer_id": "CUST_00031",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "4153.52",
+            "available_balance": "4153.52",
+            "currency": "TND",
+            "branch_id": "BR_007",
+            "created_at": "2024-07-26T17:43:34"
+          },
+          {
+            "id": "d2f2ba13-2210-4166-9cea-2677a38cd42c",
+            "account_id": "ACC_00092",
+            "customer_id": "CUST_00032",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "2709.07",
+            "available_balance": "2709.07",
+            "currency": "TND",
+            "branch_id": "BR_016",
+            "created_at": "2025-03-31T17:43:34"
+          },
+          {
+            "id": "9199d315-ed53-42e1-bfa0-af1011e5d593",
+            "account_id": "ACC_00093",
+            "customer_id": "CUST_00032",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "711.63",
+            "available_balance": "711.63",
+            "currency": "TND",
+            "branch_id": "BR_009",
+            "created_at": "2025-05-17T17:43:34"
+          },
+          {
+            "id": "dfe90da9-4c0c-4fdd-a9dd-0e39b3eaf19d",
+            "account_id": "ACC_00094",
+            "customer_id": "CUST_00032",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "1027.93",
+            "available_balance": "1027.93",
+            "currency": "TND",
+            "branch_id": "BR_001",
+            "created_at": "2025-02-20T17:43:34"
+          },
+          {
+            "id": "027339bd-a0ef-4b63-89bf-ff6ab63aa579",
+            "account_id": "ACC_00095",
+            "customer_id": "CUST_00033",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "3237.04",
+            "available_balance": "3237.04",
+            "currency": "TND",
+            "branch_id": "BR_027",
+            "created_at": "2024-10-08T17:43:34"
+          },
+          {
+            "id": "e0aa3c6b-862e-434d-9fd1-2a0365f00a22",
+            "account_id": "ACC_00096",
+            "customer_id": "CUST_00033",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "3328.17",
+            "available_balance": "3328.17",
+            "currency": "TND",
+            "branch_id": "BR_002",
+            "created_at": "2024-11-07T17:43:34"
+          },
+          {
+            "id": "4fef3664-75cb-419f-a88a-22875e4c48c7",
+            "account_id": "ACC_00097",
+            "customer_id": "CUST_00033",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "4834.78",
+            "available_balance": "4834.78",
+            "currency": "TND",
+            "branch_id": "BR_002",
+            "created_at": "2025-03-19T17:43:34"
+          },
+          {
+            "id": "1cd0a8bb-87c0-4d3b-a9ff-fce95d1c87ef",
+            "account_id": "ACC_00098",
+            "customer_id": "CUST_00033",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "4943.26",
+            "available_balance": "4943.26",
+            "currency": "TND",
+            "branch_id": "BR_004",
+            "created_at": "2025-06-20T17:43:34"
+          },
+          {
+            "id": "cf329fb1-0390-4ef4-b017-6ae5239e3766",
+            "account_id": "ACC_00099",
+            "customer_id": "CUST_00034",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "4575.02",
+            "available_balance": "4575.02",
+            "currency": "TND",
+            "branch_id": "BR_007",
+            "created_at": "2025-01-09T17:43:34"
+          },
+          {
+            "id": "3d97658b-ad39-4a86-a1b6-3b97304b9cf1",
+            "account_id": "ACC_00100",
+            "customer_id": "CUST_00034",
+            "account_type": "checking",
+            "status": "active",
+            "balance": "3648.67",
+            "available_balance": "3648.67",
+            "currency": "TND",
+            "branch_id": "BR_019",
+            "created_at": "2025-09-21T17:43:34"
+          }
+        ],
+        "metadata": {
+          "rows_returned": 100,
+          "execution_time_ms": 104.56,
+          "data_freshness": "real-time",
+          "source": "database",
+          "columns_masked": [],
+          "user_role": "analyst",
+          "query_hash": "4f314e79e08922b159defa504015dbbdb3d01923c17d2e9d24b302e58bdad78f",
+          "error": null
+        },
+        "pipeline_steps": [
+          {
+            "agent": "intent",
+            "status": "success",
+            "response": {
+              "primary_category": "customer_analysis",
+              "secondary_categories": [],
+              "confidence": 0.5,
+              "explicit_constraints": {
+                "threshold": null,
+                "time_period": null,
+                "geography": null,
+                "segment": null
+              },
+              "ambiguities": [
+                "'balance' could mean account balance or revenue balance"
+              ],
+              "requires_clarification": true,
+              "detected_kpis": null
+            }
+          },
+          {
+            "agent": "schema",
+            "status": "success",
+            "response": {
+              "relevant_domains": [
+                "account_analysis",
+                "customer",
+                "customer_analysis"
+              ],
+              "tables": [
+                "accounts",
+                "customers"
+              ],
+              "key_columns": {
+                "filtering": [
+                  "account_type",
+                  "balance",
+                  "currency",
+                  "email",
+                  "kyc_verified",
+                  "name",
+                  "phone",
+                  "risk_score",
+                  "segment",
+                  "status"
+                ],
+                "joining": [
+                  "customer_id"
+                ]
+              },
+              "join_paths": [
+                {
+                  "from_table": "customers",
+                  "to_table": "accounts",
+                  "join_key": "customer_id",
+                  "join_type": "LEFT JOIN"
+                }
+              ],
+              "table_explanations": {
+                "accounts": "Fallback table mapping for accounts",
+                "customers": "Fallback table mapping for customers"
+              },
+              "confidence_scores": {
+                "accounts": 0.75,
+                "customers": 0.75
+              }
+            }
+          },
+          {
+            "agent": "entity_resolution",
+            "status": "success",
+            "response": {
+              "primary_entity": "customer",
+              "primary_key": "customer_id",
+              "primary_table": "customers",
+              "tables_containing_entity": [
+                "accounts",
+                "customers"
+              ],
+              "join_structure": [
+                {
+                  "from_table": "customers",
+                  "to_table": "accounts",
+                  "join_key": "customer_id",
+                  "join_type": "LEFT JOIN",
+                  "condition": "customers.customer_id = accounts.customer_id"
+                }
+              ],
+              "resolution_confidence": 1.0,
+              "notes": "Resolved 1 join(s) from 'customers'."
+            }
+          },
+          {
+            "agent": "sql",
+            "status": "success",
+            "response": {
+              "sql": "SELECT accounts.*\nFROM customers\n    LEFT JOIN accounts ON customers.customer_id = accounts.customer_id\nLIMIT 100",
+              "parameters": [],
+              "description": "Query customer data from accounts + customers",
+              "estimated_rows": 100,
+              "estimated_time_ms": 90,
+              "tables_used": [
+                "accounts",
+                "customers"
+              ],
+              "is_parameterized": true,
+              "semantic_warnings": [],
+              "semantic_trace": []
+            }
+          },
+          {
+            "agent": "validation",
+            "status": "success",
+            "response": {
+              "safe": true,
+              "confidence": 1.0,
+              "issues": [],
+              "checks_passed": [
+                "syntax_check",
+                "select_only",
+                "keyword_check",
+                "limit_check",
+                "pattern_check"
+              ],
+              "checks_failed": [],
+              "signature": "sha256:f04f2225b504112cdcac89754c4d5c83919a8af5e459beda322655327c929dc8:1784042826:9272331c34a13c45:req-c276e6aa",
+              "sanitized_sql": "SELECT accounts.*\nFROM customers\nLEFT JOIN accounts ON customers.customer_id = accounts.customer_id\nLIMIT 100",
+              "semantic_warnings": []
+            }
+          },
+          {
+            "agent": "compliance",
+            "status": "success",
+            "response": {
+              "compliant": true,
+              "violations": [],
+              "masking_required": [],
+              "regulations_checked": [
+                "GDPR",
+                "PCI-DSS",
+                "SOX",
+                "AML",
+                "KYC"
+              ],
+              "user_role": "analyst",
+              "message": "OK"
+            }
+          },
+          {
+            "agent": "execution",
+            "status": "success",
+            "response": {
+              "rows_returned": 100
+            }
+          }
+        ],
+        "insights": null,
+        "message": null,
+        "error": null,
+        "request_id": "req-c276e6aa",
+        "debug_url": "/debug/logs/req-c276e6aa"
+      }
+    },
+    {
+      "query_name": "Unsafe Entity Join Prevention",
+      "query_text": "Show customer name and audit log action",
+      "status": 200,
+      "response": {
+        "status": "error",
+        "results": [],
+        "metadata": {},
+        "pipeline_steps": [
+          {
+            "agent": "execution",
+            "status": "error",
+            "response": {
+              "rows_returned": 0
+            }
+          }
+        ],
+        "insights": null,
+        "message": null,
+        "error": "Execution failed: {\"detail\":\"DB_ERROR: relation \\\"audit_logs\\\" does not exist\"}",
+        "request_id": null,
+        "debug_url": null
+      }
+    }
+  ],
+  "semantic_queries": [
+    {
+      "query_name": "KPI Formula Resolution",
+      "query_text": "What is our average portfolio risk score?",
+      "status": 200,
+      "response": {
+        "status": "success",
+        "results": [
+          {
+            "collateral_id": "COL_00001",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00001",
+            "estimated_value": "562021.66",
+            "valuation_date": "2024-08-25",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00005",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00005",
+            "estimated_value": "316124.04",
+            "valuation_date": "2025-02-02",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00006",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00006",
+            "estimated_value": "26510.88",
+            "valuation_date": "2025-03-16",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00008",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00008",
+            "estimated_value": "58966.83",
+            "valuation_date": "2025-04-18",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00010",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00010",
+            "estimated_value": "223086.50",
+            "valuation_date": "2024-10-15",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00011",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00011",
+            "estimated_value": "222190.95",
+            "valuation_date": "2025-12-07",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00014",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00014",
+            "estimated_value": "34156.65",
+            "valuation_date": "2026-03-10",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00016",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00016",
+            "estimated_value": "664691.28",
+            "valuation_date": "2025-12-13",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00017",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00017",
+            "estimated_value": "140760.44",
+            "valuation_date": "2024-09-20",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00021",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00021",
+            "estimated_value": "22205.95",
+            "valuation_date": "2026-02-15",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00024",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00024",
+            "estimated_value": "25516.26",
+            "valuation_date": "2025-09-02",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00026",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00026",
+            "estimated_value": "503849.81",
+            "valuation_date": "2025-05-14",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00027",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00027",
+            "estimated_value": "8329.66",
+            "valuation_date": "2025-08-18",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00032",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00032",
+            "estimated_value": "351327.15",
+            "valuation_date": "2026-03-02",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00033",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00033",
+            "estimated_value": "1092922.86",
+            "valuation_date": "2025-01-24",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00042",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00042",
+            "estimated_value": "726842.30",
+            "valuation_date": "2026-02-07",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00051",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00051",
+            "estimated_value": "111057.56",
+            "valuation_date": "2024-07-30",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00053",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00053",
+            "estimated_value": "584193.19",
+            "valuation_date": "2024-12-30",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00056",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00056",
+            "estimated_value": "103850.87",
+            "valuation_date": "2025-01-29",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00057",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00057",
+            "estimated_value": "87261.92",
+            "valuation_date": "2025-07-28",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00058",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00058",
+            "estimated_value": "1210663.56",
+            "valuation_date": "2025-07-18",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00066",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00066",
+            "estimated_value": "124314.49",
+            "valuation_date": "2025-12-22",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00068",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00068",
+            "estimated_value": "146556.89",
+            "valuation_date": "2025-08-15",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00071",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00071",
+            "estimated_value": "13906.68",
+            "valuation_date": "2025-12-07",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00076",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00076",
+            "estimated_value": "707761.00",
+            "valuation_date": "2025-09-04",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00077",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00077",
+            "estimated_value": "84256.15",
+            "valuation_date": "2024-11-20",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00078",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00078",
+            "estimated_value": "559697.54",
+            "valuation_date": "2024-09-30",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00086",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00086",
+            "estimated_value": "860619.43",
+            "valuation_date": "2024-10-11",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00090",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00090",
+            "estimated_value": "83417.24",
+            "valuation_date": "2025-04-10",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00091",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00091",
+            "estimated_value": "381920.78",
+            "valuation_date": "2024-12-06",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00098",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00098",
+            "estimated_value": "765320.11",
+            "valuation_date": "2025-03-12",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00099",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00099",
+            "estimated_value": "21008.60",
+            "valuation_date": "2025-12-31",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00106",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00106",
+            "estimated_value": "39199.96",
+            "valuation_date": "2026-03-04",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00108",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00108",
+            "estimated_value": "18525.22",
+            "valuation_date": "2024-07-27",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00118",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00118",
+            "estimated_value": "37468.37",
+            "valuation_date": "2025-03-17",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00122",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00122",
+            "estimated_value": "738232.78",
+            "valuation_date": "2025-09-26",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00129",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00129",
+            "estimated_value": "103521.22",
+            "valuation_date": "2025-05-03",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00130",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00130",
+            "estimated_value": "929557.05",
+            "valuation_date": "2025-12-31",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00131",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00131",
+            "estimated_value": "59292.98",
+            "valuation_date": "2025-03-20",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00132",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00132",
+            "estimated_value": "36553.48",
+            "valuation_date": "2026-01-15",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00140",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00140",
+            "estimated_value": "413976.03",
+            "valuation_date": "2025-09-18",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00142",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00142",
+            "estimated_value": "14507.34",
+            "valuation_date": "2024-10-29",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00143",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00143",
+            "estimated_value": "347066.16",
+            "valuation_date": "2024-12-03",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00146",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00146",
+            "estimated_value": "1102408.81",
+            "valuation_date": "2024-07-15",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00151",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00151",
+            "estimated_value": "1332771.87",
+            "valuation_date": "2025-11-24",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00152",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00152",
+            "estimated_value": "1037048.44",
+            "valuation_date": "2025-01-10",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00154",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00154",
+            "estimated_value": "572973.66",
+            "valuation_date": "2026-01-10",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00160",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00160",
+            "estimated_value": "1393050.96",
+            "valuation_date": "2024-09-28",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00163",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00163",
+            "estimated_value": "44171.28",
+            "valuation_date": "2025-09-17",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00165",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00165",
+            "estimated_value": "542769.05",
+            "valuation_date": "2025-10-16",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00167",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00167",
+            "estimated_value": "941709.46",
+            "valuation_date": "2025-07-06",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00170",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00170",
+            "estimated_value": "9451.11",
+            "valuation_date": "2025-10-30",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00172",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00172",
+            "estimated_value": "47542.85",
+            "valuation_date": "2025-12-25",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00173",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00173",
+            "estimated_value": "48382.67",
+            "valuation_date": "2025-08-24",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00175",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00175",
+            "estimated_value": "654053.47",
+            "valuation_date": "2025-04-21",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00178",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00178",
+            "estimated_value": "31122.75",
+            "valuation_date": "2025-06-10",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00179",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00179",
+            "estimated_value": "8626.51",
+            "valuation_date": "2026-02-13",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00181",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00181",
+            "estimated_value": "746570.65",
+            "valuation_date": "2024-07-19",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00182",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00182",
+            "estimated_value": "1034734.59",
+            "valuation_date": "2025-03-20",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00186",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00186",
+            "estimated_value": "120989.83",
+            "valuation_date": "2025-06-10",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00190",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00190",
+            "estimated_value": "1095044.44",
+            "valuation_date": "2024-12-25",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00191",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00191",
+            "estimated_value": "8897.02",
+            "valuation_date": "2024-08-30",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00206",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00206",
+            "estimated_value": "8327.92",
+            "valuation_date": "2025-07-26",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00214",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00214",
+            "estimated_value": "69608.57",
+            "valuation_date": "2025-11-29",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00219",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00219",
+            "estimated_value": "951410.25",
+            "valuation_date": "2024-09-06",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00220",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00220",
+            "estimated_value": "47107.59",
+            "valuation_date": "2025-02-22",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00222",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00222",
+            "estimated_value": "51157.68",
+            "valuation_date": "2025-12-24",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00223",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00223",
+            "estimated_value": "951321.49",
+            "valuation_date": "2026-03-04",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00224",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00224",
+            "estimated_value": "57072.28",
+            "valuation_date": "2025-03-14",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00228",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00228",
+            "estimated_value": "69104.93",
+            "valuation_date": "2025-08-26",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00231",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00231",
+            "estimated_value": "29890.79",
+            "valuation_date": "2025-11-13",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00233",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00233",
+            "estimated_value": "1878.22",
+            "valuation_date": "2025-07-22",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00238",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00238",
+            "estimated_value": "19993.88",
+            "valuation_date": "2025-12-21",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00240",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00240",
+            "estimated_value": "1367820.18",
+            "valuation_date": "2024-12-29",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00241",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00241",
+            "estimated_value": "12127.47",
+            "valuation_date": "2024-12-15",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00243",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00243",
+            "estimated_value": "168553.11",
+            "valuation_date": "2025-12-21",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00246",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00246",
+            "estimated_value": "643443.09",
+            "valuation_date": "2024-11-03",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00247",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00247",
+            "estimated_value": "238565.77",
+            "valuation_date": "2025-12-07",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00248",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00248",
+            "estimated_value": "1756963.84",
+            "valuation_date": "2024-09-08",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00255",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00255",
+            "estimated_value": "13050.64",
+            "valuation_date": "2025-07-10",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00258",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00258",
+            "estimated_value": "82014.68",
+            "valuation_date": "2024-09-15",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00260",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00260",
+            "estimated_value": "78905.83",
+            "valuation_date": "2024-08-04",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00261",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00261",
+            "estimated_value": "295680.92",
+            "valuation_date": "2024-07-03",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00266",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00266",
+            "estimated_value": "16263.68",
+            "valuation_date": "2025-10-22",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00267",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00267",
+            "estimated_value": "337321.80",
+            "valuation_date": "2024-09-13",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00268",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00268",
+            "estimated_value": "95215.18",
+            "valuation_date": "2025-03-04",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00270",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00270",
+            "estimated_value": "12806.29",
+            "valuation_date": "2025-05-15",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00271",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00271",
+            "estimated_value": "489538.70",
+            "valuation_date": "2025-11-24",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00273",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00273",
+            "estimated_value": "459125.76",
+            "valuation_date": "2025-04-19",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00274",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00274",
+            "estimated_value": "22322.90",
+            "valuation_date": "2025-08-17",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00278",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00278",
+            "estimated_value": "432884.43",
+            "valuation_date": "2025-03-04",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00281",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00281",
+            "estimated_value": "43411.68",
+            "valuation_date": "2025-07-05",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00286",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00286",
+            "estimated_value": "36198.47",
+            "valuation_date": "2025-01-02",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00287",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00287",
+            "estimated_value": "68086.04",
+            "valuation_date": "2024-10-31",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00292",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00292",
+            "estimated_value": "844471.59",
+            "valuation_date": "2025-04-29",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00293",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00293",
+            "estimated_value": "75659.80",
+            "valuation_date": "2026-01-23",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00294",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00294",
+            "estimated_value": "1210034.54",
+            "valuation_date": "2024-08-18",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00296",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00296",
+            "estimated_value": "66833.64",
+            "valuation_date": "2025-11-13",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00299",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00299",
+            "estimated_value": "8682.97",
+            "valuation_date": "2025-03-07",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          },
+          {
+            "collateral_id": "COL_00304",
+            "collateral_type": "nantissement",
+            "description": "Garantie r\u00e9elle pour pr\u00eat LOAN_00304",
+            "estimated_value": "61814.66",
+            "valuation_date": "2025-11-06",
+            "valuer_name": null,
+            "status": "actif",
+            "created_at": "2026-06-21T16:43:50.549647"
+          }
+        ],
+        "metadata": {
+          "rows_returned": 100,
+          "execution_time_ms": 66.73,
+          "data_freshness": "real-time",
+          "source": "database",
+          "columns_masked": [],
+          "user_role": "analyst",
+          "query_hash": "857c6c863ceefdc78e51ea35b435b35a6a718dfa867bdcc5d4acb2ebb31a3e13",
+          "error": null
+        },
+        "pipeline_steps": [
+          {
+            "agent": "intent",
+            "status": "success",
+            "response": {
+              "primary_category": "risk_analysis",
+              "secondary_categories": [
+                "product_analysis"
+              ],
+              "confidence": 0.275,
+              "explicit_constraints": {
+                "threshold": null,
+                "time_period": null,
+                "geography": null,
+                "segment": null
+              },
+              "ambiguities": [
+                "Multiple categories equally matched \u2014 please clarify focus",
+                "What time period?",
+                "All products or specific product type?"
+              ],
+              "requires_clarification": true,
+              "detected_kpis": null
+            }
+          },
+          {
+            "agent": "schema",
+            "status": "success",
+            "response": {
+              "relevant_domains": [
+                "customer_analysis",
+                "loan",
+                "product",
+                "product_analysis",
+                "revenue_analysis",
+                "risk",
+                "risk_analysis"
+              ],
+              "tables": [
+                "collateral",
+                "customer_addresses",
+                "customer_contacts",
+                "customer_documents",
+                "customer_preferences",
+                "customer_profiles",
+                "customer_relationships",
+                "customer_risk_scores",
+                "customer_status_history",
+                "customers",
+                "guarantees",
+                "loan_contracts",
+                "loan_delinquency_events",
+                "loan_installments",
+                "loan_products",
+                "loan_repayments",
+                "loan_restructuring",
+                "non_performing_loans",
+                "products",
+                "provisions",
+                "risk_flags"
+              ],
+              "key_columns": {
+                "filtering": [
+                  "classification",
+                  "days_past_due",
+                  "kyc_verified",
+                  "outstanding_balance",
+                  "politically_exposed",
+                  "risk_score",
+                  "status"
+                ],
+                "joining": [
+                  "customer_id"
+                ]
+              },
+              "join_paths": [
+                {
+                  "from_table": "customers",
+                  "to_table": "loan_contracts",
+                  "join_key": "customer_id",
+                  "join_type": "LEFT JOIN"
+                },
+                {
+                  "from_table": "loan_contracts",
+                  "to_table": "collateral",
+                  "join_key": "loan_id",
+                  "join_type": "LEFT JOIN"
+                },
+                {
+                  "from_table": "customers",
+                  "to_table": "customer_profiles",
+                  "join_key": "customer_id",
+                  "join_type": "LEFT JOIN"
+                },
+                {
+                  "from_table": "customers",
+                  "to_table": "loan_contracts",
+                  "join_key": "customer_id",
+                  "join_type": "LEFT JOIN"
+                },
+                {
+                  "from_table": "customers",
+                  "to_table": "loan_contracts",
+                  "join_key": "customer_id",
+                  "join_type": "LEFT JOIN"
+                },
+                {
+                  "from_table": "loan_contracts",
+                  "to_table": "loan_delinquency_events",
+                  "join_key": "loan_id",
+                  "join_type": "LEFT JOIN"
+                },
+                {
+                  "from_table": "customers",
+                  "to_table": "loan_contracts",
+                  "join_key": "customer_id",
+                  "join_type": "LEFT JOIN"
+                },
+                {
+                  "from_table": "loan_contracts",
+                  "to_table": "loan_installments",
+                  "join_key": "loan_id",
+                  "join_type": "LEFT JOIN"
+                },
+                {
+                  "from_table": "customers",
+                  "to_table": "loan_contracts",
+                  "join_key": "customer_id",
+                  "join_type": "LEFT JOIN"
+                },
+                {
+                  "from_table": "loan_contracts",
+                  "to_table": "loan_repayments",
+                  "join_key": "loan_id",
+                  "join_type": "LEFT JOIN"
+                },
+                {
+                  "from_table": "customers",
+                  "to_table": "loan_contracts",
+                  "join_key": "customer_id",
+                  "join_type": "LEFT JOIN"
+                },
+                {
+                  "from_table": "loan_contracts",
+                  "to_table": "non_performing_loans",
+                  "join_key": "loan_id",
+                  "join_type": "LEFT JOIN"
+                },
+                {
+                  "from_table": "customers",
+                  "to_table": "loan_contracts",
+                  "join_key": "customer_id",
+                  "join_type": "LEFT JOIN"
+                },
+                {
+                  "from_table": "loan_contracts",
+                  "to_table": "provisions",
+                  "join_key": "loan_id",
+                  "join_type": "LEFT JOIN"
+                },
+                {
+                  "from_table": "customers",
+                  "to_table": "risk_flags",
+                  "join_key": "customer_id",
+                  "join_type": "LEFT JOIN"
+                }
+              ],
+              "table_explanations": {
+                "collateral": "Garanties r\u00e9elles associ\u00e9es aux cr\u00e9dits (Domain: loan)",
+                "customer_addresses": "Adresses physiques des clients (Domain: customer)",
+                "customer_contacts": "Coordonn\u00e9es t\u00e9l\u00e9phoniques et e-mails (Domain: customer)",
+                "customer_documents": "Fichiers justificatifs scann\u00e9s (Domain: customer)",
+                "customer_preferences": "Pr\u00e9f\u00e9rences de communication et alertes (Domain: customer)",
+                "customer_profiles": "Donn\u00e9es d\u00e9mographiques et revenus des clients (Domain: customer)",
+                "customer_relationships": "Liens familiaux et de garanties entre clients (Domain: customer)",
+                "customer_risk_scores": "Historique des scores de risques par client (Domain: risk)",
+                "customer_status_history": "Historique de changement de statut client (Domain: customer)",
+                "customers": "Registre principal des clients de la banque (Domain: customer)",
+                "guarantees": "Cautions personnelles associ\u00e9es aux cr\u00e9dits (Domain: loan)",
+                "loan_contracts": "Contrats de cr\u00e9dit accord\u00e9s aux clients (Domain: loan)",
+                "loan_delinquency_events": "Historique des incidents de paiement de pr\u00eats (Domain: loan)",
+                "loan_installments": "\u00c9ch\u00e9ancier d\u00e9taill\u00e9 des pr\u00eats (Domain: loan)",
+                "loan_products": "Types de produits de cr\u00e9dit propos\u00e9s (Domain: loan)",
+                "loan_repayments": "Remboursements de cr\u00e9dits encaiss\u00e9s (Domain: loan)",
+                "loan_restructuring": "Demandes et contrats de restructuration de pr\u00eat (Domain: loan)",
+                "non_performing_loans": "Cr\u00e9ances compromises et dossiers contentieux (Domain: loan)",
+                "products": "Catalogue g\u00e9n\u00e9ral des produits bancaires (Domain: product)",
+                "provisions": "Dotations aux provisions par contrat (Domain: loan)",
+                "risk_flags": "Signalements de risques sur les clients (Domain: risk)"
+              },
+              "confidence_scores": {
+                "collateral": 0.85,
+                "customer_addresses": 0.85,
+                "customer_contacts": 0.85,
+                "customer_documents": 0.85,
+                "customer_preferences": 0.85,
+                "customer_profiles": 0.85,
+                "customer_relationships": 0.85,
+                "customer_risk_scores": 1.0,
+                "customer_status_history": 0.85,
+                "customers": 0.85,
+                "guarantees": 0.85,
+                "loan_contracts": 0.85,
+                "loan_delinquency_events": 0.85,
+                "loan_installments": 0.85,
+                "loan_products": 0.85,
+                "loan_repayments": 0.85,
+                "loan_restructuring": 0.85,
+                "non_performing_loans": 0.85,
+                "products": 1.0,
+                "provisions": 0.85,
+                "risk_flags": 1.0
+              }
+            }
+          },
+          {
+            "agent": "entity_resolution",
+            "status": "success",
+            "response": {
+              "primary_entity": "tiers",
+              "primary_key": "tiers_id",
+              "primary_table": "tierss",
+              "tables_containing_entity": [],
+              "join_structure": [],
+              "resolution_confidence": 0.8,
+              "notes": "Semantic resolution from 'tierss'. Warnings: No safe join path in join_registry from 'tierss' to 'collateral' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'customer_addresses' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'customer_contacts' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'customer_documents' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'customer_preferences' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'customer_profiles' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'customer_relationships' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'customer_risk_scores' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'customer_status_history' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'customers' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'guarantees' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'loan_contracts' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'loan_delinquency_events' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'loan_installments' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'loan_products' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'loan_repayments' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'loan_restructuring' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'non_performing_loans' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'products' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'provisions' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'risk_flags' \u2014 skipped"
+            }
+          },
+          {
+            "agent": "sql",
+            "status": "success",
+            "response": {
+              "sql": "SELECT collateral.*\nFROM collateral\nLIMIT 100",
+              "parameters": [],
+              "description": "Query tiers data from collateral + customer_addresses + customer_contacts + customer_documents + customer_preferences + customer_profiles + customer_relationships + customer_risk_scores + customer_status_history + customers + guarantees + loan_contracts + loan_delinquency_events + loan_installments + loan_products + loan_repayments + loan_restructuring + non_performing_loans + products + provisions + risk_flags",
+              "estimated_rows": 100,
+              "estimated_time_ms": 470,
+              "tables_used": [
+                "collateral",
+                "customer_addresses",
+                "customer_contacts",
+                "customer_documents",
+                "customer_preferences",
+                "customer_profiles",
+                "customer_relationships",
+                "customer_risk_scores",
+                "customer_status_history",
+                "customers",
+                "guarantees",
+                "loan_contracts",
+                "loan_delinquency_events",
+                "loan_installments",
+                "loan_products",
+                "loan_repayments",
+                "loan_restructuring",
+                "non_performing_loans",
+                "products",
+                "provisions",
+                "risk_flags"
+              ],
+              "is_parameterized": true,
+              "semantic_warnings": [],
+              "semantic_trace": []
+            }
+          },
+          {
+            "agent": "validation",
+            "status": "success",
+            "response": {
+              "safe": true,
+              "confidence": 1.0,
+              "issues": [],
+              "checks_passed": [
+                "syntax_check",
+                "select_only",
+                "keyword_check",
+                "limit_check",
+                "pattern_check"
+              ],
+              "checks_failed": [],
+              "signature": "sha256:25ac573b80b0f4a35b3077665cc1e223d9dae79f851866481fc02518603009db:1784043073:5498dfd876359154:req-af4773ca",
+              "sanitized_sql": "SELECT collateral.*\nFROM collateral\nLIMIT 100",
+              "semantic_warnings": [
+                "[semantic] Unknown table 'collateral' referenced \u2014 not in known banking schema",
+                "[semantic] Possible raw arithmetic in SELECT \u2014 consider using metric_registry formulas"
+              ]
+            }
+          },
+          {
+            "agent": "compliance",
+            "status": "success",
+            "response": {
+              "compliant": true,
+              "violations": [],
+              "masking_required": [],
+              "regulations_checked": [
+                "GDPR",
+                "PCI-DSS",
+                "SOX",
+                "AML",
+                "KYC"
+              ],
+              "user_role": "analyst",
+              "message": "OK"
+            }
+          },
+          {
+            "agent": "execution",
+            "status": "success",
+            "response": {
+              "rows_returned": 100
+            }
+          }
+        ],
+        "insights": null,
+        "message": null,
+        "error": null,
+        "request_id": "req-af4773ca",
+        "debug_url": "/debug/logs/req-af4773ca"
+      }
+    },
+    {
+      "query_name": "Safe Entity Join Discovery",
+      "query_text": "Show customer names and their account balance",
+      "status": 200,
+      "response": {
+        "status": "success",
+        "results": [],
+        "metadata": {
+          "rows_returned": 0,
+          "execution_time_ms": 116.98,
+          "data_freshness": "real-time",
+          "source": "database",
+          "columns_masked": [],
+          "user_role": "analyst",
+          "query_hash": "8da75e824da6ecdbdf4a056dc1586739a17d4f8cfe0a033e6f8ca9c61c8b7477",
+          "error": null
+        },
+        "pipeline_steps": [
+          {
+            "agent": "intent",
+            "status": "success",
+            "response": {
+              "primary_category": "customer_analysis",
+              "secondary_categories": [],
+              "confidence": 0.5,
+              "explicit_constraints": {
+                "threshold": null,
+                "time_period": null,
+                "geography": null,
+                "segment": null
+              },
+              "ambiguities": [
+                "'balance' could mean account balance or revenue balance"
+              ],
+              "requires_clarification": true,
+              "detected_kpis": null
+            }
+          },
+          {
+            "agent": "schema",
+            "status": "success",
+            "response": {
+              "relevant_domains": [
+                "account_analysis",
+                "customer",
+                "customer_analysis"
+              ],
+              "tables": [
+                "account_balances",
+                "account_signatories",
+                "account_status_history",
+                "account_types",
+                "accounts",
+                "customer_addresses",
+                "customer_contacts",
+                "customer_documents",
+                "customer_preferences",
+                "customer_profiles",
+                "customer_relationships",
+                "customer_status_history",
+                "customers",
+                "joint_accounts"
+              ],
+              "key_columns": {
+                "filtering": [
+                  "balance",
+                  "kyc_verified",
+                  "politically_exposed",
+                  "risk_score"
+                ],
+                "joining": [
+                  "customer_id"
+                ]
+              },
+              "join_paths": [
+                {
+                  "from_table": "customers",
+                  "to_table": "accounts",
+                  "join_key": "customer_id",
+                  "join_type": "LEFT JOIN"
+                },
+                {
+                  "from_table": "customers",
+                  "to_table": "customer_profiles",
+                  "join_key": "customer_id",
+                  "join_type": "LEFT JOIN"
+                }
+              ],
+              "table_explanations": {
+                "account_balances": "Historique quotidien des soldes de comptes (Domain: account)",
+                "account_signatories": "Mandataires et signataires autoris\u00e9s (Domain: account)",
+                "account_status_history": "Historique des statuts de compte (Domain: account)",
+                "account_types": "Grille de param\u00e9trage des types de compte (Domain: account)",
+                "accounts": "Comptes bancaires des clients de la banque (Domain: account)",
+                "customer_addresses": "Adresses physiques des clients (Domain: customer)",
+                "customer_contacts": "Coordonn\u00e9es t\u00e9l\u00e9phoniques et e-mails (Domain: customer)",
+                "customer_documents": "Fichiers justificatifs scann\u00e9s (Domain: customer)",
+                "customer_preferences": "Pr\u00e9f\u00e9rences de communication et alertes (Domain: customer)",
+                "customer_profiles": "Donn\u00e9es d\u00e9mographiques et revenus des clients (Domain: customer)",
+                "customer_relationships": "Liens familiaux et de garanties entre clients (Domain: customer)",
+                "customer_status_history": "Historique de changement de statut client (Domain: customer)",
+                "customers": "Registre principal des clients de la banque (Domain: customer)",
+                "joint_accounts": "Comptes joints multid\u00e9positaires (Domain: account)"
+              },
+              "confidence_scores": {
+                "account_balances": 0.85,
+                "account_signatories": 0.85,
+                "account_status_history": 0.85,
+                "account_types": 0.85,
+                "accounts": 0.85,
+                "customer_addresses": 1.0,
+                "customer_contacts": 1.0,
+                "customer_documents": 1.0,
+                "customer_preferences": 1.0,
+                "customer_profiles": 1.0,
+                "customer_relationships": 1.0,
+                "customer_status_history": 1.0,
+                "customers": 1.0,
+                "joint_accounts": 0.85
+              }
+            }
+          },
+          {
+            "agent": "entity_resolution",
+            "status": "success",
+            "response": {
+              "primary_entity": "tiers",
+              "primary_key": "tiers_id",
+              "primary_table": "tierss",
+              "tables_containing_entity": [],
+              "join_structure": [],
+              "resolution_confidence": 0.8,
+              "notes": "Semantic resolution from 'tierss'. Warnings: No safe join path in join_registry from 'tierss' to 'account_balances' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'account_signatories' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'account_status_history' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'account_types' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'accounts' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'customer_addresses' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'customer_contacts' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'customer_documents' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'customer_preferences' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'customer_profiles' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'customer_relationships' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'customer_status_history' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'customers' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'joint_accounts' \u2014 skipped"
+            }
+          },
+          {
+            "agent": "sql",
+            "status": "success",
+            "response": {
+              "sql": "SELECT account_balances.*\nFROM account_balances\nLIMIT 100",
+              "parameters": [],
+              "description": "Query tiers data from account_balances + account_signatories + account_status_history + account_types + accounts + customer_addresses + customer_contacts + customer_documents + customer_preferences + customer_profiles + customer_relationships + customer_status_history + customers + joint_accounts",
+              "estimated_rows": 100,
+              "estimated_time_ms": 330,
+              "tables_used": [
+                "account_balances",
+                "account_signatories",
+                "account_status_history",
+                "account_types",
+                "accounts",
+                "customer_addresses",
+                "customer_contacts",
+                "customer_documents",
+                "customer_preferences",
+                "customer_profiles",
+                "customer_relationships",
+                "customer_status_history",
+                "customers",
+                "joint_accounts"
+              ],
+              "is_parameterized": true,
+              "semantic_warnings": [],
+              "semantic_trace": []
+            }
+          },
+          {
+            "agent": "validation",
+            "status": "success",
+            "response": {
+              "safe": true,
+              "confidence": 1.0,
+              "issues": [],
+              "checks_passed": [
+                "syntax_check",
+                "select_only",
+                "keyword_check",
+                "limit_check",
+                "pattern_check"
+              ],
+              "checks_failed": [],
+              "signature": "sha256:c10ff4da694945b7bc3f767e0f3b4452733ad8fee2cbecc5d6c7b8a352d4a29f:1784043119:6207d9992da07b3d:req-86a2c1ea",
+              "sanitized_sql": "SELECT account_balances.*\nFROM account_balances\nLIMIT 100",
+              "semantic_warnings": [
+                "[semantic] Unknown table 'account_balances' referenced \u2014 not in known banking schema",
+                "[semantic] Possible raw arithmetic in SELECT \u2014 consider using metric_registry formulas"
+              ]
+            }
+          },
+          {
+            "agent": "compliance",
+            "status": "success",
+            "response": {
+              "compliant": true,
+              "violations": [],
+              "masking_required": [],
+              "regulations_checked": [
+                "GDPR",
+                "PCI-DSS",
+                "SOX",
+                "AML",
+                "KYC"
+              ],
+              "user_role": "analyst",
+              "message": "OK"
+            }
+          },
+          {
+            "agent": "execution",
+            "status": "success",
+            "response": {
+              "rows_returned": 0
+            }
+          }
+        ],
+        "insights": null,
+        "message": null,
+        "error": null,
+        "request_id": "req-86a2c1ea",
+        "debug_url": "/debug/logs/req-86a2c1ea"
+      }
+    },
+    {
+      "query_name": "Unsafe Entity Join Prevention",
+      "query_text": "Show customer name and audit log action",
+      "status": 200,
+      "response": {
+        "status": "success",
+        "results": [],
+        "metadata": {
+          "rows_returned": 0,
+          "execution_time_ms": 0.0,
+          "data_freshness": "cached",
+          "source": "cache",
+          "columns_masked": [],
+          "user_role": "analyst",
+          "query_hash": "8da75e824da6ecdbdf4a056dc1586739a17d4f8cfe0a033e6f8ca9c61c8b7477",
+          "error": null
+        },
+        "pipeline_steps": [
+          {
+            "agent": "intent",
+            "status": "success",
+            "response": {
+              "primary_category": "customer_analysis",
+              "secondary_categories": [
+                "compliance_analysis"
+              ],
+              "confidence": 0.275,
+              "explicit_constraints": {
+                "threshold": null,
+                "time_period": null,
+                "geography": null,
+                "segment": null
+              },
+              "ambiguities": [
+                "Multiple categories equally matched \u2014 please clarify focus"
+              ],
+              "requires_clarification": true,
+              "detected_kpis": null
+            }
+          },
+          {
+            "agent": "schema",
+            "status": "success",
+            "response": {
+              "relevant_domains": [
+                "account_analysis",
+                "compliance",
+                "compliance_analysis",
+                "customer",
+                "customer_analysis",
+                "kyc",
+                "risk_analysis"
+              ],
+              "tables": [
+                "account_balances",
+                "account_signatories",
+                "account_status_history",
+                "account_types",
+                "accounts",
+                "aml_alerts",
+                "audit_findings",
+                "compliance_cases",
+                "compliance_reviews",
+                "customer_addresses",
+                "customer_contacts",
+                "customer_documents",
+                "customer_preferences",
+                "customer_profiles",
+                "customer_relationships",
+                "customer_risk_scores",
+                "customer_status_history",
+                "customers",
+                "joint_accounts",
+                "kyc_cases",
+                "kyc_documents",
+                "kyc_expirations",
+                "kyc_reviews",
+                "kyc_verifications",
+                "pep_screening",
+                "risk_flags",
+                "sanctions_screening",
+                "suspicious_activity_reports"
+              ],
+              "key_columns": {
+                "filtering": [
+                  "balance",
+                  "kyc_verified",
+                  "politically_exposed",
+                  "risk_score",
+                  "severity"
+                ],
+                "joining": [
+                  "customer_id"
+                ]
+              },
+              "join_paths": [
+                {
+                  "from_table": "customers",
+                  "to_table": "accounts",
+                  "join_key": "customer_id",
+                  "join_type": "LEFT JOIN"
+                },
+                {
+                  "from_table": "customers",
+                  "to_table": "aml_alerts",
+                  "join_key": "customer_id",
+                  "join_type": "LEFT JOIN"
+                },
+                {
+                  "from_table": "customers",
+                  "to_table": "customer_profiles",
+                  "join_key": "customer_id",
+                  "join_type": "LEFT JOIN"
+                },
+                {
+                  "from_table": "customers",
+                  "to_table": "kyc_cases",
+                  "join_key": "customer_id",
+                  "join_type": "LEFT JOIN"
+                },
+                {
+                  "from_table": "customers",
+                  "to_table": "kyc_cases",
+                  "join_key": "customer_id",
+                  "join_type": "LEFT JOIN"
+                },
+                {
+                  "from_table": "kyc_cases",
+                  "to_table": "kyc_documents",
+                  "join_key": "kyc_case_id",
+                  "join_type": "LEFT JOIN"
+                },
+                {
+                  "from_table": "customers",
+                  "to_table": "kyc_cases",
+                  "join_key": "customer_id",
+                  "join_type": "LEFT JOIN"
+                },
+                {
+                  "from_table": "kyc_cases",
+                  "to_table": "kyc_reviews",
+                  "join_key": "kyc_case_id",
+                  "join_type": "LEFT JOIN"
+                },
+                {
+                  "from_table": "customers",
+                  "to_table": "kyc_cases",
+                  "join_key": "customer_id",
+                  "join_type": "LEFT JOIN"
+                },
+                {
+                  "from_table": "kyc_cases",
+                  "to_table": "kyc_verifications",
+                  "join_key": "kyc_case_id",
+                  "join_type": "LEFT JOIN"
+                },
+                {
+                  "from_table": "customers",
+                  "to_table": "risk_flags",
+                  "join_key": "customer_id",
+                  "join_type": "LEFT JOIN"
+                },
+                {
+                  "from_table": "customers",
+                  "to_table": "aml_alerts",
+                  "join_key": "customer_id",
+                  "join_type": "LEFT JOIN"
+                },
+                {
+                  "from_table": "aml_alerts",
+                  "to_table": "suspicious_activity_reports",
+                  "join_key": "alert_id",
+                  "join_type": "LEFT JOIN"
+                }
+              ],
+              "table_explanations": {
+                "account_balances": "Historique quotidien des soldes de comptes (Domain: account)",
+                "account_signatories": "Mandataires et signataires autoris\u00e9s (Domain: account)",
+                "account_status_history": "Historique des statuts de compte (Domain: account)",
+                "account_types": "Grille de param\u00e9trage des types de compte (Domain: account)",
+                "accounts": "Comptes bancaires des clients de la banque (Domain: account)",
+                "aml_alerts": "Alertes de blanchiment g\u00e9n\u00e9r\u00e9es par le moteur transactionnel (Domain: compliance)",
+                "audit_findings": "Constats d'audit \u00e0 r\u00e9soudre (Domain: compliance)",
+                "compliance_cases": "Enqu\u00eates et dossiers de conformit\u00e9 ouverts (Domain: compliance)",
+                "compliance_reviews": "Audits de conformit\u00e9 par dossier (Domain: compliance)",
+                "customer_addresses": "Adresses physiques des clients (Domain: customer)",
+                "customer_contacts": "Coordonn\u00e9es t\u00e9l\u00e9phoniques et e-mails (Domain: customer)",
+                "customer_documents": "Fichiers justificatifs scann\u00e9s (Domain: customer)",
+                "customer_preferences": "Pr\u00e9f\u00e9rences de communication et alertes (Domain: customer)",
+                "customer_profiles": "Donn\u00e9es d\u00e9mographiques et revenus des clients (Domain: customer)",
+                "customer_relationships": "Liens familiaux et de garanties entre clients (Domain: customer)",
+                "customer_risk_scores": "Historique des scores de risques par client (Domain: risk)",
+                "customer_status_history": "Historique de changement de statut client (Domain: customer)",
+                "customers": "Registre principal des clients de la banque (Domain: customer)",
+                "joint_accounts": "Comptes joints multid\u00e9positaires (Domain: account)",
+                "kyc_cases": "Dossiers de v\u00e9rification d'identit\u00e9 (Domain: kyc)",
+                "kyc_documents": "Pi\u00e8ces justificatives d'identit\u00e9 attach\u00e9es aux dossiers (Domain: kyc)",
+                "kyc_expirations": "Alertes d'\u00e9ch\u00e9ance des pi\u00e8ces KYC (Domain: kyc)",
+                "kyc_reviews": "Historique des d\u00e9cisions KYC par analyste (Domain: kyc)",
+                "kyc_verifications": "Contr\u00f4les individuels effectu\u00e9s par dossier KYC (Domain: kyc)",
+                "pep_screening": "Screening des personnes politiquement expos\u00e9es (Domain: kyc)",
+                "risk_flags": "Signalements de risques sur les clients (Domain: risk)",
+                "sanctions_screening": "Screening des listes de sanctions internationales (Domain: kyc)",
+                "suspicious_activity_reports": "D\u00e9clarations de soup\u00e7on (DSFR) destin\u00e9es \u00e0 la CTAF (Domain: compliance)"
+              },
+              "confidence_scores": {
+                "account_balances": 0.85,
+                "account_signatories": 0.85,
+                "account_status_history": 0.85,
+                "account_types": 0.85,
+                "accounts": 0.85,
+                "aml_alerts": 1.0,
+                "audit_findings": 1.0,
+                "compliance_cases": 1.0,
+                "compliance_reviews": 1.0,
+                "customer_addresses": 1.0,
+                "customer_contacts": 1.0,
+                "customer_documents": 1.0,
+                "customer_preferences": 1.0,
+                "customer_profiles": 1.0,
+                "customer_relationships": 1.0,
+                "customer_risk_scores": 0.85,
+                "customer_status_history": 1.0,
+                "customers": 1.0,
+                "joint_accounts": 0.85,
+                "kyc_cases": 0.85,
+                "kyc_documents": 0.85,
+                "kyc_expirations": 0.85,
+                "kyc_reviews": 0.85,
+                "kyc_verifications": 0.85,
+                "pep_screening": 0.85,
+                "risk_flags": 0.85,
+                "sanctions_screening": 0.85,
+                "suspicious_activity_reports": 1.0
+              }
+            }
+          },
+          {
+            "agent": "entity_resolution",
+            "status": "success",
+            "response": {
+              "primary_entity": "tiers",
+              "primary_key": "tiers_id",
+              "primary_table": "tierss",
+              "tables_containing_entity": [],
+              "join_structure": [],
+              "resolution_confidence": 0.8,
+              "notes": "Semantic resolution from 'tierss'. Warnings: No safe join path in join_registry from 'tierss' to 'account_balances' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'account_signatories' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'account_status_history' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'account_types' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'accounts' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'aml_alerts' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'audit_findings' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'compliance_cases' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'compliance_reviews' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'customer_addresses' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'customer_contacts' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'customer_documents' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'customer_preferences' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'customer_profiles' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'customer_relationships' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'customer_risk_scores' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'customer_status_history' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'customers' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'joint_accounts' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'kyc_cases' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'kyc_documents' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'kyc_expirations' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'kyc_reviews' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'kyc_verifications' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'pep_screening' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'risk_flags' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'sanctions_screening' \u2014 skipped; No safe join path in join_registry from 'tierss' to 'suspicious_activity_reports' \u2014 skipped"
+            }
+          },
+          {
+            "agent": "sql",
+            "status": "success",
+            "response": {
+              "sql": "SELECT account_balances.*\nFROM account_balances\nLIMIT 100",
+              "parameters": [],
+              "description": "Query tiers data from account_balances + account_signatories + account_status_history + account_types + accounts + aml_alerts + audit_findings + compliance_cases + compliance_reviews + customer_addresses + customer_contacts + customer_documents + customer_preferences + customer_profiles + customer_relationships + customer_risk_scores + customer_status_history + customers + joint_accounts + kyc_cases + kyc_documents + kyc_expirations + kyc_reviews + kyc_verifications + pep_screening + risk_flags + sanctions_screening + suspicious_activity_reports",
+              "estimated_rows": 100,
+              "estimated_time_ms": 610,
+              "tables_used": [
+                "account_balances",
+                "account_signatories",
+                "account_status_history",
+                "account_types",
+                "accounts",
+                "aml_alerts",
+                "audit_findings",
+                "compliance_cases",
+                "compliance_reviews",
+                "customer_addresses",
+                "customer_contacts",
+                "customer_documents",
+                "customer_preferences",
+                "customer_profiles",
+                "customer_relationships",
+                "customer_risk_scores",
+                "customer_status_history",
+                "customers",
+                "joint_accounts",
+                "kyc_cases",
+                "kyc_documents",
+                "kyc_expirations",
+                "kyc_reviews",
+                "kyc_verifications",
+                "pep_screening",
+                "risk_flags",
+                "sanctions_screening",
+                "suspicious_activity_reports"
+              ],
+              "is_parameterized": true,
+              "semantic_warnings": [],
+              "semantic_trace": []
+            }
+          },
+          {
+            "agent": "validation",
+            "status": "success",
+            "response": {
+              "safe": true,
+              "confidence": 1.0,
+              "issues": [],
+              "checks_passed": [
+                "syntax_check",
+                "select_only",
+                "keyword_check",
+                "limit_check",
+                "pattern_check"
+              ],
+              "checks_failed": [],
+              "signature": "sha256:e5bf7e7f1a91f7afa07689ef1d62572b6cf82abf89c103694c456505403b35d4:1784043165:3fd935951d2baa60:req-550476c6",
+              "sanitized_sql": "SELECT account_balances.*\nFROM account_balances\nLIMIT 100",
+              "semantic_warnings": [
+                "[semantic] Unknown table 'account_balances' referenced \u2014 not in known banking schema",
+                "[semantic] Possible raw arithmetic in SELECT \u2014 consider using metric_registry formulas"
+              ]
+            }
+          },
+          {
+            "agent": "compliance",
+            "status": "success",
+            "response": {
+              "compliant": true,
+              "violations": [],
+              "masking_required": [],
+              "regulations_checked": [
+                "GDPR",
+                "PCI-DSS",
+                "SOX",
+                "AML",
+                "KYC"
+              ],
+              "user_role": "analyst",
+              "message": "OK"
+            }
+          },
+          {
+            "agent": "execution",
+            "status": "success",
+            "response": {
+              "rows_returned": 0
+            }
+          }
+        ],
+        "insights": null,
+        "message": null,
+        "error": null,
+        "request_id": "req-550476c6",
+        "debug_url": "/debug/logs/req-550476c6"
+      }
+    }
+  ],
+  "semantic_agent_status": {
+    "schema_agent": {
+      "semantic_layer_enabled": true,
+      "semantic_cache_ready": true,
+      "fallback_active": false,
+      "fallback_reason": null,
+      "metadata_counts": {
+        "table_metadata": 54,
+        "column_metadata": 10,
+        "join_registry": 24
+      },
+      "readiness_requirements": {
+        "table_metadata": "must be non-empty",
+        "column_metadata": "must be non-empty",
+        "join_registry": "must be non-empty"
+      }
+    },
+    "entity_resolution_agent": {
+      "semantic_layer_enabled": true,
+      "semantic_cache_ready": true,
+      "fallback_active": false,
+      "fallback_reason": null,
+      "metadata_counts": {
+        "business_glossary": 165,
+        "join_registry_nodes": 23
+      },
+      "readiness_requirements": {
+        "business_glossary": "must be non-empty",
+        "join_registry": "must be non-empty"
+      }
+    },
+    "sql_agent": {
+      "semantic_layer_enabled": true,
+      "semantic_cache_ready": true,
+      "fallback_active": false,
+      "fallback_reason": null,
+      "metadata_counts": {
+        "metric_registry": 25,
+        "join_registry_safe_pairs": 48
+      },
+      "readiness_requirements": {
+        "metric_registry": "must contain at least one valid formula",
+        "join_registry": "must contain at least one safe join pair"
+      }
+    }
+  }
+}

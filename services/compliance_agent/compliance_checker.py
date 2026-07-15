@@ -225,8 +225,8 @@ class ComplianceChecker:
         if "NOT IN" in condition or "not in" in condition:
             try:
                 inner = condition.split("(")[1].split(")")[0]
-                allowed = [r.strip().lower() for r in inner.split(",")]
-                return role in allowed
+                denied_roles = [r.strip().lower() for r in inner.split(",")]
+                return role not in denied_roles
             except IndexError:
                 pass
         return True

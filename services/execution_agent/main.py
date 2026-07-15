@@ -206,13 +206,25 @@ async def test_execution():
       - Cache: first hit (database) + second hit (cache)
     """
     import hashlib, hmac, json as _json
-
-    SIGNING_KEY = "DEMO_KEY_CHANGE_IN_PRODUCTION_DO_NOT_USE_IN_PROD"
+    from query_executor import SIGNING_KEY
 
     def _sign(sql, params):
-        msg = sql + "|" + str(sorted(str(p) for p in params))
-        sig = hmac.new(SIGNING_KEY.encode(), msg.encode(), hashlib.sha256).hexdigest()
-        return f"sha256:{sig}:1700000000"
+        import sys
+        import os
+        shared_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "shared"))
+        if shared_path not in sys.path:
+            sys.path.insert(0, shared_path)
+        from query_signing import sign_query_payload
+        import uuid
+        import secrets
+        return sign_query_payload(
+            request_id=str(uuid.uuid4()),
+            sql=sql,
+            parameters=params,
+            timestamp=int(time.time()),
+            nonce=secrets.token_hex(8),
+            key=SIGNING_KEY
+        )
 
     # Real DB schema:
     # customers: customer_id, name, email, phone, risk_score, segment, kyc_verified
@@ -287,7 +299,9 @@ async def test_execution():
         cache_test = tc.pop("_cache_test", False)
         check_ssn  = tc.pop("_check_ssn_masked", False)
 
-        sig = "sha256:INVALID:0" if bad_sig else _sign(tc["sql"], tc["params"])
+        sig = "sha256:INVALID:0:dummy:uuid" if bad_sig else _sign(tc["sql"], tc["params"])
+        formatted = None
+        cols_masked = []
 
         try:
             # First call

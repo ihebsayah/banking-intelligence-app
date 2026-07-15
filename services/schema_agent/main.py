@@ -35,21 +35,57 @@ app.add_middleware(
 
 matcher = SchemaMatcher()
 
+# Readiness state — separate from is_initialized on matcher
+_semantic_cache_ready: bool = False
+_fallback_reason: str = ""
+
 
 @app.on_event("startup")
 async def startup() -> None:
-    global matcher
+    global matcher, _semantic_cache_ready, _fallback_reason
     try:
-        from shared.config import get_settings
         from shared.database import get_connector
-        settings = get_settings()
-        if settings.SEMANTIC_LAYER_ENABLED:
-            db_connector = await get_connector(settings.DATABASE_URL)
+        semantic_enabled = os.getenv("SEMANTIC_LAYER_ENABLED", "false").lower() == "true"
+        if semantic_enabled:
+            db_url = os.getenv(
+                "DATABASE_URL",
+                "postgresql://banking_user:securepass123@postgres-main:5432/banking_dev"
+            )
+            db_connector = await get_connector(db_url)
             matcher = SchemaMatcher(db=db_connector, semantic_layer_enabled=True)
             await matcher.initialize_db_cache()
-            logger.info("Schema Agent DB Cache initialized successfully")
+
+            # Validate minimum required metadata — ready only if data actually loaded
+            t_count = len(matcher._table_metadata_cache)
+            c_count = len(matcher._column_metadata_cache)
+            j_count = len(matcher._join_registry_cache)
+
+            if t_count == 0:
+                _fallback_reason = "table_metadata is empty"
+                logger.warning(
+                    "[SchemaAgent] %s — semantic cache NOT ready; using static fallback", _fallback_reason
+                )
+            elif c_count == 0:
+                _fallback_reason = "column_metadata is empty"
+                logger.warning(
+                    "[SchemaAgent] %s — semantic cache NOT ready; using static fallback", _fallback_reason
+                )
+            elif j_count == 0:
+                _fallback_reason = "join_registry is empty"
+                logger.warning(
+                    "[SchemaAgent] %s — semantic cache NOT ready; using static fallback", _fallback_reason
+                )
+            else:
+                _semantic_cache_ready = True
+                logger.info(
+                    "[SchemaAgent] Semantic cache ready: %d tables, %d columns, %d joins",
+                    t_count, c_count, j_count
+                )
+        else:
+            _fallback_reason = "SEMANTIC_LAYER_ENABLED=false"
     except Exception as exc:
-        logger.warning("Failed to initialize database cache for Schema Agent: %s", exc)
+        _fallback_reason = f"startup error: {exc}"
+        logger.warning("[SchemaAgent] Failed to initialize database cache: %s", exc)
 
 
 @app.post("/map_schema", response_model=SchemaMappingResponse)
@@ -108,4 +144,41 @@ async def get_domains() -> dict:
 
 @app.get("/health")
 async def health() -> dict:
-    return {"status": "healthy", "service": "schema_agent"}
+    semantic_enabled = os.getenv("SEMANTIC_LAYER_ENABLED", "false").lower() == "true"
+
+    return {
+        "status": "healthy",
+        "service": "schema_agent",
+        "semantic_layer_enabled": semantic_enabled,
+        "semantic_cache_ready": _semantic_cache_ready,
+        "fallback_active": not _semantic_cache_ready,
+        "fallback_reason": _fallback_reason if not _semantic_cache_ready else None,
+        "metadata_counts": {
+            "table_metadata": len(matcher._table_metadata_cache),
+            "column_metadata": len(matcher._column_metadata_cache),
+            "join_registry": len(matcher._join_registry_cache),
+        },
+    }
+
+
+@app.get("/semantic/health")
+async def semantic_health() -> dict:
+    """Detailed semantic layer health — safe to expose (no credentials or formulas)."""
+    semantic_enabled = os.getenv("SEMANTIC_LAYER_ENABLED", "false").lower() == "true"
+
+    return {
+        "semantic_layer_enabled": semantic_enabled,
+        "semantic_cache_ready": _semantic_cache_ready,
+        "fallback_active": not _semantic_cache_ready,
+        "fallback_reason": _fallback_reason if not _semantic_cache_ready else None,
+        "metadata_counts": {
+            "table_metadata": len(matcher._table_metadata_cache),
+            "column_metadata": len(matcher._column_metadata_cache),
+            "join_registry": len(matcher._join_registry_cache),
+        },
+        "readiness_requirements": {
+            "table_metadata": "must be non-empty",
+            "column_metadata": "must be non-empty",
+            "join_registry": "must be non-empty",
+        },
+    }

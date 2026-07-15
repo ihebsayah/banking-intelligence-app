@@ -219,7 +219,29 @@ class QueryValidator:
 
         signature = None
         if safe:
-            signature = self._sign_query(sql, request.parameters)
+            import uuid
+            import secrets
+            # Generate request_id and nonce if not provided (e.g. in standalone tests)
+            req_id = getattr(request, "request_id", None) or str(uuid.uuid4())
+            nonce = getattr(request, "nonce", None) or secrets.token_hex(8)
+            try:
+                import sys
+                import os
+                shared_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "shared"))
+                if shared_path not in sys.path:
+                    sys.path.insert(0, shared_path)
+                from query_signing import sign_query_payload
+                signature = sign_query_payload(
+                    request_id=req_id,
+                    sql=sql,
+                    parameters=request.parameters,
+                    timestamp=int(time.time()),
+                    nonce=nonce,
+                    key=SIGNING_KEY
+                )
+            except Exception as exc:
+                logger.error("Failed to sign query payload: %s", exc)
+                signature = None
 
         # Sanitized SQL for safe logging
         if HAS_SQLPARSE:
@@ -270,29 +292,45 @@ class QueryValidator:
 
     def _sign_query(self, sql: str, parameters: list) -> str:
         """HMAC-SHA256 signature over (sql + parameters) for tamper detection."""
-        message = sql + "|" + str(sorted(str(p) for p in parameters))
-        sig = hmac.new(
-            SIGNING_KEY.encode("utf-8"),
-            message.encode("utf-8"),
-            hashlib.sha256,
-        ).hexdigest()
-        timestamp = int(time.time())
-        return f"sha256:{sig}:{timestamp}"
+        import uuid
+        import secrets
+        try:
+            import sys
+            import os
+            shared_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "shared"))
+            if shared_path not in sys.path:
+                sys.path.insert(0, shared_path)
+            from query_signing import sign_query_payload
+            return sign_query_payload(
+                request_id=str(uuid.uuid4()),
+                sql=sql,
+                parameters=parameters,
+                timestamp=int(time.time()),
+                nonce=secrets.token_hex(8),
+                key=SIGNING_KEY
+            )
+        except Exception as exc:
+            logger.error("Failed to sign query payload in _sign_query fallback: %s", exc)
+            # Fallback to a legacy-like dummy signature to avoid completely crashing
+            timestamp = int(time.time())
+            return f"sha256:dummy:{timestamp}"
 
     def verify_signature(self, sql: str, parameters: list, signature: str) -> bool:
         """Verify a previously signed query has not been tampered with."""
         try:
-            parts = signature.split(":")
-            if len(parts) != 3 or parts[0] != "sha256":
-                return False
-            expected_sig = parts[1]
-            message = sql + "|" + str(sorted(str(p) for p in parameters))
-            actual_sig = hmac.new(
-                SIGNING_KEY.encode("utf-8"),
-                message.encode("utf-8"),
-                hashlib.sha256,
-            ).hexdigest()
-            return hmac.compare_digest(expected_sig, actual_sig)
+            import sys
+            import os
+            shared_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "shared"))
+            if shared_path not in sys.path:
+                sys.path.insert(0, shared_path)
+            from query_signing import verify_query_signature
+            return verify_query_signature(
+                sql=sql,
+                parameters=parameters,
+                signature=signature,
+                key=SIGNING_KEY,
+                max_age_seconds=int(os.getenv("QUERY_SIGNATURE_MAX_AGE_SECONDS", "60"))
+            )
         except Exception:
             return False
 

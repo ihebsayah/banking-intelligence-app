@@ -15,6 +15,8 @@ class QueryValidationRequest(BaseModel):
     user_role: str = "analyst"  # "analyst" | "admin" | "readonly"
     # Phase 6B: optional upstream semantic warnings to carry through
     upstream_semantic_warnings: List[str] = []
+    request_id: Optional[str] = None
+    nonce: Optional[str] = None
 
 
 class QueryValidationResponse(BaseModel):

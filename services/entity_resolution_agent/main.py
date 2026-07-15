@@ -21,6 +21,7 @@ import uvicorn
 
 from models import EntityResolutionRequest, EntityResolutionResponse
 from entity_resolver import EntityResolver, initialize_entity_cache, SEMANTIC_LAYER_ENABLED
+import entity_resolver as _er_module
 
 # ──────────────────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -29,25 +30,35 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Readiness state (populated in lifespan)
+_fallback_reason: str = "not yet initialized"
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize semantic cache on startup if feature flag is enabled."""
+    global _fallback_reason
     if SEMANTIC_LAYER_ENABLED:
         try:
             import psycopg2
             db_url = os.getenv(
                 "DATABASE_URL",
-                "postgresql://banking_user:securepass123@db:5432/banking_dev"
+                "postgresql://banking_user:securepass123@postgres-main:5432/banking_dev"
             )
             conn = psycopg2.connect(db_url)
             initialize_entity_cache(conn)
             conn.close()
+            if _er_module._cache_ready:
+                _fallback_reason = ""
+            else:
+                _fallback_reason = "glossary or join_registry empty after load"
         except Exception as exc:
+            _fallback_reason = f"DB connection failed: {exc}"
             logger.warning(
                 "[startup] Could not initialize entity semantic cache: %s", exc
             )
     else:
+        _fallback_reason = "SEMANTIC_LAYER_ENABLED=false"
         logger.info("[startup] SEMANTIC_LAYER_ENABLED=False — using hardcoded resolver")
     yield
 
@@ -75,12 +86,40 @@ resolver = EntityResolver()
 # ──────────────────────────────────────────────────────────────────────────────
 @app.get("/health")
 async def health():
+    cache_ready = _er_module._cache_ready
     return {
         "status": "healthy",
         "service": "entity_resolution_agent",
         "port": 8004,
         "version": "0.6b.0",
-        "semantic_layer": SEMANTIC_LAYER_ENABLED,
+        "semantic_layer_enabled": SEMANTIC_LAYER_ENABLED,
+        "semantic_cache_ready": cache_ready,
+        "fallback_active": not cache_ready,
+        "fallback_reason": _fallback_reason if not cache_ready else None,
+        "metadata_counts": {
+            "business_glossary": len(_er_module._glossary_cache),
+            "join_registry_nodes": len(_er_module._join_graph),
+        },
+    }
+
+
+@app.get("/semantic/health")
+async def semantic_health():
+    """Detailed semantic layer health."""
+    cache_ready = _er_module._cache_ready
+    return {
+        "semantic_layer_enabled": SEMANTIC_LAYER_ENABLED,
+        "semantic_cache_ready": cache_ready,
+        "fallback_active": not cache_ready,
+        "fallback_reason": _fallback_reason if not cache_ready else None,
+        "metadata_counts": {
+            "business_glossary": len(_er_module._glossary_cache),
+            "join_registry_nodes": len(_er_module._join_graph),
+        },
+        "readiness_requirements": {
+            "business_glossary": "must be non-empty",
+            "join_registry": "must be non-empty",
+        },
     }
 
 
