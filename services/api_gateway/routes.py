@@ -576,7 +576,7 @@ async def submit_query(
     logger.info("Query received", extra={"user_id": user.user_id, "role": user.user_role, "query": body.query[:80]})
 
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=300.0) as client:
             response = await client.post(
                 f"{ORCHESTRATOR_URL}/process_query",
                 json={"query": body.query, "user_role": user.user_role,

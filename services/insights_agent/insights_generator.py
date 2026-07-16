@@ -55,10 +55,10 @@ class InsightsGenerator:
             # Step 3 — trends
             trends = self._identify_trends(request.query_intent, stats, context)
 
-            # Step 4 — Mistral summary
+            # Step 4 — Mistral summary + recommendations (single call)
             stats_dict = stats.model_dump()
             context_dict = context.model_dump()
-            summary = self.mistral.generate_summary(
+            summary, recommendations = self.mistral.generate_summary_and_recommendations(
                 request.query_intent,
                 request.query_text,
                 request.results,
@@ -66,13 +66,6 @@ class InsightsGenerator:
                 context_dict,
                 [t.model_dump() for t in trends],
                 primary_col=primary_col,
-            )
-
-            # Step 5 — recommendations
-            recommendations = self.mistral.generate_recommendations(
-                summary,
-                stats_dict,
-                [t.model_dump() for t in trends],
             )
 
             total_deposits = context.system_totals.get("total_deposits", 1) or 1

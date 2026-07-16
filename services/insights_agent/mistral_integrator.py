@@ -76,41 +76,106 @@ class MistralIntegrator:
         fallback += f"Recommend prioritising {top_region} branch for strategic allocation."
         return fallback
 
+    def generate_summary_and_recommendations(
+        self,
+        query_intent: str,
+        query_text: str,
+        results: List[Dict],
+        statistics: Dict[str, Any],
+        context: Dict[str, Any],
+        trends: List[Dict],
+        primary_col: str = None,
+    ) -> tuple:
+        """Single Ollama call that returns (summary, recommendations)."""
+        prompt = self._build_combined_prompt(
+            query_intent, query_text, results, statistics, context, trends
+        )
+        raw = self._call_ollama(prompt, max_tokens=300)
+        if raw:
+            return self._parse_combined_response(raw)
+
+        # Fallback
+        summary = self._fallback_summary(query_intent, query_text, results, statistics, context, trends, primary_col)
+        recs = self._fallback_recommendations(statistics, trends)
+        return summary, recs
+
     def generate_recommendations(
         self,
         summary: str,
         statistics: Dict[str, Any],
         trends: List[Dict],
     ) -> List[str]:
-        """Return up to 3 actionable business recommendations."""
-        prompt = (
-            f"Banking analysis summary: {summary}\n"
-            f"Key statistics: total={statistics.get('total_sum')}, "
-            f"avg={statistics.get('average')}, outliers={len(statistics.get('outliers', []))}\n"
-            f"Trends: {[t.get('metric') for t in trends]}\n\n"
-            "Generate exactly 3 specific, actionable banking business recommendations.\n"
-            "Format: numbered list 1. 2. 3. — one per line, no preamble."
-        )
-        raw = self._call_ollama(prompt, max_tokens=250)
-        if raw:
-            lines = [
-                ln.strip()
-                for ln in raw.splitlines()
-                if ln.strip() and ln.strip()[0].isdigit()
-            ]
-            if len(lines) >= 3:
-                return lines[:3]
+        """Return up to 3 actionable business recommendations (legacy, kept for compat)."""
+        return self._fallback_recommendations(statistics, trends)
 
-        # Smart, specific fallbacks based on trends & metrics
+    def _parse_combined_response(self, raw: str) -> tuple:
+        """Parse combined summary+recommendations from single LLM response."""
+        parts = raw.split("\nRecommendations:")
+        if len(parts) == 1:
+            parts = raw.split("\n1.")
+            if len(parts) == 2:
+                summary = parts[0].strip()
+                recs_text = "1." + parts[1]
+            else:
+                return raw.strip(), self._fallback_recommendations({}, [])
+        else:
+            summary = parts[0].strip()
+            recs_text = parts[1].strip()
+
+        lines = [
+            ln.strip()
+            for ln in recs_text.splitlines()
+            if ln.strip() and ln.strip()[0].isdigit()
+        ]
+        recs = lines[:3] if len(lines) >= 3 else self._fallback_recommendations({}, [])
+        return summary, recs
+
+    def _fallback_recommendations(
+        self,
+        statistics: Dict[str, Any],
+        trends: List[Dict],
+    ) -> List[str]:
         outliers_count = len(statistics.get("outliers", []))
         avg = statistics.get("average") or 0.0
-        
-        recs = [
+        return [
             f"1. Optimize operational capacity in high-performing regions to sustain recent transaction growth trends.",
             f"2. Schedule a portfolio risk review for segments displaying anomalous behaviors (detected {outliers_count} outliers).",
             f"3. Tailor personalized high-value product packages for customer profiles exceeding average margins ({avg:.2f})."
         ]
-        return recs
+
+    def _fallback_summary(
+        self,
+        query_intent: str,
+        query_text: str,
+        results: List[Dict],
+        statistics: Dict[str, Any],
+        context: Dict[str, Any],
+        trends: List[Dict],
+        primary_col: str = None,
+    ) -> str:
+        num_records = len(results)
+        total_sum = statistics.get("total_sum")
+        avg = statistics.get("average")
+        is_monetary = primary_col in self._MONETARY_COLS if primary_col else False
+        top_region = max(
+            context.get("regional_breakdown", {"Unknown": 1}),
+            key=lambda k: context.get("regional_breakdown", {}).get(k, 0),
+            default="Unknown",
+        )
+        col_label = primary_col.replace("_", " ").title() if primary_col else "metric"
+        fallback = f"Analysis of '{query_text}' across {num_records} records: "
+        if total_sum is not None and avg is not None:
+            if is_monetary:
+                fallback += f"total {col_label} = ${total_sum:,.0f}, average {col_label} = ${avg:,.0f} per record. "
+            else:
+                fallback += f"average {col_label} = {avg:.3f} (total = {total_sum:.3f}). "
+        else:
+            fallback += f"highest concentration in {top_region} region. "
+        if trends:
+            t_names = [t.get("metric", "").replace("_", " ") for t in trends]
+            fallback += f"Key drivers: {', '.join(t_names)}. "
+        fallback += f"Recommend prioritising {top_region} branch for strategic allocation."
+        return fallback
 
     # ──────────────────────────────────────────────────────────────────────
     # Internal helpers
@@ -136,6 +201,34 @@ class MistralIntegrator:
         except Exception as exc:
             logger.error(f"Ollama call failed: {exc}")
         return ""
+
+    def _build_combined_prompt(
+        self,
+        query_intent: str,
+        query_text: str,
+        results: List[Dict],
+        statistics: Dict[str, Any],
+        context: Dict[str, Any],
+        trends: List[Dict],
+    ) -> str:
+        top_region = max(
+            context.get("regional_breakdown", {"Unknown": 1}),
+            key=lambda k: context.get("regional_breakdown", {}).get(k, 0),
+            default="Unknown",
+        )
+        cols = list(results[0].keys())[:5] if results else []
+        return (
+            f"Banking analysis. Query: {query_text}\n"
+            f"Intent: {query_intent}. Records: {len(results)}. Columns: {cols}\n"
+            f"Stats: total={statistics.get('total_sum', 'N/A')}, "
+            f"avg={statistics.get('average', 'N/A')}, outliers={len(statistics.get('outliers', []))}\n"
+            f"Context: deposits={context.get('system_totals', {}).get('total_deposits', 'N/A')}, "
+            f"region={top_region}\n"
+            f"Trends: {[t.get('metric') for t in trends]}\n\n"
+            "Write summary then 3 recommendations.\n"
+            "Summary:\n"
+            "Recommendations:\n1.\n2.\n3."
+        )
 
     def _build_summary_prompt(
         self,

@@ -392,7 +392,7 @@ class OrchestratorAgent:
                 "status": "success",
                 "results": execution_data.get("data", []),
                 "metadata": execution_data.get("metadata", {}),
-                "insights": insights_data if insights_response.get("success") else None,
+                "insights": insights_response.get("data") if insights_response.get("success") else None,
                 "pipeline": {
                     "intent": intent_data,
                     "schema": schema_data,
@@ -742,7 +742,7 @@ class OrchestratorAgent:
                         "results": results,
                         "metadata": metadata,
                     },
-                    timeout=180,
+                    timeout=300,
                 )
             if response.status_code == 200:
                 return {"success": True, "data": response.json()}
