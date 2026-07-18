@@ -129,3 +129,84 @@ def test_ambiguity_detected_for_mixed_query(recognizer):
     # Response has required keys
     for key in ("primary_category", "confidence", "secondary_categories", "explicit_constraints"):
         assert key in result, f"Missing key: {key}"
+
+
+# ── Phase 6C Increment 1: Structured Intent tests ──────────────────────────────
+def test_structured_intent_en(recognizer):
+    """Test English structured intent extraction."""
+    result = recognizer.recognize_sync("Top 10 customers in New York with risk score > 0.8")
+    assert result["language"] == "en"
+    assert result["domain"] == "customer"
+    assert result["task"] == "ranking"
+    assert result["limit_requested"] == 10
+    assert len(result["filters_structured"]) > 0
+    assert result["filters_structured"][0]["column"] == "customers.risk_score"
+    assert result["intent_confidence"] > 0.5
+
+def test_structured_intent_fr(recognizer):
+    """Test French structured intent extraction with vocab."""
+    result = recognizer.recognize_sync("Afficher les créances douteuses par gouvernorat")
+    assert result["language"] == "fr"
+    # 'créances douteuses' maps to credit risk domain
+    assert result["domain"] in ("credit risk", "loans")
+    assert result["task"] == "detail_listing"
+    assert "branches.governorate" in result["dimensions"]
+    assert result["intent_confidence"] > 0.5
+
+def test_structured_intent_kpi_detection(recognizer):
+    """Test KPI detection for metric registry."""
+    result = recognizer.recognize_sync("Calculer le taux de créances classées du mois dernier")
+    # 'taux de créances classées' maps to 'npl_ratio' KPI
+    assert "npl_ratio" in result["metrics"]
+    assert result["time_range"]["value"] == "last_30_days"
+
+
+def test_structured_intent_clarification(recognizer):
+    """Test clarification is triggered on ambiguous short queries."""
+    result = recognizer.recognize_sync("Show risk")
+    assert result["requires_clarification"] is True
+    assert "clarification_question" in result
+    assert "analyser" in result["clarification_question"] or "analyse" in result["clarification_question"] or "risk" in result["clarification_question"].lower()
+
+
+# ── Phase 6C Semantic Corrections Regression Tests ───────────────────────────
+def test_metric_separation_positive_vs_negative(recognizer):
+    """Test that bare entity keywords do not trigger ratios, but explicit triggers do."""
+    # Negative cases (no ratio trigger)
+    res_neg1 = recognizer.recognize_sync("List NPL accounts with DPD > 90")
+    assert "npl_ratio" not in res_neg1["metrics"]
+    assert res_neg1["task"] == "detail_listing"
+    
+    res_neg2 = recognizer.recognize_sync("Show AML alerts and suspicious activity report history")
+    assert "aml_alert_rate" not in res_neg2["metrics"]
+    assert res_neg2["task"] == "detail_listing"
+    
+    # Positive cases (with ratio/rate triggers)
+    res_pos1 = recognizer.recognize_sync("Show KYC compliance rate by branch last year")
+    assert "kyc_compliance_rate" in res_pos1["metrics"]
+    assert res_pos1["task"] == "aggregation"
+    
+    res_pos2 = recognizer.recognize_sync("Calculer le taux de créances douteuses par gouvernorat")
+    assert "npl_ratio" in res_pos2["metrics"]
+    assert res_pos2["task"] == "aggregation"
+
+def test_task_inference_grouping_vs_listing(recognizer):
+    """Test that par/by grouping does not force aggregation unless a measure is requested."""
+    # Grouping listing -> detail_listing
+    res_list1 = recognizer.recognize_sync("Créances douteuses par gouvernorat")
+    assert res_list1["task"] == "detail_listing"
+    
+    res_list2 = recognizer.recognize_sync("Risk score and active status for customers by segment")
+    assert res_list2["task"] == "detail_listing"
+    
+    # Grouping with count/sum/average -> aggregation
+    res_agg1 = recognizer.recognize_sync("Compliance audits count by branch")
+    assert res_agg1["task"] == "aggregation"
+
+def test_requested_fields_extraction(recognizer):
+    """Test explicit extraction of requested output fields."""
+    res = recognizer.recognize_sync("Show risk score and active status for customers")
+    assert "risk_score" in res["requested_fields"]
+    assert "status" in res["requested_fields"]
+
+

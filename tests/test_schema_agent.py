@@ -116,3 +116,185 @@ def test_key_columns_for_customer_entity(matcher):
     assert any("customer_id" in v for v in key_cols.values()), (
         f"customer_id not found in key columns: {key_cols}"
     )
+
+
+# ── Phase 6C Increment 1: Progressive Schema Selection tests ───────────────────
+def test_progressive_schema_selection(matcher):
+    """Test progressive schema selection and column pruning."""
+    res = matcher.progressive_map(
+        query="Show risk flags for customer",
+        domain="customer",
+        task="detail_listing",
+        metrics=[],
+        dimensions=[],
+        filters_structured=[],
+        limit_requested=None
+    )
+    assert "customers" in res.selected_tables
+    assert res.schema_confidence > 0.0
+    assert len(res.selected_columns) > 0
+    assert "customers" in res.selected_columns
+
+def test_bridge_table_preservation(matcher):
+    """Test that bridge tables are resolved and preserved to connect joins."""
+    # Ensure join registry mock or actual is loaded
+    matcher._join_registry_cache = [
+        {"source_table": "customers", "source_column": "customer_id", "target_table": "accounts", "target_column": "customer_id", "is_bidirectional": True},
+        {"source_table": "accounts", "source_column": "branch_id", "target_table": "branches", "target_column": "branch_id", "is_bidirectional": True}
+    ]
+    matcher._table_metadata_cache = {
+        "customers": {"domain": "customer"},
+        "accounts": {"domain": "accounts"},
+        "branches": {"domain": "branch and regional performance"}
+    }
+    
+    res = matcher.progressive_map(
+        query="Branches showing customer details",
+        domain="customer",
+        task="detail_listing",
+        metrics=[],
+        dimensions=["branches.name"],
+        filters_structured=[],
+        limit_requested=None
+    )
+    # Connecting customers to branches requires accounts as a bridge table!
+    assert "customers" in res.selected_tables
+    assert "branches" in res.selected_tables
+    assert "accounts" in res.bridge_tables or "accounts" in res.selected_tables
+    assert len(res.join_paths) >= 2
+
+def test_provenance_and_versioning(matcher):
+    """Test provenance tracking and snapshot versioning."""
+    res = matcher.progressive_map(
+        query="Show customer risk score",
+        domain="customer",
+        task="detail_listing",
+        metrics=[],
+        dimensions=[],
+        filters_structured=[],
+        limit_requested=None
+    )
+    assert res.semantic_metadata_version.startswith("v6C.")
+    assert len(res.schema_snapshot_id) == 32 # MD5 hash length
+    assert "customers" in res.table_provenance
+    assert res.table_provenance["customers"]["source"] == "table_metadata"
+
+def test_max_total_tables_constraint(matcher):
+    """Test that total tables are bounded by SEMANTIC_MAX_TOTAL_TABLES."""
+    # Populate large set of dummy joins
+    matcher._join_registry_cache = [
+        {"source_table": f"t{i}", "source_column": "id", "target_table": f"t{i+1}", "target_column": "id", "is_bidirectional": True}
+        for i in range(1, 15)
+    ]
+    matcher._table_metadata_cache = {
+        f"t{i}": {"domain": "customer"} for i in range(1, 16)
+    }
+    
+    # Run progressive map with SEMANTIC_MAX_TOTAL_TABLES = 5
+    res = matcher.progressive_map(
+        query="t1 to t15",
+        domain="customer",
+        task="detail_listing",
+        metrics=[],
+        dimensions=[],
+        filters_structured=[],
+        limit_requested=None,
+        max_selected_tables=2,
+        max_total_tables=5
+    )
+    total_resolved = len(res.selected_tables) + len(res.bridge_tables)
+    assert total_resolved <= 5
+
+
+# ── Phase 6C Schema Selection Semantic Corrections Regression Tests ───────────
+def test_requested_fields_reporting(matcher):
+    """Test that missing requested output fields are reported."""
+    # Populate mock cache with customers table and name column
+    matcher._table_metadata_cache = {
+        "customers": {"domain": "customer"}
+    }
+    matcher._column_metadata_cache = {
+        ("customers", "name"): {"column_name": "name", "table_name": "customers"},
+        ("customers", "customer_id"): {"column_name": "customer_id", "table_name": "customers"}
+    }
+    
+    res = matcher.progressive_map(
+        query="Show customer nonexistent_field and name",
+        domain="customer",
+        task="detail_listing",
+        metrics=[],
+        dimensions=[],
+        filters_structured=[],
+        limit_requested=None,
+        requested_fields=["nonexistent_field", "name"]
+    )
+    assert "nonexistent_field" in res.missing_requested_fields
+    assert "name" not in res.missing_requested_fields
+
+def test_metric_grain_compatibility(matcher):
+    """Test grain incompatibility detection for PNB and ROE."""
+    # PNB with account type is unsupported
+    res_pnb = matcher.progressive_map(
+        query="PNB by account type",
+        domain="profitability",
+        task="aggregation",
+        metrics=["pnb"],
+        dimensions=["accounts.account_type"],
+        filters_structured=[],
+        limit_requested=None
+    )
+    assert res_pnb.unsupported_reason is not None
+    assert "account_type" in res_pnb.unsupported_reason
+
+    # ROE with branch is unsupported
+    res_roe = matcher.progressive_map(
+        query="ROE by agence",
+        domain="profitability",
+        task="aggregation",
+        metrics=["roe"],
+        dimensions=["branches.name"],
+        filters_structured=[],
+        limit_requested=None
+    )
+    assert res_roe.unsupported_reason is not None
+    assert "dimensions other than time" in res_roe.unsupported_reason
+
+def test_temporal_source_capability(matcher):
+    """Test temporal source validation swaps customers -> kyc_cases for historical queries."""
+    res = matcher.progressive_map(
+        query="KYC compliance rate last year",
+        domain="kyc",
+        task="aggregation",
+        metrics=["kyc_compliance_rate"],
+        dimensions=[],
+        filters_structured=[],
+        limit_requested=None
+    )
+    # Since it is a historical query (last year), we cannot use the current-state 'customers' table.
+    # It must select the historical log table 'kyc_cases'.
+    assert "kyc_cases" in res.selected_tables
+    assert "customers" not in res.selected_tables
+
+def test_authoritative_source_priority(matcher):
+    """Test priority weighting: metric registry source table (4.0) > analytical view (3.0) > operational (2.0)."""
+    # Force mock metadata
+    matcher._table_metadata_cache = {
+        "loan_contracts": {"domain": "loans"},           # Operational (2.0)
+        "non_performing_loans": {"domain": "loans"},     # Analytical view (3.0)
+        "branches": {"domain": "branch performance"}     # Related (1.0)
+    }
+    
+    # In 'npl_ratio' query, non_performing_loans is analytical view (3.0) + metric source (+4.0) -> total 7.0
+    # loan_contracts is operational (2.0) + metric source (+4.0) -> total 6.0
+    res = matcher.progressive_map(
+        query="NPL ratio",
+        domain="credit risk",
+        task="aggregation",
+        metrics=["npl_ratio"],
+        dimensions=[],
+        filters_structured=[],
+        limit_requested=None
+    )
+    assert res.selected_tables[0] == "non_performing_loans"
+
+

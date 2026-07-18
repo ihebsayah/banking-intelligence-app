@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../s
 
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException
-from models import SchemaMappingRequest, SchemaMappingResponse
+from models import SchemaMappingRequest, SchemaMappingResponse, SchemaSelectionRequest, SchemaSelectionResponse
 from schema_matcher import SchemaMatcher, INTENT_TO_DOMAINS
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
@@ -134,6 +134,35 @@ async def map_schema(request: SchemaMappingRequest) -> SchemaMappingResponse:
 
     except Exception as exc:
         logger.exception("Schema mapping failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/map_schema_v2", response_model=SchemaSelectionResponse)
+async def map_schema_v2(request: SchemaSelectionRequest) -> SchemaSelectionResponse:
+    """
+    Map extended/structured intent to candidate tables, selected tables,
+    bridge tables, minimal columns, and safe join paths with provenance and versioning.
+    """
+    try:
+        from shared.config import get_settings
+        settings = get_settings()
+        
+        response = matcher.progressive_map(
+            query=request.query,
+            domain=request.domain,
+            task=request.task,
+            metrics=request.metrics,
+            dimensions=request.dimensions,
+            filters_structured=request.filters_structured,
+            limit_requested=request.limit_requested,
+            requested_fields=request.requested_fields,
+            max_candidate_tables=settings.SEMANTIC_MAX_CANDIDATE_TABLES,
+            max_selected_tables=settings.SEMANTIC_MAX_SELECTED_TABLES,
+            max_total_tables=settings.SEMANTIC_MAX_TOTAL_TABLES
+        )
+        return response
+    except Exception as exc:
+        logger.exception("Progressive schema mapping v2 failed")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 

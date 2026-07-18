@@ -86,7 +86,19 @@ class Settings(BaseSettings):
     ENABLE_CACHING: bool = Field(default=True)
     DEV_MODE: bool = Field(default=True, description="Enable development fallback/mocks")
     SEMANTIC_LAYER_ENABLED: bool = Field(default=False)
-
+    STRUCTURED_QUERY_PLAN_ENABLED: bool = Field(default=False)
+    DETERMINISTIC_SQL_COMPILER_ENABLED: bool = Field(default=False)
+    SQL_REPAIR_ENABLED: bool = Field(default=False)
+    RESULT_VERIFICATION_ENABLED: bool = Field(default=False)
+    CONVERSATION_CONTEXT_ENABLED: bool = Field(default=False)
+    LLM_SQL_FALLBACK_ENABLED: bool = Field(default=False)
+    SEMANTIC_MAX_CANDIDATE_TABLES: int = Field(default=20)
+    SEMANTIC_MAX_SELECTED_TABLES: int = Field(default=6)
+    SEMANTIC_MAX_TOTAL_TABLES: int = Field(default=10)
+    MAX_JOIN_PATH_DEPTH: int = Field(default=3)
+    MAX_SQL_REPAIR_ATTEMPTS: int = Field(default=2)
+    EXPLAIN_COST_CHECK_ENABLED: bool = Field(default=False)
+    BENCHMARK_MODE: bool = Field(default=False)
 
     class Config:
         env_file = ".env"

@@ -19,12 +19,20 @@ import logging
 import os
 from typing import List, Tuple, Any, Optional, Dict, Set
 
-from models import (
-    SQLGenerationRequest,
-    SQLGenerationResponse,
-    Parameter,
-    JoinPathInput,
-)
+try:
+    from sql_agent.models import (
+        SQLGenerationRequest,
+        SQLGenerationResponse,
+        Parameter,
+        JoinPathInput,
+    )
+except ImportError:
+    from models import (
+        SQLGenerationRequest,
+        SQLGenerationResponse,
+        Parameter,
+        JoinPathInput,
+    )
 
 logger = logging.getLogger(__name__)
 

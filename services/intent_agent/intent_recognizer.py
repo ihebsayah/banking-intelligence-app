@@ -364,6 +364,26 @@ class IntentRecognizer:
         if self._semantic_layer_enabled:
             res["detected_kpis"] = detected_kpis or []
 
+        # Phase 6C: upgrade with structured intent fields (backward-compatible)
+        try:
+            import importlib, sys as _sys
+            _dir = __import__("os").path.dirname(__import__("os").path.abspath(__file__))
+            if _dir not in _sys.path:
+                _sys.path.insert(0, _dir)
+            from structured_intent import build_structured_intent
+            struct = build_structured_intent(query)
+            # Add or override structured intent fields
+            for k, v in struct.items():
+                if k == "ambiguities":
+                    # Merge ambiguities
+                    res[k] = list(set(res.get(k, []) + v))
+                elif k == "requires_clarification":
+                    res[k] = res.get(k, False) or v
+                else:
+                    res[k] = v
+        except Exception as exc:
+            logger.warning("Failed to parse structured intent fields: %s", exc)
+
         return res
 
     async def recognize(self, query: str) -> dict:
@@ -371,6 +391,7 @@ class IntentRecognizer:
         cached = await self._from_cache(query)
         if cached:
             logger.debug("Intent cache hit: %s", query[:40])
+            # Ensure cached response contains structured intent defaults if needed
             return cached
 
         # Detect KPIs dynamically or statically under semantic mode
@@ -397,3 +418,4 @@ class IntentRecognizer:
         result = self.recognize_sync(query, detected_kpis=detected_kpis)
         await self._to_cache(query, result)
         return result
+

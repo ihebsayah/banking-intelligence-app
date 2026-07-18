@@ -7,8 +7,25 @@ from __future__ import annotations
 
 import logging
 from typing import Dict, List, Optional, Tuple, Any
+import sys
+import os
 
-from models import JoinPath
+if "schema_agent_models" not in sys.modules:
+    _schema_agent_dir = os.path.dirname(os.path.abspath(__file__))
+    if _schema_agent_dir not in sys.path:
+        sys.path.insert(0, _schema_agent_dir)
+    _prev_models = sys.modules.pop("models", None)
+    try:
+        import models
+        sys.modules["schema_agent_models"] = models
+    finally:
+        if _prev_models:
+            sys.modules["models"] = _prev_models
+else:
+    models = sys.modules["schema_agent_models"]
+
+JoinPath = models.JoinPath
+SchemaSelectionResponse = models.SchemaSelectionResponse
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +123,51 @@ class SchemaMatcher:
         self._column_metadata_cache: Dict[Tuple[str, str], Dict[str, Any]] = {}
         self._join_registry_cache: List[Dict[str, Any]] = []
         self._is_initialized = False
+        
+        # Phase 6C Progressive Schema Selection
+        import sys as _sys, os as _os
+        _dir = _os.path.dirname(_os.path.abspath(__file__))
+        if _dir not in _sys.path:
+            _sys.path.insert(0, _dir)
+        from progressive_schema import ProgressiveSchemaRetrieval
+        self.progressive_retriever = ProgressiveSchemaRetrieval(self)
+
+    def progressive_map(self,
+                         query: str,
+                         domain: str,
+                         task: str,
+                         metrics: List[str],
+                         dimensions: List[str],
+                         filters_structured: List[Dict],
+                         limit_requested: Optional[int],
+                         intent: Optional["StructuredIntent"] = None,
+                         requested_fields: Optional[List[str]] = None,
+                         max_candidate_tables: int = 20,
+                         max_selected_tables: int = 6,
+                         max_total_tables: int = 10) -> SchemaSelectionResponse:
+        """Execute progressive schema retrieval and minimal tables/columns selection."""
+        # Backward compatibility: extract intent fields if intent not provided
+        if intent is None:
+            from intent_agent.structured_intent import build_structured_intent
+            intent_dict = build_structured_intent(query=query)
+            # Use dict as a duck-typed intent object
+            intent = type('StructuredIntent', (), intent_dict)()
+        
+        return self.progressive_retriever.retrieve(
+            query=query,
+            domain=domain,
+            task=task,
+            metrics=metrics,
+            dimensions=dimensions,
+            filters_structured=filters_structured,
+            limit_requested=limit_requested,
+            requested_fields=requested_fields or [],
+            max_candidate_tables=max_candidate_tables,
+            max_selected_tables=max_selected_tables,
+            max_total_tables=max_total_tables,
+            intent=intent
+        )
+
 
     async def initialize_db_cache(self) -> None:
         """Fetch all semantic metadata from database and cache in memory."""
