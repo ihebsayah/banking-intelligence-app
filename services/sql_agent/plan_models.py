@@ -2,9 +2,11 @@
 services/sql_agent/plan_models.py
 Pydantic models for QueryPlan, CompiledQuery, and analytical expressions.
 
-Increment 2.6: Adds CaseExpression (conditional aggregation), GrainSpec
-(grain tracking), entity-aware join cardinality, fan-out risk detection,
-RatioExpression aggregation strategy, expanded ExpectedAnswer types.
+Increment 2.6: CaseExpression, GrainSpec, fan-out detection, ExpectedAnswer.
+Increment 3: MetricExecutionStrategy, ResultVerification, RepairAction,
+             PlanRefinement metadata.
+Increment 3.1: EmptyResultSemantics, VerificationSeverity, MetricValidationRules,
+               PlanRepairRequest, ExecutionRetryPolicy, SQLMechanicalRepair.
 
 Constraints:
   - Typed models throughout (no List[Dict] or Dict for plan structures)
@@ -13,7 +15,7 @@ Constraints:
   - Deterministic: same QueryPlan always yields same SQL/params/aliases
   - Compiler is a pure renderer (no inference)
 """
-from typing import List, Optional, Literal, Union
+from typing import Dict, List, Optional, Literal, Union
 from pydantic import BaseModel, Field
 
 
@@ -108,7 +110,94 @@ class GrainSpec(BaseModel):
     identity_columns: List[str] = Field(default_factory=list)
 
 
+# ─── Increment 3.1: ExpectedAnswer enums ─────────────────────────────────────
+
+EmptyResultSemantics = Literal[
+    "valid_no_match",       # empty result is acceptable (no matching data)
+    "expect_scalar_zero",   # scalar should be 0 (e.g. count of nothing)
+    "expect_scalar_null",   # scalar should be NULL
+    "invalid",              # empty result is unexpected / error
+]
+
+VerificationSeverity = Literal["critical", "warning", "informational"]
+
+
+# ─── Increment 3.1: MetricValidationRules ────────────────────────────────────
+
+class MetricValidationRules(BaseModel):
+    """Validation constraints for a metric value after execution."""
+    value_type: Literal["numeric", "percentage", "ratio", "count"] = "numeric"
+    minimum: Optional[float] = None
+    maximum: Optional[float] = None
+    nullable: bool = True
+    finite_only: bool = True
+
+
+# ─── Increment 3.1: Recovery models ─────────────────────────────────────────
+
+class PlanRepairRequest(BaseModel):
+    """Request to re-plan the query instead of repairing SQL.
+
+    Produced by SQLMechanicalRepair when the error requires structural
+    changes (removing tables, columns, or filters) that must go through
+    the planner, not direct SQL mutation.
+    """
+    reason: str
+    error_type: str
+    requested_change: str  # e.g. "remove_table: fake_table"
+    original_sql: str = ""
+    original_error: str = ""
+
+
+class ExecutionRetryPolicy(BaseModel):
+    """Determines whether a transient error should trigger a retry."""
+    max_retries: int = 1
+    retryable_error_types: List[str] = Field(
+        default_factory=lambda: ["deadlock", "timeout", "serialization_failure"]
+    )
+
+    def should_retry(self, error_type: str, attempt: int) -> bool:
+        return attempt < self.max_retries and error_type in self.retryable_error_types
+
+
+class SQLMechanicalRepair(BaseModel):
+    """Semantics-preserving SQL fixes that do not alter query intent.
+
+    Allowed repairs:
+      - Add missing GROUP BY column
+      - Fix unbalanced parentheses
+      - Remove trailing semicolons
+
+    Destructive repairs (removing JOINs, columns, filters) are NOT allowed;
+    those produce PlanRepairRequest instead.
+    """
+    repair_id: str = ""
+    description: str = ""
+    repaired_sql: str = ""
+    repair_type: str = ""  # "group_by_fix" | "syntax_fix" | "none"
+
+
 # ─── Registered metric (from metric_registry) ────────────────────────────────
+
+class MetricExecutionStrategy(BaseModel):
+    """Metadata describing how a metric should be executed safely.
+
+    Attributes:
+      execution_strategy: how to run the metric
+        - 'single_query': standard single-query with aggregation
+        - 'independent_subqueries': separate aggregations joined at end
+        - 'approved_metric_view': use a pre-built database view
+      fan_out_safe: whether the metric's SQL is safe from join fan-out
+      preaggregation_required: whether tables must be aggregated before joining
+      allowed_join_patterns: which join cardinalities are safe for this metric
+    """
+    execution_strategy: Literal[
+        "single_query", "independent_subqueries", "approved_metric_view"
+    ] = "single_query"
+    fan_out_safe: bool = True
+    preaggregation_required: bool = False
+    allowed_join_patterns: List[str] = Field(default_factory=lambda: ["many_to_one"])
+
 
 class MetricReference(BaseModel):
     """An approved metric with its formula resolved from metric_registry."""
@@ -117,6 +206,7 @@ class MetricReference(BaseModel):
     formula: str
     source_tables: List[str] = Field(default_factory=list)
     grain_supported: bool = True
+    execution_strategy: Optional[MetricExecutionStrategy] = None
 
 
 # ─── Filter, time, sort ─────────────────────────────────────────────────────
@@ -152,6 +242,10 @@ class ExpectedAnswer(BaseModel):
     ordering: Optional[str] = None
     aggregation_required: bool = False
     expected_columns: List[str] = Field(default_factory=list)
+    # Increment 3.1: empty-result semantics
+    empty_result_semantics: EmptyResultSemantics = "invalid"
+    # Increment 3.1: per-metric validation rules
+    metric_validation_rules: Dict[str, MetricValidationRules] = Field(default_factory=dict)
 
 
 # ─── QueryPlan ────────────────────────────────────────────────────────────────
@@ -238,3 +332,91 @@ class CompiledQuery(BaseModel):
     schema_snapshot_id: str = ""
     semantic_metadata_version: str = ""
     description: str = ""
+
+
+# ─── Increment 3: Result verification ───────────────────────────────────────
+
+class VerificationCheck(BaseModel):
+    """A single verification check result."""
+    check_name: str
+    passed: bool
+    expected: str = ""
+    actual: str = ""
+    message: str = ""
+    severity: VerificationSeverity = "warning"
+
+
+class ResultVerification(BaseModel):
+    """Verification result comparing dataset against ExpectedAnswer."""
+    verified: bool
+    checks: List[VerificationCheck] = Field(default_factory=list)
+    row_count: int = 0
+    column_count: int = 0
+    repair_suggestions: List[str] = Field(default_factory=list)
+    # Increment 3.1: severity summary
+    critical_failures: List[str] = Field(default_factory=list)
+    warnings: List[str] = Field(default_factory=list)
+    informational: List[str] = Field(default_factory=list)
+
+
+# ─── Increment 3: Repair actions ────────────────────────────────────────────
+
+class RepairAction(BaseModel):
+    """A single repair action to fix a failed query."""
+    action_type: Literal[
+        "add_group_by", "add_distinct", "add_where",
+        "switch_subquery", "add_limit", "fix_null_filter",
+        "retry_with_timeout",
+        "plan_repair_request",  # Increment 3.1: destructive change → replan
+    ]
+    description: str
+    plan_delta: dict = Field(default_factory=dict)
+    is_destructive: bool = False  # Increment 3.1: true if removes tables/columns/filters
+
+
+class PGRepairEngine(BaseModel):
+    """Post-execution repair engine result."""
+    repaired: bool
+    original_error: str = ""
+    repairs_applied: List[RepairAction] = Field(default_factory=list)
+    retried_sql: str = ""
+    # Increment 3.1: recovery splitting
+    retry_attempted: bool = False
+    mechanical_repair: Optional[SQLMechanicalRepair] = None
+    plan_repair_request: Optional[PlanRepairRequest] = None
+
+
+# ─── Increment 3: Plan refinement ───────────────────────────────────────────
+
+class PlanRefinement(BaseModel):
+    """Advisory refinement proposal for a QueryPlan after verification failure.
+
+    Increment 3.1: Only produces proposals — never auto-applies changes.
+    Caller must decide whether to accept each proposal.
+    """
+    reason: str
+    original_plan_summary: str = ""
+    refined_plan_summary: str = ""
+    changes: List[str] = Field(default_factory=list)
+    proposals: List[Dict[str, str]] = Field(default_factory=list)  # advisory-only
+
+
+# ─── Increment 3: Execution trace ───────────────────────────────────────────
+
+class ExecutionTrace(BaseModel):
+    """Full trace of the execution lifecycle for debugging."""
+    plan_hash: str = ""
+    compiled_sql_length: int = 0
+    original_sql_hash: str = ""  # SHA-256 of original compiled SQL
+    attempted_sql_hash: str = ""  # SHA-256 of SQL after mechanical repair
+    execution_time_ms: float = 0.0
+    rows_returned: int = 0
+    verification_passed: bool = False
+    repairs_count: int = 0
+    refinements_count: int = 0
+    total_time_ms: float = 0.0
+    retry_reason: str = ""  # why a retry was triggered
+    mechanical_repair_id: str = ""  # ID of SQLMechanicalRepair applied
+    critical_failures: List[str] = Field(default_factory=list)
+    replanning_request: Optional[PlanRepairRequest] = None
+    metadata_version: str = "3.1"

@@ -6,6 +6,10 @@ Increment 2.5: Pure SQL renderer. All analytical decisions (aggregation,
 GROUP BY, ordering) are made by the QueryPlanBuilder. This compiler reads
 already-resolved expressions and emits SQL.
 
+Increment 3.1: Materializes independent_subqueries strategy — metrics with
+execution_strategy="independent_subqueries" are compiled as separate
+aggregated subqueries joined at the end, eliminating fan-out risk.
+
 Rules:
   - Renderer ONLY: does not infer metrics, select tables, or alter intent.
   - Only uses: selected tables, bridge tables, registered joins, approved
@@ -53,6 +57,22 @@ _DATE_COLUMNS = {
     "balance_sheet_snapshots": "period",
 }
 
+# ─── Increment 3.1: Independent subquery registry ───────────────────────────
+# Maps metric_id → (numerator_sql, denominator_sql) templates.
+# Used when execution_strategy="independent_subqueries" to eliminate fan-out.
+_INDEPENDENT_SUBQUERY_REGISTRY = {
+    "loan_to_deposit": {
+        "numerator": "SELECT COALESCE(SUM(lc.principal_amount), 0) AS num FROM loan_contracts lc",
+        "denominator": "SELECT COALESCE(SUM(a.balance), 0) AS den FROM accounts a",
+        "ratio_expr": "ROUND(100.0 * numerator::numeric / NULLIF(denominator::numeric, 0), 2)",
+    },
+    "npl_ratio": {
+        "numerator": "SELECT COUNT(n.npl_id) AS num FROM non_performing_loans n",
+        "denominator": "SELECT COUNT(lc.loan_id) AS den FROM loan_contracts lc",
+        "ratio_expr": "ROUND(100.0 * numerator::numeric / NULLIF(denominator::numeric, 0), 2)",
+    },
+}
+
 
 class DeterministicSQLCompiler:
     """
@@ -76,6 +96,12 @@ class DeterministicSQLCompiler:
             params.append(BoundParameter(position=pos, value=value, type=ptype))
             return f"${pos}"
 
+        # ── Increment 3.1: Check for independent subqueries ────────────
+        independent_metric = self._find_independent_metric(plan)
+        if independent_metric:
+            return self._compile_independent_subqueries(plan, independent_metric, params, next_param)
+
+        # ── Standard single-query compilation ──────────────────────────
         # ── SELECT ────────────────────────────────────────────────────────
         select_parts = self._compile_select(plan)
         select_clause = f"SELECT {', '.join(select_parts)}"
@@ -226,6 +252,62 @@ class DeterministicSQLCompiler:
         if not plan.sort:
             return ""
         return f"ORDER BY {plan.sort.column} {plan.sort.direction}"
+
+    # ── Increment 3.1: Independent subqueries ────────────────────────────
+
+    def _find_independent_metric(self, plan: QueryPlan) -> str:
+        """Find the first metric with independent_subqueries strategy."""
+        for m in plan.metrics:
+            if m.execution_strategy and m.execution_strategy.execution_strategy == "independent_subqueries":
+                if m.metric_id in _INDEPENDENT_SUBQUERY_REGISTRY:
+                    return m.metric_id
+        return ""
+
+    def _compile_independent_subqueries(
+        self, plan: QueryPlan, metric_id: str, params: list, next_param,
+    ) -> CompiledQuery:
+        """Compile metric as two independent subqueries joined on a constant key."""
+        reg = _INDEPENDENT_SUBQUERY_REGISTRY[metric_id]
+
+        # Add WHERE filters to each subquery if present
+        where_parts = self._compile_where(plan, next_param)
+        where_clause = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+
+        num_sql = reg["numerator"]
+        den_sql = reg["denominator"]
+
+        if where_clause:
+            # Append WHERE to each subquery (before any existing WHERE)
+            num_sql = num_sql.rstrip() + f"\n  {where_clause}"
+            den_sql = den_sql.rstrip() + f"\n  {where_clause}"
+
+        # Build the combined SQL
+        sql = f"""SELECT
+    {reg['ratio_expr']} AS {metric_id}
+FROM
+    ({num_sql}) AS _num,
+    ({den_sql}) AS _den"""
+
+        # Add ORDER BY and LIMIT if present
+        order_clause = self._compile_order_by(plan)
+        if order_clause:
+            sql += f"\n{order_clause}"
+        sql += f"\nLIMIT {plan.limit}"
+
+        # Column aliases
+        aliases = {metric_id: reg["ratio_expr"]}
+
+        description = f"Independent subqueries for {metric_id} (Increment 3.1)"
+
+        return CompiledQuery(
+            sql=sql,
+            parameters=params,
+            tables_used=plan.selected_tables + plan.bridge_tables,
+            column_aliases=aliases,
+            schema_snapshot_id=plan.schema_snapshot_id,
+            semantic_metadata_version=plan.semantic_metadata_version,
+            description=description,
+        )
 
     # ── Description ───────────────────────────────────────────────────────
 

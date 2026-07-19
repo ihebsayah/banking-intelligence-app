@@ -6,6 +6,16 @@ Safe query executor with:
   - 30-second execution timeout
   - Redis caching (cache-aside pattern)
   - Row-count + execution-time metadata
+
+Increment 3: Added verification pipeline:
+  - ResultVerifier validates dataset against ExpectedAnswer
+  - PGRepairEngine auto-repairs common PG errors
+  - PlanRefiner suggests plan adjustments on verification failure
+
+Increment 3.1: Recovery split:
+  - ExecutionRetryPolicy: deadlocks, transients → retry once
+  - SQLMechanicalRepair: semantics-preserving fixes (GROUP BY, syntax)
+  - PlanRepairRequest: structural issues → replan request
 """
 import asyncio
 import hashlib
@@ -253,6 +263,62 @@ class QueryExecutor:
             )
         except asyncio.TimeoutError:
             raise TimeoutError(f"Query exceeded {QUERY_TIMEOUT_SECONDS}s timeout — aborted for safety")
+
+    # ── Verification pipeline (Increment 3) ────────────────────────────────
+
+    def verify_result(
+        self,
+        data: List[Dict],
+        expected_answer: Optional[Dict] = None,
+        plan_metrics: Optional[List[str]] = None,
+        plan_dimensions: Optional[List[str]] = None,
+        plan_grain: Optional[Dict] = None,
+    ) -> Dict[str, Any]:
+        """Run ResultVerifier against the returned dataset."""
+        from result_verifier import ResultVerifier
+        verifier = ResultVerifier()
+        return verifier.verify(
+            data=data,
+            expected_answer=expected_answer,
+            plan_metrics=plan_metrics,
+            plan_dimensions=plan_dimensions,
+            plan_grain=plan_grain,
+        )
+
+    def diagnose_error(self, error_message: str) -> Dict[str, Any]:
+        """Run PGRepairEngine diagnosis on an error."""
+        from pg_repair_engine import PGRepairEngine
+        engine = PGRepairEngine()
+        return engine.diagnose(error_message)
+
+    def attempt_repair(self, sql: str, error_message: str) -> Optional[str]:
+        """Attempt to repair SQL based on error diagnosis (legacy interface)."""
+        from pg_repair_engine import PGRepairEngine
+        engine = PGRepairEngine()
+        diagnosis = engine.diagnose(error_message)
+        return engine.repair_sql(sql, diagnosis["error_type"], diagnosis.get("matched_value", ""))
+
+    def attempt_recovery(
+        self,
+        sql: str,
+        error_message: str,
+        attempt: int = 0,
+    ) -> Dict[str, Any]:
+        """Increment 3.1: Three-way recovery split."""
+        from pg_repair_engine import PGRepairEngine
+        engine = PGRepairEngine()
+        return engine.attempt_recovery(sql, error_message, attempt)
+
+    def refine_plan(
+        self,
+        plan_summary: Dict[str, Any],
+        verification_result: Optional[Dict] = None,
+        execution_error: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Run PlanRefiner to suggest plan adjustments."""
+        from plan_refiner import PlanRefiner
+        refiner = PlanRefiner()
+        return refiner.refine(plan_summary, verification_result, execution_error)
 
     async def _run_query(self, sql: str, parameters: list) -> List[Dict]:
         """Execute against real DB or return mock rows if pool unavailable."""

@@ -7,6 +7,8 @@ Endpoints:
   GET  /health         — Liveness probe
   POST /cache/clear    — Manually clear query cache
   POST /test_execution — Run 15 built-in test cases
+
+Increment 3.1: Recovery split, advisory-only refinement, severity-aware verification.
 """
 import sys
 import logging
@@ -102,6 +104,19 @@ async def execute_query(request: ExecutionRequest):
       - Role-based column/row filtering applied
       - PII masked for all roles except compliance
 
+    Verification (Increment 3.1):
+      - ResultVerifier validates dataset against ExpectedAnswer
+      - Severity-aware: critical blocks, warnings logged, informational ignored
+      - Empty-result semantics from ExpectedAnswer respected
+
+    Recovery (Increment 3.1):
+      - ExecutionRetryPolicy: deadlocks/transients → retry once
+      - SQLMechanicalRepair: GROUP BY/syntax fixes only
+      - PlanRepairRequest: structural issues → replan
+
+    Refinement (Increment 3.1):
+      - PlanRefiner is advisory-only — proposals never auto-applied
+
     Caching:
       - Result cached in Redis for 1 hour (SHA-256 keyed on sql+params)
       - metadata.source = "cache" | "database"
@@ -110,6 +125,15 @@ async def execute_query(request: ExecutionRequest):
         "execute_query: user_role=%s format=%s sql_len=%d",
         request.user_role, request.format, len(request.sql),
     )
+
+    verification_result = None
+    repairs_applied = 0
+    refinements_applied = 0
+    status = "success"
+    execution_status = "success"
+    verification_status = "skipped"
+    retry_status = "none"
+    execution_trace = {}
 
     try:
         result = await executor.execute(
@@ -131,30 +155,167 @@ async def execute_query(request: ExecutionRequest):
                 data_freshness="n/a",
                 user_role=request.user_role,
                 error=str(exc),
+                execution_status="error",
+                verification_status="skipped",
+                retry_status="none",
             ),
             message=str(exc),
         )
-    except TimeoutError as exc:
-        logger.error("Query timeout: %s", exc)
-        return ExecutionResponse(
-            status="error",
-            data=None,
-            metadata=ExecutionMetadata(
-                rows_returned=0,
-                execution_time_ms=30000.0,
-                source="database",
-                data_freshness="n/a",
-                user_role=request.user_role,
-                error="TIMEOUT",
-            ),
-            message=str(exc),
-        )
-    except RuntimeError as exc:
-        logger.error("DB error: %s", exc)
-        raise HTTPException(status_code=500, detail=str(exc))
+    except (TimeoutError, RuntimeError) as exc:
+        # Increment 3.1: Three-way recovery split
+        error_msg = str(exc)
+        logger.error("Execution error: %s", error_msg)
+        execution_status = "error"
+
+        recovery = executor.attempt_recovery(request.sql, error_msg, attempt=0)
+
+        if recovery.get("retry"):
+            # Transient → retry original SQL
+            retry_status = "retried"
+            execution_trace["retry_reason"] = recovery["error_type"]
+            try:
+                result = await executor.execute(
+                    sql=request.sql,
+                    parameters=request.parameters,
+                    signature=request.signature,
+                    user_role=request.user_role,
+                )
+                execution_status = "success"
+                repairs_applied = 1
+                status = "repaired"
+            except Exception:
+                return ExecutionResponse(
+                    status="error",
+                    data=None,
+                    metadata=ExecutionMetadata(
+                        rows_returned=0,
+                        execution_time_ms=0.0,
+                        source="database",
+                        data_freshness="n/a",
+                        user_role=request.user_role,
+                        error=error_msg,
+                        execution_status="error",
+                        verification_status="skipped",
+                        retry_status="retried",
+                        execution_trace=execution_trace,
+                    ),
+                    message=error_msg,
+                )
+        elif recovery.get("mechanical_sql"):
+            # Semantics-preserving repair
+            repair_id = recovery.get("repair_id", "")
+            retry_status = "mechanical_repair"
+            execution_trace["mechanical_repair_id"] = repair_id
+            try:
+                result = await executor.execute(
+                    sql=recovery["mechanical_sql"],
+                    parameters=request.parameters,
+                    signature=request.signature,
+                    user_role=request.user_role,
+                )
+                execution_status = "success"
+                repairs_applied = 1
+                status = "repaired"
+            except Exception:
+                return ExecutionResponse(
+                    status="error",
+                    data=None,
+                    metadata=ExecutionMetadata(
+                        rows_returned=0,
+                        execution_time_ms=0.0,
+                        source="database",
+                        data_freshness="n/a",
+                        user_role=request.user_role,
+                        error=error_msg,
+                        execution_status="error",
+                        verification_status="skipped",
+                        retry_status="mechanical_repair",
+                        execution_trace=execution_trace,
+                    ),
+                    message=error_msg,
+                )
+        elif recovery.get("plan_repair"):
+            # Structural → replan request
+            retry_status = "replan_requested"
+            execution_trace["plan_repair_request"] = recovery["plan_repair"]
+            return ExecutionResponse(
+                status="error",
+                data=None,
+                metadata=ExecutionMetadata(
+                    rows_returned=0,
+                    execution_time_ms=0.0,
+                    source="database",
+                    data_freshness="n/a",
+                    user_role=request.user_role,
+                    error=error_msg,
+                    execution_status="error",
+                    verification_status="skipped",
+                    retry_status="replan_requested",
+                    execution_trace=execution_trace,
+                ),
+                message=f"Structural error requires replanning: {recovery['error_type']}",
+            )
+        else:
+            # Unrecoverable
+            return ExecutionResponse(
+                status="error",
+                data=None,
+                metadata=ExecutionMetadata(
+                    rows_returned=0,
+                    execution_time_ms=0.0,
+                    source="database",
+                    data_freshness="n/a",
+                    user_role=request.user_role,
+                    error=error_msg,
+                    execution_status="error",
+                    verification_status="skipped",
+                    retry_status="none",
+                    execution_trace=execution_trace,
+                ),
+                message=error_msg,
+            )
 
     raw_rows = result["data"]
     meta = result["metadata"]
+
+    # Increment 3.1: Verify result against ExpectedAnswer
+    if request.expected_answer and isinstance(raw_rows, list):
+        verification_result = executor.verify_result(
+            data=raw_rows,
+            expected_answer=request.expected_answer,
+            plan_metrics=request.plan_metrics,
+            plan_dimensions=request.plan_dimensions,
+            plan_grain=request.plan_grain,
+        )
+
+        # Determine verification status from severity
+        critical = verification_result.get("critical_failures", [])
+        warnings = verification_result.get("warnings", [])
+
+        if critical:
+            verification_status = "critical"
+        elif warnings:
+            verification_status = "warning"
+        else:
+            verification_status = "passed"
+
+        if not verification_result.get("verified"):
+            logger.warning(
+                "Verification failed (status=%s): critical=%s warnings=%s",
+                verification_status, critical, warnings,
+            )
+            # Advisory-only refinement (Increment 3.1)
+            plan_summary = {
+                "task": request.expected_answer.get("answer_type", ""),
+                "dimensions": request.plan_dimensions or [],
+                "metrics": request.plan_metrics or [],
+                "filters": [],
+                "limit": 100,
+            }
+            refinement = executor.refine_plan(plan_summary, verification_result)
+            if refinement.get("retry_recommended"):
+                refinements_applied = 1
+                logger.info("Plan refinement proposed: %s", refinement["reason"])
 
     # Format + mask
     formatted_data, columns_masked = formatter.format(
@@ -164,7 +325,7 @@ async def execute_query(request: ExecutionRequest):
     )
 
     return ExecutionResponse(
-        status="success",
+        status=status,
         data=formatted_data,
         metadata=ExecutionMetadata(
             rows_returned=meta["rows_returned"],
@@ -174,6 +335,13 @@ async def execute_query(request: ExecutionRequest):
             columns_masked=columns_masked,
             user_role=request.user_role,
             query_hash=meta.get("query_hash"),
+            verification=verification_result,
+            repairs_applied=repairs_applied,
+            refinements_applied=refinements_applied,
+            execution_status=execution_status,
+            verification_status=verification_status,
+            retry_status=retry_status,
+            execution_trace=execution_trace if execution_trace else None,
         ),
     )
 

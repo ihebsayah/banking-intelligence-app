@@ -19,6 +19,7 @@ from sql_agent.plan_models import (
     QueryPlan, ColumnRef, JoinSpec, JoinCardinality, MetricReference,
     FilterSpec, TimeRangeSpec, SortSpec, ExpectedAnswer, GrainSpec,
     AggregateExpression, RatioExpression, CaseExpression, AnalyticalExpression,
+    MetricExecutionStrategy,
 )
 
 logger = logging.getLogger(__name__)
@@ -32,36 +33,72 @@ APPROVED_METRICS: Dict[str, Dict[str, Any]] = {
         "alias": "npl_ratio",
         "source_tables": ["loan_contracts", "non_performing_loans"],
         "grains": {"branch", "governorate", "region", "time"},
+        "execution_strategy": {
+            "execution_strategy": "independent_subqueries",
+            "fan_out_safe": True,
+            "preaggregation_required": True,
+            "allowed_join_patterns": ["many_to_one"],
+        },
     },
     "roe": {
         "formula": "ROUND(100.0 * ins.net_income / NULLIF(bss.total_equity, 0), 2)",
         "alias": "roe",
         "source_tables": ["income_statement_snapshots", "balance_sheet_snapshots"],
         "grains": {"time"},
+        "execution_strategy": {
+            "execution_strategy": "independent_subqueries",
+            "fan_out_safe": True,
+            "preaggregation_required": True,
+            "allowed_join_patterns": ["many_to_one"],
+        },
     },
     "roa": {
         "formula": "ROUND(100.0 * ins.net_income / NULLIF(bss.total_assets, 0), 2)",
         "alias": "roa",
         "source_tables": ["income_statement_snapshots", "balance_sheet_snapshots"],
         "grains": {"time"},
+        "execution_strategy": {
+            "execution_strategy": "independent_subqueries",
+            "fan_out_safe": True,
+            "preaggregation_required": True,
+            "allowed_join_patterns": ["many_to_one"],
+        },
     },
     "kyc_compliance_rate": {
         "formula": "ROUND(100.0 * COUNT(CASE WHEN c.kyc_verified = true THEN 1 END) / NULLIF(COUNT(*), 0), 2)",
         "alias": "kyc_compliance_rate",
         "source_tables": ["customers"],
         "grains": {"branch", "governorate", "region", "time"},
+        "execution_strategy": {
+            "execution_strategy": "single_query",
+            "fan_out_safe": True,
+            "preaggregation_required": False,
+            "allowed_join_patterns": ["many_to_one"],
+        },
     },
     "aml_alert_rate": {
         "formula": "ROUND(100.0 * COUNT(aa.alert_id) / NULLIF(COUNT(DISTINCT c.customer_id), 0), 2)",
         "alias": "aml_alert_rate",
         "source_tables": ["aml_alerts", "customers"],
         "grains": {"branch", "governorate", "region", "time"},
+        "execution_strategy": {
+            "execution_strategy": "single_query",
+            "fan_out_safe": True,
+            "preaggregation_required": False,
+            "allowed_join_patterns": ["many_to_one"],
+        },
     },
     "loan_to_deposit": {
         "formula": "ROUND(SUM(CASE WHEN lc.loan_id IS NOT NULL THEN lc.principal_amount ELSE 0 END) / NULLIF(SUM(a.balance), 0), 4)",
         "alias": "loan_to_deposit",
         "source_tables": ["loan_contracts", "accounts"],
         "grains": {"branch", "governorate", "time"},
+        "execution_strategy": {
+            "execution_strategy": "independent_subqueries",
+            "fan_out_safe": True,
+            "preaggregation_required": True,
+            "allowed_join_patterns": [],
+        },
     },
     "pnb": {
         "formula": "COALESCE(ins.fee_income, 0) + COALESCE(ins.interest_income, 0) - COALESCE(ins.operating_expenses, 0)",
@@ -430,12 +467,18 @@ class QueryPlanBuilder:
             if dim_grains and not dim_grains.issubset(allowed_grains):
                 grain_supported = False
 
+            strategy = None
+            strategy_raw = info.get("execution_strategy")
+            if strategy_raw:
+                strategy = MetricExecutionStrategy(**strategy_raw)
+
             validated.append(MetricReference(
                 metric_id=mid.lower(),
                 alias=info["alias"],
                 formula=info["formula"],
                 source_tables=info["source_tables"],
                 grain_supported=grain_supported,
+                execution_strategy=strategy,
             ))
         return validated, None
 

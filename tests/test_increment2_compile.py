@@ -1227,7 +1227,8 @@ class TestLDRNamedMetric:
         assert len(plan.analytical_expressions) == 0
 
     def test_named_metric_ldr_compiles(self):
-        """Named metric 'loan_to_deposit' from APPROVED_METRICS compiles."""
+        """Named metric 'loan_to_deposit' from APPROVED_METRICS compiles.
+        Increment 3.1: compiles as independent subqueries (no CASE WHEN)."""
         plan, cq = _build_and_compile(
             task="aggregation",
             selected_tables=["loan_contracts", "accounts"],
@@ -1239,7 +1240,9 @@ class TestLDRNamedMetric:
             requested_fields=[],
         )
         assert len(plan.metrics) == 1
-        assert "CASE WHEN" in cq.sql
+        # Increment 3.1: independent subqueries replace CASE WHEN for fan-out safety
+        assert "_num" in cq.sql
+        assert "_den" in cq.sql
         assert "loan_to_deposit" in cq.sql
 
 
