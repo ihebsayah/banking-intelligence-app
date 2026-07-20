@@ -62,14 +62,14 @@ _DATE_COLUMNS = {
 # Used when execution_strategy="independent_subqueries" to eliminate fan-out.
 _INDEPENDENT_SUBQUERY_REGISTRY = {
     "loan_to_deposit": {
-        "numerator": "SELECT COALESCE(SUM(lc.principal_amount), 0) AS num FROM loan_contracts lc",
-        "denominator": "SELECT COALESCE(SUM(a.balance), 0) AS den FROM accounts a",
-        "ratio_expr": "ROUND(100.0 * numerator::numeric / NULLIF(denominator::numeric, 0), 2)",
+        "numerator": "SELECT COALESCE(SUM(lc.principal_amount), 0) AS num FROM loan_contracts lc WHERE lc.currency = 'TND'",
+        "denominator": "SELECT COALESCE(SUM(a.balance), 0) AS den FROM accounts a WHERE a.currency = 'TND'",
+        "ratio_expr": "ROUND(100.0 * _num.num::numeric / NULLIF(_den.den::numeric, 0), 2)",
     },
     "npl_ratio": {
-        "numerator": "SELECT COUNT(n.npl_id) AS num FROM non_performing_loans n",
-        "denominator": "SELECT COUNT(lc.loan_id) AS den FROM loan_contracts lc",
-        "ratio_expr": "ROUND(100.0 * numerator::numeric / NULLIF(denominator::numeric, 0), 2)",
+        "numerator": "SELECT COUNT(DISTINCT n.loan_id) AS num FROM non_performing_loans n",
+        "denominator": "SELECT COUNT(DISTINCT lc.loan_id) AS den FROM loan_contracts lc",
+        "ratio_expr": "ROUND(100.0 * _num.num::numeric / NULLIF(_den.den::numeric, 0), 2)",
     },
 }
 
@@ -266,20 +266,44 @@ class DeterministicSQLCompiler:
     def _compile_independent_subqueries(
         self, plan: QueryPlan, metric_id: str, params: list, next_param,
     ) -> CompiledQuery:
-        """Compile metric as two independent subqueries joined on a constant key."""
+        """Compile metric as two independent subqueries.
+
+        Grouped independent subqueries (dimensions present) are NOT supported
+        because scalar subqueries joined on a constant key cannot produce
+        per-group results. Fail closed by raising ValueError.
+        """
         reg = _INDEPENDENT_SUBQUERY_REGISTRY[metric_id]
 
-        # Add WHERE filters to each subquery if present
-        where_parts = self._compile_where(plan, next_param)
-        where_clause = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+        # ── Fail closed: grouped independent subqueries unsupported ────
+        if plan.dimensions:
+            raise ValueError(
+                f"Grouped independent subqueries for '{metric_id}' are not "
+                f"supported: scalar subqueries joined on a constant key cannot "
+                f"produce per-group results. Use 'single_query' strategy or "
+                f"approved_metric_view for grouped execution."
+            )
+
+        # ── Filter routing: resolve column aliases per subquery ────────
+        num_alias = self._extract_subquery_alias(reg["numerator"])
+        den_alias = self._extract_subquery_alias(reg["denominator"])
+        num_table = self._extract_subquery_table(reg["numerator"])
+        den_table = self._extract_subquery_table(reg["denominator"])
+
+        where_parts = self._compile_where_routed(
+            plan, next_param, num_table, num_alias, den_table, den_alias,
+        )
+        num_where = f"WHERE {where_parts[num_table]}" if where_parts.get(num_table) else ""
+        den_where = f"WHERE {where_parts[den_table]}" if where_parts.get(den_table) else ""
 
         num_sql = reg["numerator"]
         den_sql = reg["denominator"]
 
-        if where_clause:
-            # Append WHERE to each subquery (before any existing WHERE)
-            num_sql = num_sql.rstrip() + f"\n  {where_clause}"
-            den_sql = den_sql.rstrip() + f"\n  {where_clause}"
+        if num_where:
+            kw = "AND" if " WHERE " in num_sql.upper() else "WHERE"
+            num_sql = num_sql.rstrip() + f"\n  {kw} {where_parts[num_table].lstrip('WHERE ')}"
+        if den_where:
+            kw = "AND" if " WHERE " in den_sql.upper() else "WHERE"
+            den_sql = den_sql.rstrip() + f"\n  {kw} {where_parts[den_table].lstrip('WHERE ')}"
 
         # Build the combined SQL
         sql = f"""SELECT
@@ -309,7 +333,158 @@ FROM
             description=description,
         )
 
-    # ── Description ───────────────────────────────────────────────────────
+    # ── Independent subquery helpers ────────────────────────────────────
+
+    @staticmethod
+    def _extract_subquery_alias(sql_template: str) -> str:
+        """Extract the table alias from a subquery template.
+
+        e.g. 'SELECT ... FROM loan_contracts lc' → 'lc'
+        """
+        match = re.search(r'FROM\s+\w+\s+(\w+)', sql_template)
+        return match.group(1) if match else ""
+
+    @staticmethod
+    def _extract_subquery_table(sql_template: str) -> str:
+        """Extract the table name from a subquery template.
+
+        e.g. 'SELECT ... FROM loan_contracts lc' → 'loan_contracts'
+        """
+        match = re.search(r'FROM\s+(\w+)', sql_template)
+        return match.group(1) if match else ""
+
+    def _compile_where_routed(
+        self, plan: QueryPlan, next_param,
+        num_table: str, num_alias: str,
+        den_table: str, den_alias: str,
+    ) -> dict:
+        """Route WHERE filters to the correct subquery with alias rewriting.
+
+        Returns {table_name: where_clause_string} for each subquery.
+        Shared filters (date, branch, region) are applied to both sides.
+        Side-specific filters are applied only to the matching side.
+        Unsupported filter columns (not in any subquery table) are skipped.
+        """
+        # Shared columns that apply to both subqueries when the column exists
+        # in both tables. branch_id/region/governorate only propagate if the
+        # target table actually has the column (non_performing_loans lacks branch_id).
+        _SHARED_COLUMNS = {
+            "created_at",
+            "branch_id",
+            "region",
+            "governorate",
+        }
+
+        # Columns that exist per subquery table (validated against live schema)
+        _TABLE_HAS_COLUMN = {
+            "loan_contracts": {"created_at", "branch_id", "currency"},
+            "accounts": {"created_at", "branch_id", "currency"},
+            "non_performing_loans": {"created_at"},
+            "income_statement_snapshots": {"period"},
+            "balance_sheet_snapshots": {"period"},
+        }
+
+        def _col_exists_in_table(table: str, col: str) -> bool:
+            """Check if a column exists in the given table for shared-column propagation."""
+            if table in _TABLE_HAS_COLUMN:
+                return col in _TABLE_HAS_COLUMN[table]
+            return False
+
+        result = {num_table: [], den_table: []}
+
+        for f in plan.filters:
+            parts = f.column.split(".")
+            if len(parts) == 2:
+                filter_table, filter_col = parts
+            else:
+                filter_table, filter_col = "", parts[0]
+
+            # Determine if this filter applies to num, den, or both
+            applies_to_num = False
+            applies_to_den = False
+
+            if filter_table == num_table:
+                applies_to_num = True
+                # Shared column in matched table → also apply to other side
+                # only if the other table actually has the column
+                if filter_col in _SHARED_COLUMNS:
+                    if _col_exists_in_table(den_table, filter_col):
+                        applies_to_den = True
+                    else:
+                        # ponytail: population filter cannot reach denominator → fail closed
+                        raise ValueError(
+                            f"Population filter '{f.column}' cannot be routed to denominator "
+                            f"table '{den_table}' (column '{filter_col}' not present). "
+                            f"Failing closed: cannot compute meaningful ratio with "
+                            f"unequal population filters."
+                        )
+            elif filter_table == den_table:
+                applies_to_den = True
+                if filter_col in _SHARED_COLUMNS:
+                    if _col_exists_in_table(num_table, filter_col):
+                        applies_to_num = True
+                    else:
+                        raise ValueError(
+                            f"Population filter '{f.column}' cannot be routed to numerator "
+                            f"table '{num_table}' (column '{filter_col}' not present). "
+                            f"Failing closed: cannot compute meaningful ratio with "
+                            f"unequal population filters."
+                        )
+            elif not filter_table:
+                # Unqualified column: apply to both if present
+                applies_to_num = True
+                applies_to_den = True
+            else:
+                # Table specified but doesn't match either subquery → fail closed
+                raise ValueError(
+                    f"Unsupported filter column '{f.column}': table '{filter_table}' "
+                    f"is not in the subquery tables ({num_table}, {den_table}). "
+                    f"Filters must reference columns from the metric's source tables."
+                )
+
+            if applies_to_num:
+                alias_col = f"{num_alias}.{filter_col}"
+                ph = next_param(f.value)
+                if f.operator.upper() == "IN" and isinstance(f.value, (list, tuple)):
+                    placeholders = ", ".join(next_param(v) for v in f.value)
+                    result[num_table].append(f"{alias_col} IN ({placeholders})")
+                elif f.operator.upper() == "BETWEEN" and isinstance(f.value, (list, tuple)) and len(f.value) == 2:
+                    ph_lo = next_param(f.value[0])
+                    ph_hi = next_param(f.value[1])
+                    result[num_table].append(f"{alias_col} BETWEEN {ph_lo} AND {ph_hi}")
+                else:
+                    result[num_table].append(f"{alias_col} {f.operator} {ph}")
+
+            if applies_to_den:
+                alias_col = f"{den_alias}.{filter_col}"
+                ph = next_param(f.value)
+                if f.operator.upper() == "IN" and isinstance(f.value, (list, tuple)):
+                    placeholders = ", ".join(next_param(v) for v in f.value)
+                    result[den_table].append(f"{alias_col} IN ({placeholders})")
+                elif f.operator.upper() == "BETWEEN" and isinstance(f.value, (list, tuple)) and len(f.value) == 2:
+                    ph_lo = next_param(f.value[0])
+                    ph_hi = next_param(f.value[1])
+                    result[den_table].append(f"{alias_col} BETWEEN {ph_lo} AND {ph_hi}")
+                else:
+                    result[den_table].append(f"{alias_col} {f.operator} {ph}")
+
+        if plan.time_range.type == "relative" and plan.time_range.value:
+            interval = _TIME_INTERVALS.get(plan.time_range.value)
+            if interval:
+                for table, alias, where_list in [
+                    (num_table, num_alias, result[num_table]),
+                    (den_table, den_alias, result[den_table]),
+                ]:
+                    date_col_name = _DATE_COLUMNS.get(table)
+                    if date_col_name:
+                        where_list.append(
+                            f"{alias}.{date_col_name} >= CURRENT_DATE - INTERVAL '{interval}'"
+                        )
+
+        return {
+            num_table: " AND ".join(result[num_table]),
+            den_table: " AND ".join(result[den_table]),
+        }
 
     def _describe(self, plan: QueryPlan) -> str:
         action = plan.task.replace("_", " ").title()

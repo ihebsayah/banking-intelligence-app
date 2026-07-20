@@ -32,43 +32,91 @@ APPROVED_METRICS: Dict[str, Dict[str, Any]] = {
         "formula": "ROUND(100.0 * COUNT(CASE WHEN lp.status = 'non_performing' THEN 1 END) / NULLIF(COUNT(*), 0), 2)",
         "alias": "npl_ratio",
         "source_tables": ["loan_contracts", "non_performing_loans"],
-        "grains": {"branch", "governorate", "region", "time"},
+        "grains": {"scalar"},
         "execution_strategy": {
             "execution_strategy": "independent_subqueries",
             "fan_out_safe": True,
             "preaggregation_required": True,
             "allowed_join_patterns": ["many_to_one"],
+        },
+        "population": {
+            "numerator": "COUNT(DISTINCT n.loan_id) from non_performing_loans WHERE created_at <= reporting_date",
+            "denominator": "COUNT(DISTINCT lc.loan_id) from loan_contracts WHERE created_at <= reporting_date",
+            "governed_loan_identity": "loan_id (non_performing_loans.loan_id → loan_contracts.loan_id)",
+            "numerator_uniqueness": "DISTINCT — one NPL row per loan_id even with historical classification changes",
+            "denominator_inclusion": "All governed loan_contracts as of reporting date (active, rembourse, contentieux)",
+            "current_state_vs_historical": "Numerator: distinct loans classified NPL as of reporting date. "
+                                           "Denominator: distinct loans in governed population as of same reporting date. "
+                                           "Both use the same as-of cutoff; not a period flow metric.",
+            "reporting_date_alignment": "Both numerator and denominator use created_at as the synthetic benchmark "
+                                        "reporting timestamp (live schema has no classification_date/effective_date)",
+            "definition": "count-based as-of (COUNT DISTINCT NPL loan_id as-of date / COUNT DISTINCT governed loan_id as-of date)",
+            "currency_invariant": True,
+            "schema_column_mapping": "created_at → synthetic classification/effective reporting timestamp "
+                                     "(live schema: non_performing_loans.created_at, loan_contracts.created_at)",
+        },
+        "temporal_policy": {
+            "allowed_time_ranges": ["last_30_days", "last_90_days", "last_quarter", "last_year", "ytd"],
+            "default_time_range": "last_quarter",
+            "numerator_business_date": "non_performing_loans.created_at",
+            "denominator_business_date": "loan_contracts.created_at",
+            "as_of_semantics": "Both numerator and denominator use created_at as the synthetic benchmark "
+                               "reporting timestamp; live schema has no dedicated classification_date or "
+                               "effective_date columns — not a period-flow metric, measures stock",
+            "timezone": "UTC (all timestamps stored as UTC in PostgreSQL)",
         },
     },
     "roe": {
         "formula": "ROUND(100.0 * ins.net_income / NULLIF(bss.total_equity, 0), 2)",
         "alias": "roe",
         "source_tables": ["income_statement_snapshots", "balance_sheet_snapshots"],
-        "grains": {"time"},
+        "grains": {"scalar"},
         "execution_strategy": {
             "execution_strategy": "independent_subqueries",
             "fan_out_safe": True,
             "preaggregation_required": True,
             "allowed_join_patterns": ["many_to_one"],
+        },
+        "population": {
+            "numerator": "net_income from income_statement_snapshots",
+            "denominator": "total_equity from balance_sheet_snapshots",
+            "description": "Return on equity: net income divided by shareholders equity",
+            "temporal_source": "income_statement_snapshots.period, balance_sheet_snapshots.period",
+        },
+        "temporal_policy": {
+            "allowed_time_ranges": ["last_quarter", "last_year", "ytd"],
+            "default_time_range": "last_year",
+            "note": "Requires matching reporting periods across numerator and denominator.",
         },
     },
     "roa": {
         "formula": "ROUND(100.0 * ins.net_income / NULLIF(bss.total_assets, 0), 2)",
         "alias": "roa",
         "source_tables": ["income_statement_snapshots", "balance_sheet_snapshots"],
-        "grains": {"time"},
+        "grains": {"scalar"},
         "execution_strategy": {
             "execution_strategy": "independent_subqueries",
             "fan_out_safe": True,
             "preaggregation_required": True,
             "allowed_join_patterns": ["many_to_one"],
         },
+        "population": {
+            "numerator": "net_income from income_statement_snapshots",
+            "denominator": "total_assets from balance_sheet_snapshots",
+            "description": "Return on assets: net income divided by total assets",
+            "temporal_source": "income_statement_snapshots.period, balance_sheet_snapshots.period",
+        },
+        "temporal_policy": {
+            "allowed_time_ranges": ["last_quarter", "last_year", "ytd"],
+            "default_time_range": "last_year",
+            "note": "Requires matching reporting periods across numerator and denominator.",
+        },
     },
     "kyc_compliance_rate": {
         "formula": "ROUND(100.0 * COUNT(CASE WHEN c.kyc_verified = true THEN 1 END) / NULLIF(COUNT(*), 0), 2)",
         "alias": "kyc_compliance_rate",
         "source_tables": ["customers"],
-        "grains": {"branch", "governorate", "region", "time"},
+        "grains": {"branch", "governorate", "region", "segment", "time"},
         "execution_strategy": {
             "execution_strategy": "single_query",
             "fan_out_safe": True,
@@ -92,12 +140,30 @@ APPROVED_METRICS: Dict[str, Dict[str, Any]] = {
         "formula": "ROUND(SUM(CASE WHEN lc.loan_id IS NOT NULL THEN lc.principal_amount ELSE 0 END) / NULLIF(SUM(a.balance), 0), 4)",
         "alias": "loan_to_deposit",
         "source_tables": ["loan_contracts", "accounts"],
-        "grains": {"branch", "governorate", "time"},
+        "grains": {"scalar"},
         "execution_strategy": {
             "execution_strategy": "independent_subqueries",
             "fan_out_safe": True,
             "preaggregation_required": True,
             "allowed_join_patterns": [],
+        },
+        "population": {
+            "numerator": "SUM(lc.principal_amount) from loan_contracts WHERE currency = 'TND'",
+            "denominator": "SUM(a.balance) from accounts WHERE currency = 'TND'",
+            "reporting_currency": "TND",
+            "currency_enforcement": "Hardcoded WHERE currency = 'TND' in both subqueries; "
+                                    "requests with mixed or non-TND currencies are rejected at SQL level",
+            "temporal_source_numerator": "loan_contracts.created_at",
+            "temporal_source_denominator": "accounts.created_at",
+        },
+        "temporal_policy": {
+            "allowed_time_ranges": ["last_30_days", "last_90_days", "last_quarter", "last_year", "ytd"],
+            "default_time_range": "last_quarter",
+            "numerator_business_date": "loan_contracts.created_at",
+            "denominator_business_date": "accounts.created_at",
+            "as_of_semantics": "Both numerator and denominator use independent temporal windows; "
+                               "mismatched windows produce meaningless ratios",
+            "timezone": "UTC (all timestamps stored as UTC in PostgreSQL)",
         },
     },
     "pnb": {
@@ -329,6 +395,7 @@ class QueryPlanBuilder:
         unsupported_reason: Optional[str] = None,
         semantic_metadata_version: str = "",
         schema_snapshot_id: str = "",
+        requested_currency: Optional[str] = None,
     ) -> QueryPlan:
         # ── Fast-fail on known-bad states ─────────────────────────────────
         if unsupported_reason:
@@ -353,6 +420,17 @@ class QueryPlanBuilder:
         if metric_fail:
             return self._fail_plan(
                 metric_fail, semantic_metadata_version, schema_snapshot_id,
+                task, query_text, selected_tables, selected_columns,
+                missing_requested_fields or [],
+            )
+
+        # ── Validate requested_currency for governed metrics ──────────────
+        currency_err = self._validate_metric_currency(
+            validated_metrics, requested_currency,
+        )
+        if currency_err:
+            return self._fail_plan(
+                currency_err, semantic_metadata_version, schema_snapshot_id,
                 task, query_text, selected_tables, selected_columns,
                 missing_requested_fields or [],
             )
@@ -461,11 +539,15 @@ class QueryPlanBuilder:
             if not info:
                 return [], f"Unknown metric '{mid}' — not in approved registry"
 
-            grain_supported = True
             dim_grains = {_DIMENSION_TO_GRAIN.get(d, d) for d in dimensions}
             allowed_grains = info.get("grains", set())
             if dim_grains and not dim_grains.issubset(allowed_grains):
-                grain_supported = False
+                disallowed = dim_grains - allowed_grains
+                return [], (
+                    f"Metric '{mid}' does not support grain(s) {disallowed}. "
+                    f"Allowed grains: {allowed_grains}. "
+                    f"Grouped independent subqueries are not implemented."
+                )
 
             strategy = None
             strategy_raw = info.get("execution_strategy")
@@ -477,10 +559,41 @@ class QueryPlanBuilder:
                 alias=info["alias"],
                 formula=info["formula"],
                 source_tables=info["source_tables"],
-                grain_supported=grain_supported,
+                grain_supported=True,
                 execution_strategy=strategy,
             ))
         return validated, None
+
+    # ── Currency validation ────────────────────────────────────────────────
+
+    # ponytail: per-metric currency table. Add entries as new currency-bound metrics appear.
+    _METRIC_GOVERNED_CURRENCY: Dict[str, str] = {
+        "loan_to_deposit": "TND",
+    }
+
+    def _validate_metric_currency(
+        self, metrics: List[MetricReference], requested_currency: Optional[str],
+    ) -> Optional[str]:
+        """Validate requested_currency against governed currency for ratio metrics.
+
+        Rules for loan_to_deposit (and any metric in _METRIC_GOVERNED_CURRENCY):
+        - No requested_currency: use governed default (TND) silently
+        - Explicit TND: accepted
+        - Explicit non-TND: rejected at planning (not silently answered with TND SQL)
+        - Mixed currencies: rejected at planning
+        """
+        if not requested_currency:
+            return None
+        for m in metrics:
+            governed = self._METRIC_GOVERNED_CURRENCY.get(m.metric_id)
+            if governed and requested_currency.upper() != governed.upper():
+                return (
+                    f"Metric '{m.metric_id}' is governed by reporting currency "
+                    f"'{governed}'. Requested currency '{requested_currency}' is not "
+                    f"supported. Either omit requested_currency (defaults to {governed}) "
+                    f"or request '{governed}' explicitly."
+                )
+        return None
 
     # ── Fan-out detection ─────────────────────────────────────────────────
 
@@ -851,6 +964,7 @@ class QueryPlanBuilder:
         self, filters: List[Dict[str, Any]], tables: List[str],
     ) -> List[FilterSpec]:
         specs = []
+        dropped = []
         for f in filters:
             col = f.get("column", "")
             op = f.get("operator", "=")
@@ -860,8 +974,10 @@ class QueryPlanBuilder:
             if len(parts) == 2:
                 t, c = parts
                 if t not in tables:
+                    dropped.append(col)
                     continue
                 if c not in _VALID_COLUMNS.get(t, set()):
+                    dropped.append(col)
                     continue
             else:
                 found = False
@@ -871,12 +987,18 @@ class QueryPlanBuilder:
                         found = True
                         break
                 if not found:
+                    dropped.append(col)
                     continue
 
             param_name = col.replace(".", "_")
             specs.append(FilterSpec(
                 column=col, operator=op, value=val, param_name=param_name,
             ))
+        if dropped:
+            raise ValueError(
+                f"Unsupported filter column(s): {', '.join(dropped)}. "
+                f"Filters must reference columns from the selected tables: {tables}"
+            )
         return specs
 
     def _build_time_range(self, time_range: Dict[str, Any]) -> TimeRangeSpec:

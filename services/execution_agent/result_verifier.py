@@ -21,6 +21,7 @@ Checks performed:
  12. ordering — result ordering matches expected ordering
 """
 import logging
+from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -91,7 +92,7 @@ class ResultVerifier:
             data, plan_metrics or expected_answer.get("expected_metrics", []),
         )
         checks.append(null_check)
-        if not null_check["passed"]:
+        if not null_check["passed"] and expected_answer.get("empty_result_semantics") != "expect_scalar_null":
             suggestions.append(null_check.get("repair", ""))
 
         # 6. Empty result semantics (Increment 3.1)
@@ -262,7 +263,7 @@ class ResultVerifier:
         for m in metrics:
             if m in first_row:
                 val = first_row[m]
-                if val is not None and not isinstance(val, (int, float)):
+                if val is not None and not isinstance(val, (int, float, Decimal)):
                     non_numeric.append(m)
 
         if non_numeric:
@@ -466,7 +467,7 @@ class ResultVerifier:
                     if not rule.get("nullable", True):
                         violations.append(f"{m}: NULL not allowed")
                     continue
-                if not isinstance(val, (int, float)):
+                if not isinstance(val, (int, float, Decimal)):
                     continue
                 if rule.get("minimum") is not None and val < rule["minimum"]:
                     violations.append(f"{m}: {val} < minimum {rule['minimum']}")
