@@ -10,27 +10,25 @@ from typing import Dict, List, Optional, Tuple, Any, Set
 
 _schema_agent_dir = os.path.dirname(os.path.abspath(__file__))
 
-if "schema_agent_models" not in sys.modules:
-    if _schema_agent_dir not in sys.path:
-        sys.path.insert(0, _schema_agent_dir)
-    _prev_models = sys.modules.pop("models", None)
-    try:
-        import models
-        sys.modules["schema_agent_models"] = models
-    finally:
-        if _prev_models:
-            sys.modules["models"] = _prev_models
-else:
-    models = sys.modules["schema_agent_models"]
+# Ensure the service directory leads sys.path so `import models` resolves to
+# schema_agent/models.py (with JoinPath), not shared/models.py (without it).
+# main.py already does this, but guard here for standalone imports (e.g. tests).
+if _schema_agent_dir not in sys.path:
+    sys.path.insert(0, _schema_agent_dir)
 
-JoinPath = models.JoinPath
-SchemaSelectionResponse = models.SchemaSelectionResponse
+import models as _svc_models  # noqa: E402 — always schema_agent/models.py
 
-# Ensure shared/ is importable (it's always present via services/shared/)
-_services_dir = os.path.dirname(_schema_agent_dir)
-_shared_dir = os.path.join(_services_dir, "shared")
-if _shared_dir not in sys.path:
-    sys.path.insert(0, _shared_dir)
+JoinPath = _svc_models.JoinPath
+SchemaSelectionResponse = _svc_models.SchemaSelectionResponse
+
+# Ensure shared/ is importable.
+# Docker layout: shared/ is copied to /app/shared (sibling of service files).
+# Local dev layout: services/<agent>/ → services/shared/ (one level up).
+_sibling_shared = os.path.join(_schema_agent_dir, "shared")
+_parent_shared = os.path.join(os.path.dirname(_schema_agent_dir), "shared")
+for _shared_dir in (_sibling_shared, _parent_shared):
+    if os.path.isdir(_shared_dir) and _shared_dir not in sys.path:
+        sys.path.insert(0, _shared_dir)
 
 from provenance import Provenance  # type: ignore[import]
 

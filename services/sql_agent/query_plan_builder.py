@@ -12,7 +12,9 @@ Fails safely on: unresolved fields, unsupported grain, missing capability,
 no join path, version mismatch, unknown metrics, fan-out risk.
 """
 import logging
+import os
 import re
+from collections import deque
 from typing import Dict, List, Optional, Set, Tuple, Any
 
 from sql_agent.plan_models import (
@@ -23,6 +25,134 @@ from sql_agent.plan_models import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# ─── Join graph cache (loaded once from join_registry) ────────────────────────
+# ponytail: mirrors entity_resolver pattern — load once, BFS many times
+_join_graph: Dict[str, List[dict]] = {}
+_join_graph_ready: bool = False
+
+SENSITIVE_LOG_TABLES = {
+    "audit_log", "user_activity_log", "compliance_events", "compliance_rules",
+    "compliance_violations", "compliance_cases", "compliance_reviews", "regulatory_reports",
+}
+
+
+def initialize_join_registry(db_conn) -> None:
+    """Load join_registry into memory for BFS join resolution. Idempotent."""
+    global _join_graph, _join_graph_ready
+    if _join_graph_ready:
+        return
+    try:
+        with db_conn.cursor() as cur:
+            cur.execute("SELECT * FROM join_registry")
+            colnames = [desc[0].lower() for desc in cur.description]
+            src_idx = colnames.index("source_table")
+            src_col_idx = colnames.index("source_column")
+            tgt_idx = colnames.index("target_table")
+            tgt_col_idx = colnames.index("target_column")
+            jtype_idx = colnames.index("join_type") if "join_type" in colnames else -1
+            conf_idx = colnames.index("confidence") if "confidence" in colnames else -1
+            bidir_idx = colnames.index("is_bidirectional") if "is_bidirectional" in colnames else -1
+
+            graph: Dict[str, List[dict]] = {}
+            for row in cur.fetchall():
+                from_t = row[src_idx].lower()
+                key = row[src_col_idx]
+                to_t = row[tgt_idx].lower()
+                target_col = row[tgt_col_idx]
+                if conf_idx != -1 and row[conf_idx] is not None and float(row[conf_idx]) < 0.8:
+                    continue
+                jtype = row[jtype_idx] if jtype_idx != -1 and row[jtype_idx] else "LEFT JOIN"
+                cond = f"{from_t}.{key} = {to_t}.{target_col}"
+                is_bidirectional = True
+                if bidir_idx != -1 and row[bidir_idx] is not None:
+                    is_bidirectional = bool(row[bidir_idx])
+                if from_t in SENSITIVE_LOG_TABLES or to_t in SENSITIVE_LOG_TABLES:
+                    is_bidirectional = False
+                graph.setdefault(from_t, []).append(
+                    {"to_table": to_t, "join_key": key, "condition": cond, "join_type": jtype}
+                )
+                if is_bidirectional:
+                    rev_cond = f"{to_t}.{target_col} = {from_t}.{key}"
+                    graph.setdefault(to_t, []).append(
+                        {"to_table": from_t, "join_key": target_col, "condition": rev_cond, "join_type": jtype}
+                    )
+            _join_graph = graph
+        _join_graph_ready = bool(_join_graph)
+        if _join_graph_ready:
+            logger.info("[QueryPlanBuilder] Join registry loaded: %d graph nodes", len(_join_graph))
+    except Exception as exc:
+        logger.warning("[QueryPlanBuilder] Join registry init failed: %s", exc)
+        _join_graph_ready = False
+
+
+def _bfs_join_path(start: str, end: str) -> Optional[List[dict]]:
+    """BFS over _join_graph to find shortest join path. Returns list of edge dicts or None."""
+    if start == end:
+        return []
+    visited = {start}
+    queue: deque = deque([(start, [])])
+    while queue:
+        node, path = queue.popleft()
+        if len(path) >= 3:
+            continue
+        for edge in _join_graph.get(node, []):
+            nxt = edge["to_table"]
+            if nxt in visited:
+                continue
+            step = {**edge, "from_table": node}
+            new_path = path + [step]
+            if nxt == end:
+                return new_path
+            visited.add(nxt)
+            queue.append((nxt, new_path))
+    return None
+
+
+def _auto_resolve_joins(tables: List[str]) -> List[dict]:
+    """Resolve join paths between multiple tables via BFS over join_registry.
+    Sorts tables so BFS primary matches compiler's FROM primary."""
+    if len(tables) < 2 or not _join_graph_ready:
+        return []
+    sorted_tables = sorted(tables)
+    primary = sorted_tables[0]
+    join_paths: List[dict] = []
+    joined = {primary}
+    for target in sorted_tables[1:]:
+        if target in joined:
+            continue
+        path = _bfs_join_path_excluding(primary, target, joined)
+        if path is None:
+            logger.warning("[QueryPlanBuilder] No join path: %s → %s", primary, target)
+            continue
+        for step in path:
+            join_paths.append(step)
+            joined.add(step["to_table"])
+    return join_paths
+
+
+def _bfs_join_path_excluding(start: str, end: str, exclude: Set[str]) -> Optional[List[dict]]:
+    """BFS that avoids already-joined tables as intermediate hops."""
+    if start == end:
+        return []
+    visited = {start} | exclude
+    queue: deque = deque([(start, [])])
+    while queue:
+        node, path = queue.popleft()
+        if len(path) >= 3:
+            continue
+        for edge in _join_graph.get(node, []):
+            nxt = edge["to_table"]
+            if nxt in visited and nxt != end:
+                continue
+            step = {**edge, "from_table": node}
+            new_path = path + [step]
+            if nxt == end:
+                return new_path
+            visited.add(nxt)
+            queue.append((nxt, new_path))
+    return None
 
 
 # ─── Approved metric formulas (static registry) ──────────────────────────────
@@ -436,7 +566,11 @@ class QueryPlanBuilder:
             )
 
         # ── Build joins (before fan-out detection) ────────────────────────
-        join_specs = self._build_joins(join_paths)
+        # ponytail: auto-resolve when caller passes empty joins for multi-table
+        resolved_paths = join_paths
+        if not resolved_paths and len(selected_tables) > 1:
+            resolved_paths = _auto_resolve_joins(selected_tables)
+        join_specs = self._build_joins(resolved_paths)
 
         # ── Detect fan-out risk ───────────────────────────────────────────
         fan_out = self._detect_fan_out(join_specs, selected_tables)

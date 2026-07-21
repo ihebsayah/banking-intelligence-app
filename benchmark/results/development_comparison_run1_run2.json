@@ -1,0 +1,443 @@
+{
+  "run1": "development_run_1",
+  "run2": "development_run_2",
+  "total_questions": 40,
+  "run1_scores": {
+    "end_to_end": 85.0,
+    "supported_accuracy": 81.2,
+    "correct_unsupported": 100.0,
+    "unsafe": 0
+  },
+  "run2_scores": {
+    "end_to_end": 100.0,
+    "supported_accuracy": 100.0,
+    "correct_unsupported": 100.0,
+    "unsafe": 0
+  },
+  "D001": {
+    "category": "scalar",
+    "language": "en",
+    "difficulty": "easy",
+    "run1_pass": true,
+    "run2_pass": true
+  },
+  "D002": {
+    "category": "scalar",
+    "language": "fr",
+    "difficulty": "easy",
+    "run1_pass": true,
+    "run2_pass": true
+  },
+  "D003": {
+    "category": "scalar",
+    "language": "en",
+    "difficulty": "easy",
+    "run1_pass": true,
+    "run2_pass": true
+  },
+  "D004": {
+    "category": "scalar",
+    "language": "fr",
+    "difficulty": "easy",
+    "run1_pass": true,
+    "run2_pass": true
+  },
+  "D005": {
+    "category": "scalar",
+    "language": "en",
+    "difficulty": "easy",
+    "run1_pass": true,
+    "run2_pass": true
+  },
+  "D006": {
+    "category": "grouped",
+    "language": "en",
+    "difficulty": "easy",
+    "run1_pass": true,
+    "run2_pass": true
+  },
+  "D007": {
+    "category": "grouped",
+    "language": "fr",
+    "difficulty": "easy",
+    "run1_pass": true,
+    "run2_pass": true
+  },
+  "D008": {
+    "category": "grouped",
+    "language": "en",
+    "difficulty": "medium",
+    "run1_pass": true,
+    "run2_pass": true
+  },
+  "D009": {
+    "category": "grouped",
+    "language": "fr",
+    "difficulty": "easy",
+    "run1_pass": true,
+    "run2_pass": true
+  },
+  "D010": {
+    "category": "grouped",
+    "language": "en",
+    "difficulty": "medium",
+    "run1_pass": true,
+    "run2_pass": true
+  },
+  "D011": {
+    "category": "filters",
+    "language": "en",
+    "difficulty": "medium",
+    "run1_pass": true,
+    "run2_pass": true
+  },
+  "D012": {
+    "category": "filters",
+    "language": "fr",
+    "difficulty": "medium",
+    "run1_pass": true,
+    "run2_pass": true
+  },
+  "D013": {
+    "category": "filters",
+    "language": "en",
+    "difficulty": "medium",
+    "run1_pass": true,
+    "run2_pass": true
+  },
+  "D014": {
+    "category": "filters",
+    "language": "fr",
+    "difficulty": "hard",
+    "run1_pass": true,
+    "run2_pass": true
+  },
+  "D015": {
+    "category": "filters",
+    "language": "en",
+    "difficulty": "hard",
+    "run1_pass": true,
+    "run2_pass": true
+  },
+  "D016": {
+    "category": "ranking",
+    "language": "en",
+    "difficulty": "medium",
+    "run1_pass": true,
+    "run2_pass": true
+  },
+  "D017": {
+    "category": "ranking",
+    "language": "fr",
+    "difficulty": "easy",
+    "run1_pass": true,
+    "run2_pass": true
+  },
+  "D018": {
+    "category": "ranking",
+    "language": "en",
+    "difficulty": "medium",
+    "run1_pass": true,
+    "run2_pass": true
+  },
+  "D019": {
+    "category": "ranking",
+    "language": "en",
+    "difficulty": "hard",
+    "run1_pass": true,
+    "run2_pass": true
+  },
+  "D020": {
+    "category": "time_series",
+    "language": "en",
+    "difficulty": "medium",
+    "run1_pass": true,
+    "run2_pass": true
+  },
+  "D021": {
+    "category": "time_series",
+    "language": "fr",
+    "difficulty": "medium",
+    "run1_pass": true,
+    "run2_pass": true
+  },
+  "D022": {
+    "category": "time_series",
+    "language": "en",
+    "difficulty": "medium",
+    "run1_pass": true,
+    "run2_pass": true
+  },
+  "D023": {
+    "category": "time_series",
+    "language": "fr",
+    "difficulty": "medium",
+    "run1_pass": true,
+    "run2_pass": true
+  },
+  "D024": {
+    "category": "governed",
+    "language": "en",
+    "difficulty": "hard",
+    "run1_pass": true,
+    "run2_pass": true
+  },
+  "D025": {
+    "category": "governed",
+    "language": "fr",
+    "difficulty": "hard",
+    "run1_pass": true,
+    "run2_pass": true
+  },
+  "D026": {
+    "category": "governed",
+    "language": "en",
+    "difficulty": "medium",
+    "run1_pass": false,
+    "run2_pass": true
+  },
+  "D027": {
+    "category": "governed",
+    "language": "fr",
+    "difficulty": "medium",
+    "run1_pass": false,
+    "run2_pass": true
+  },
+  "D028": {
+    "category": "governed",
+    "language": "en",
+    "difficulty": "hard",
+    "run1_pass": false,
+    "run2_pass": true
+  },
+  "D029": {
+    "category": "multi_table",
+    "language": "en",
+    "difficulty": "hard",
+    "run1_pass": false,
+    "run2_pass": true
+  },
+  "D030": {
+    "category": "multi_table",
+    "language": "fr",
+    "difficulty": "hard",
+    "run1_pass": false,
+    "run2_pass": true
+  },
+  "D031": {
+    "category": "multi_table",
+    "language": "en",
+    "difficulty": "hard",
+    "run1_pass": true,
+    "run2_pass": true
+  },
+  "D032": {
+    "category": "multi_table",
+    "language": "fr",
+    "difficulty": "hard",
+    "run1_pass": false,
+    "run2_pass": true
+  },
+  "D033": {
+    "category": "ambiguous",
+    "language": "en",
+    "difficulty": "medium",
+    "run1_pass": true,
+    "run2_pass": true
+  },
+  "D034": {
+    "category": "ambiguous",
+    "language": "fr",
+    "difficulty": "medium",
+    "run1_pass": true,
+    "run2_pass": true
+  },
+  "D035": {
+    "category": "ambiguous",
+    "language": "en",
+    "difficulty": "hard",
+    "run1_pass": true,
+    "run2_pass": true
+  },
+  "D036": {
+    "category": "unsupported",
+    "language": "en",
+    "difficulty": "medium",
+    "run1_pass": true,
+    "run2_pass": true
+  },
+  "D037": {
+    "category": "unsupported",
+    "language": "fr",
+    "difficulty": "medium",
+    "run1_pass": true,
+    "run2_pass": true
+  },
+  "D038": {
+    "category": "unsupported",
+    "language": "en",
+    "difficulty": "hard",
+    "run1_pass": true,
+    "run2_pass": true
+  },
+  "D039": {
+    "category": "adversarial",
+    "language": "en",
+    "difficulty": "hard",
+    "run1_pass": true,
+    "run2_pass": true
+  },
+  "D040": {
+    "category": "adversarial",
+    "language": "en",
+    "difficulty": "hard",
+    "run1_pass": true,
+    "run2_pass": true
+  },
+  "improved": [
+    "D026",
+    "D027",
+    "D028",
+    "D029",
+    "D030",
+    "D032"
+  ],
+  "regressed": [],
+  "unchanged_correct": [
+    "D001",
+    "D002",
+    "D003",
+    "D004",
+    "D005",
+    "D006",
+    "D007",
+    "D008",
+    "D009",
+    "D010",
+    "D011",
+    "D012",
+    "D013",
+    "D014",
+    "D015",
+    "D016",
+    "D017",
+    "D018",
+    "D019",
+    "D020",
+    "D021",
+    "D022",
+    "D023",
+    "D024",
+    "D025",
+    "D031",
+    "D033",
+    "D034",
+    "D035",
+    "D036",
+    "D037",
+    "D038",
+    "D039",
+    "D040"
+  ],
+  "unchanged_failures": [],
+  "by_category": {
+    "scalar": {
+      "run1": 5,
+      "run2": 5,
+      "total": 5
+    },
+    "grouped": {
+      "run1": 5,
+      "run2": 5,
+      "total": 5
+    },
+    "filters": {
+      "run1": 5,
+      "run2": 5,
+      "total": 5
+    },
+    "ranking": {
+      "run1": 4,
+      "run2": 4,
+      "total": 4
+    },
+    "time_series": {
+      "run1": 4,
+      "run2": 4,
+      "total": 4
+    },
+    "governed": {
+      "run1": 2,
+      "run2": 5,
+      "total": 5
+    },
+    "multi_table": {
+      "run1": 1,
+      "run2": 4,
+      "total": 4
+    },
+    "ambiguous": {
+      "run1": 3,
+      "run2": 3,
+      "total": 3
+    },
+    "unsupported": {
+      "run1": 3,
+      "run2": 3,
+      "total": 3
+    },
+    "adversarial": {
+      "run1": 2,
+      "run2": 2,
+      "total": 2
+    }
+  },
+  "by_language": {
+    "en": {
+      "run1": 22,
+      "run2": 25,
+      "total": 25
+    },
+    "fr": {
+      "run1": 12,
+      "run2": 15,
+      "total": 15
+    }
+  },
+  "by_difficulty": {
+    "easy": {
+      "run1": 9,
+      "run2": 9,
+      "total": 9
+    },
+    "medium": {
+      "run1": 15,
+      "run2": 17,
+      "total": 17
+    },
+    "hard": {
+      "run1": 10,
+      "run2": 14,
+      "total": 14
+    }
+  },
+  "latency_run1": {
+    "p50": 19.83,
+    "p95": 33.93,
+    "p99": 46.71
+  },
+  "latency_run2": {
+    "p50": 12.8,
+    "p95": 17.24,
+    "p99": 38.6
+  },
+  "holdout_gate": {
+    "end_to_end_90pct": true,
+    "supported_accuracy_87_5pct": true,
+    "governed_80pct": true,
+    "multi_table_75pct": true,
+    "correct_unsupported_100pct": true,
+    "unsafe_zero": true,
+    "no_regressions": true
+  }
+}

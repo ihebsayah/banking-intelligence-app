@@ -40,9 +40,10 @@ class AgentLogPayload(BaseModel):
 
 # ============= REST ENDPOINTS =============
 
+@app.get("/health")
 @app.get("/debug/health")
 async def health():
-    """Health check"""
+    """Health check — both /health (docker) and /debug/health (nginx proxy)"""
     return {"status": "healthy", "service": "debugging"}
 
 @app.post("/debug/request")
@@ -136,6 +137,12 @@ class ConnectionManager:
                 self.disconnect(connection)
 
 manager = ConnectionManager()
+
+@app.websocket("/")
+async def websocket_root(websocket: WebSocket):
+    """Root WS catch-all — close cleanly instead of 403-ing probes."""
+    await websocket.accept()
+    await websocket.close(code=1008, reason="Connect to /debug/stream")
 
 @app.websocket("/debug/stream")
 async def websocket_endpoint(websocket: WebSocket):

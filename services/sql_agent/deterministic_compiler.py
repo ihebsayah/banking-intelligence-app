@@ -181,9 +181,20 @@ class DeterministicSQLCompiler:
             else:
                 parts.append(sql_expr)
 
-        # Plain requested columns
-        for col in plan.requested_columns:
-            parts.append(f"{col.table}.{col.name}")
+        # Plain requested columns — skip when aggregate present
+        # ponytail: one guard prevents GROUP BY errors for all aggregate queries
+        has_aggregates = bool(plan.metrics or plan.analytical_expressions)
+        if not has_aggregates:
+            for col in plan.requested_columns:
+                parts.append(f"{col.table}.{col.name}")
+        elif plan.dimensions:
+            dim_set = {(d.table, d.name) for d in plan.dimensions}
+            for col in plan.requested_columns:
+                if (col.table, col.name) in dim_set:
+                    parts.append(f"{col.table}.{col.name}")
+            for d in plan.dimensions:
+                if (d.table, d.name) not in {(c.table, c.name) for c in plan.requested_columns}:
+                    parts.append(f"{d.table}.{d.name}")
 
         # Fallback: if nothing selected, add primary key
         if not parts and plan.selected_tables:

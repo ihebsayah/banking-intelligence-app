@@ -8,8 +8,16 @@ import logging
 import os
 
 import sys
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../shared")))
+# Insert this service's own directory first so `import models` resolves to
+# schema_agent/models.py (which has JoinPath), not shared/models.py (which
+# doesn't). PYTHONPATH=/app:/app/shared means /app/shared can shadow /app
+# unless we explicitly put the service dir at the front of sys.path.
+_svc_dir = os.path.abspath(os.path.dirname(__file__))
+if _svc_dir not in sys.path:
+    sys.path.insert(0, _svc_dir)
+_shared_dir = os.path.join(_svc_dir, "shared")
+if os.path.isdir(_shared_dir) and _shared_dir not in sys.path:
+    sys.path.append(_shared_dir)  # shared goes at the end, never shadows svc
 
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException

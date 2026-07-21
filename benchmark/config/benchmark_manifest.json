@@ -1,0 +1,15 @@
+{
+  "benchmark_version": "v1",
+  "git_commit": "14989e28fdd086a4f6d0444c4b8be16eb1d2465b",
+  "git_tag": "benchmark-v1-holdout-candidate",
+  "semantic_metadata_version": "3.1",
+  "schema_snapshot_id": "5505493603ebdf5a022434738c0638c35f8e3be0334232582bb90322a618fde8",
+  "database": "banking_dev",
+  "postgres_version": "16",
+  "development_run": "development_run_2",
+  "development_score": 1.0,
+  "holdout_candidate_commit": "14989e28fdd086a4f6d0444c4b8be16eb1d2465b",
+  "holdout_candidate_tag": "benchmark-v1-holdout-candidate",
+  "question_count": 200,
+  "benchmark_date": "2026-07-20"
+}

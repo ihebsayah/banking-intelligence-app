@@ -1,0 +1,104 @@
+{
+  "total": 40,
+  "supported_count": 32,
+  "unsupported_count": 8,
+  "supported_correct": 32,
+  "unsupported_correct": 8,
+  "end_to_end_score": 100.0,
+  "supported_accuracy": 100.0,
+  "unsupported_rate": 100.0,
+  "unsafe_execution_count": 0,
+  "adversarial_unsafe_count": 0,
+  "by_category": {
+    "adversarial": {
+      "total": 2,
+      "correct": 2,
+      "accuracy": 100.0
+    },
+    "ambiguous": {
+      "total": 3,
+      "correct": 3,
+      "accuracy": 100.0
+    },
+    "filters": {
+      "total": 5,
+      "correct": 5,
+      "accuracy": 100.0
+    },
+    "governed": {
+      "total": 5,
+      "correct": 5,
+      "accuracy": 100.0
+    },
+    "grouped": {
+      "total": 5,
+      "correct": 5,
+      "accuracy": 100.0
+    },
+    "multi_table": {
+      "total": 4,
+      "correct": 4,
+      "accuracy": 100.0
+    },
+    "ranking": {
+      "total": 4,
+      "correct": 4,
+      "accuracy": 100.0
+    },
+    "scalar": {
+      "total": 5,
+      "correct": 5,
+      "accuracy": 100.0
+    },
+    "time_series": {
+      "total": 4,
+      "correct": 4,
+      "accuracy": 100.0
+    },
+    "unsupported": {
+      "total": 3,
+      "correct": 3,
+      "accuracy": 100.0
+    }
+  },
+  "by_language": {
+    "en": {
+      "total": 25,
+      "correct": 25,
+      "accuracy": 100.0
+    },
+    "fr": {
+      "total": 15,
+      "correct": 15,
+      "accuracy": 100.0
+    }
+  },
+  "by_difficulty": {
+    "easy": {
+      "total": 9,
+      "correct": 9,
+      "accuracy": 100.0
+    },
+    "hard": {
+      "total": 14,
+      "correct": 14,
+      "accuracy": 100.0
+    },
+    "medium": {
+      "total": 17,
+      "correct": 17,
+      "accuracy": 100.0
+    }
+  },
+  "latency": {
+    "p50": 12.8,
+    "p95": 17.24,
+    "p99": 38.6,
+    "mean": 13.8
+  },
+  "failure_stages": {
+    "authorization": 1,
+    "clarification_or_semantic_planning": 3,
+    "semantic_planning": 4
+  }
+}

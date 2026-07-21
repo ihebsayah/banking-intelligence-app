@@ -1,0 +1,295 @@
+[
+  {
+    "question_id": "D001",
+    "comparison_mode": "exact_scalar",
+    "expected_value": 2000,
+    "tolerance": 0
+  },
+  {
+    "question_id": "D002",
+    "comparison_mode": "exact_scalar",
+    "expected_value": 4571,
+    "tolerance": 0
+  },
+  {
+    "question_id": "D003",
+    "comparison_mode": "exact_scalar",
+    "expected_value": 1500,
+    "tolerance": 0
+  },
+  {
+    "question_id": "D004",
+    "comparison_mode": "exact_scalar",
+    "expected_value": 1711,
+    "tolerance": 0
+  },
+  {
+    "question_id": "D005",
+    "comparison_mode": "exact_scalar",
+    "expected_value": 30,
+    "tolerance": 0
+  },
+  {
+    "question_id": "D006",
+    "comparison_mode": "unordered_rows",
+    "expected_rows": [
+      {
+        "segment": "PART_MASS",
+        "customer_count": 1420
+      },
+      {
+        "segment": "PART_PREM",
+        "customer_count": 371
+      },
+      {
+        "segment": "CORP_SME",
+        "customer_count": 163
+      },
+      {
+        "segment": "CORP_LARGE",
+        "customer_count": 46
+      }
+    ]
+  },
+  {
+    "question_id": "D007",
+    "comparison_mode": "unordered_rows",
+    "expected_rows": [
+      {
+        "status": "active",
+        "account_count": 4571
+      },
+      {
+        "status": "dormant",
+        "account_count": 322
+      },
+      {
+        "status": "closed",
+        "account_count": 107
+      }
+    ]
+  },
+  {
+    "question_id": "D008",
+    "comparison_mode": "row_count",
+    "expected_row_count": 30,
+    "tolerance": 0
+  },
+  {
+    "question_id": "D009",
+    "comparison_mode": "unordered_rows",
+    "expected_rows": [
+      {
+        "loan_type": "pro",
+        "loan_count": 404
+      },
+      {
+        "loan_type": "immo",
+        "loan_count": 384
+      },
+      {
+        "loan_type": "auto",
+        "loan_count": 379
+      },
+      {
+        "loan_type": "conso",
+        "loan_count": 333
+      }
+    ]
+  },
+  {
+    "question_id": "D010",
+    "comparison_mode": "unordered_rows",
+    "expected_rows": [
+      {
+        "status": "compl\u00e9t\u00e9",
+        "transaction_count": 50000
+      }
+    ]
+  },
+  {
+    "question_id": "D011",
+    "comparison_mode": "exact_scalar",
+    "expected_value": 1420,
+    "tolerance": 0
+  },
+  {
+    "question_id": "D012",
+    "comparison_mode": "exact_scalar",
+    "expected_value": 6,
+    "tolerance": 0
+  },
+  {
+    "question_id": "D013",
+    "comparison_mode": "exact_scalar",
+    "expected_value": 300,
+    "tolerance": 0
+  },
+  {
+    "question_id": "D014",
+    "comparison_mode": "exact_scalar",
+    "expected_value": 82,
+    "tolerance": 0
+  },
+  {
+    "question_id": "D015",
+    "comparison_mode": "row_count",
+    "expected_row_count": 100
+  },
+  {
+    "question_id": "D016",
+    "comparison_mode": "row_count",
+    "expected_row_count": 5,
+    "tolerance": 0
+  },
+  {
+    "question_id": "D017",
+    "comparison_mode": "row_count",
+    "expected_row_count": 3,
+    "tolerance": 0
+  },
+  {
+    "question_id": "D018",
+    "comparison_mode": "row_count",
+    "expected_row_count": 4,
+    "tolerance": 0
+  },
+  {
+    "question_id": "D019",
+    "comparison_mode": "row_count",
+    "expected_row_count": 5,
+    "tolerance": 0
+  },
+  {
+    "question_id": "D020",
+    "comparison_mode": "row_count",
+    "expected_row_count": 100,
+    "tolerance": 0
+  },
+  {
+    "question_id": "D021",
+    "comparison_mode": "row_count",
+    "expected_row_count": 100,
+    "tolerance": 0
+  },
+  {
+    "question_id": "D022",
+    "comparison_mode": "row_count",
+    "expected_row_count": 100,
+    "tolerance": 0
+  },
+  {
+    "question_id": "D023",
+    "comparison_mode": "row_count",
+    "expected_row_count": 100,
+    "tolerance": 0
+  },
+  {
+    "question_id": "D024",
+    "comparison_mode": "numeric_tolerance",
+    "expected_value": "2606.31",
+    "tolerance": "0.1",
+    "numeric_type": "decimal"
+  },
+  {
+    "question_id": "D025",
+    "comparison_mode": "numeric_tolerance",
+    "expected_value": "3.73",
+    "tolerance": "0.01",
+    "numeric_type": "decimal"
+  },
+  {
+    "question_id": "D026",
+    "comparison_mode": "numeric_tolerance",
+    "expected_value": "259478774.45",
+    "tolerance": "1",
+    "numeric_type": "decimal"
+  },
+  {
+    "question_id": "D027",
+    "comparison_mode": "numeric_tolerance",
+    "expected_value": "12409234.21",
+    "tolerance": "1",
+    "numeric_type": "decimal"
+  },
+  {
+    "question_id": "D028",
+    "comparison_mode": "numeric_tolerance",
+    "expected_value": "0.4763",
+    "tolerance": "0.001",
+    "numeric_type": "decimal"
+  },
+  {
+    "question_id": "D029",
+    "comparison_mode": "exact_scalar",
+    "expected_value": 5416,
+    "tolerance": 0
+  },
+  {
+    "question_id": "D030",
+    "comparison_mode": "row_count",
+    "expected_value": 10,
+    "tolerance": 0,
+    "expected_row_count": 100
+  },
+  {
+    "question_id": "D031",
+    "comparison_mode": "row_count",
+    "expected_row_count": 9,
+    "tolerance": 0
+  },
+  {
+    "question_id": "D032",
+    "comparison_mode": "row_count",
+    "expected_row_count": 9,
+    "tolerance": 0
+  },
+  {
+    "question_id": "D033",
+    "comparison_mode": "unsupported",
+    "expected_value": null,
+    "tolerance": null
+  },
+  {
+    "question_id": "D034",
+    "comparison_mode": "unsupported",
+    "expected_value": null,
+    "tolerance": null
+  },
+  {
+    "question_id": "D035",
+    "comparison_mode": "unsupported",
+    "expected_value": null,
+    "tolerance": null
+  },
+  {
+    "question_id": "D036",
+    "comparison_mode": "unsupported",
+    "expected_value": null,
+    "tolerance": null
+  },
+  {
+    "question_id": "D037",
+    "comparison_mode": "unsupported",
+    "expected_value": null,
+    "tolerance": null
+  },
+  {
+    "question_id": "D038",
+    "comparison_mode": "unsupported",
+    "expected_value": null,
+    "tolerance": null
+  },
+  {
+    "question_id": "D039",
+    "comparison_mode": "unsupported",
+    "expected_value": null,
+    "tolerance": null
+  },
+  {
+    "question_id": "D040",
+    "comparison_mode": "unsupported",
+    "expected_value": null,
+    "tolerance": null
+  }
+]

@@ -1,0 +1,22 @@
+NAME                          STATUS                  PORTS
+banking_api_gateway           Up 12 hours (healthy)   0.0.0.0:8000->8000/tcp, [::]:8000->8000/tcp
+banking_audit_agent           Up 12 hours (healthy)   0.0.0.0:8008->8008/tcp, [::]:8008->8008/tcp
+banking_audit_enhancement     Up 12 hours (healthy)   0.0.0.0:8012->8012/tcp, [::]:8012->8012/tcp
+banking_compliance_agent      Up 12 hours (healthy)   0.0.0.0:8011->8011/tcp, [::]:8011->8011/tcp
+banking_debug_service         Up 11 hours (healthy)   0.0.0.0:8099->8099/tcp, [::]:8099->8099/tcp
+banking_embedding_service     Up 12 hours (healthy)   0.0.0.0:8009->8009/tcp, [::]:8009->8009/tcp
+banking_entity_resolution     Up 12 hours (healthy)   0.0.0.0:8004->8004/tcp, [::]:8004->8004/tcp
+banking_execution_agent       Up 12 hours (healthy)   0.0.0.0:8007->8007/tcp, [::]:8007->8007/tcp
+banking_frontend              Up 11 hours (healthy)   0.0.0.0:3000->80/tcp, [::]:3000->80/tcp
+banking_insights_agent        Up 12 hours (healthy)   0.0.0.0:8013->8013/tcp, [::]:8013->8013/tcp
+banking_intent_agent          Up 12 hours (healthy)   0.0.0.0:8002->8002/tcp, [::]:8002->8002/tcp
+banking_ollama                Up 12 hours (healthy)   0.0.0.0:11434->11434/tcp, [::]:11434->11434/tcp
+banking_orchestrator          Up 12 hours (healthy)   0.0.0.0:8001->8001/tcp, [::]:8001->8001/tcp
+banking_postgres_audit        Up 12 hours (healthy)   0.0.0.0:5433->5432/tcp, [::]:5433->5432/tcp
+banking_postgres_embeddings   Up 12 hours (healthy)   0.0.0.0:5434->5432/tcp, [::]:5434->5432/tcp
+banking_postgres_main         Up 12 hours (healthy)   0.0.0.0:5432->5432/tcp, [::]:5432->5432/tcp
+banking_redis                 Up 12 hours (healthy)   0.0.0.0:6379->6379/tcp, [::]:6379->6379/tcp
+banking_schema_agent          Up 12 hours (healthy)   0.0.0.0:8003->8003/tcp, [::]:8003->8003/tcp
+banking_secrets               Up 12 hours (healthy)   0.0.0.0:8010->8010/tcp, [::]:8010->8010/tcp
+banking_sql_agent             Up 12 hours (healthy)   0.0.0.0:8005->8005/tcp, [::]:8005->8005/tcp
+banking_validation_agent      Up 12 hours (healthy)   0.0.0.0:8006->8006/tcp, [::]:8006->8006/tcp

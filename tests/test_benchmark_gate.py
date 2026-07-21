@@ -33,11 +33,28 @@ from sql_agent.plan_models import (
     GrainSpec, ColumnRef, ExpectedAnswer, FilterSpec,
     PlanRepairRequest, ExecutionRetryPolicy, ExecutionTrace,
 )
-from sql_agent.query_plan_builder import QueryPlanBuilder, APPROVED_METRICS
+from sql_agent.query_plan_builder import QueryPlanBuilder, APPROVED_METRICS, initialize_join_registry
 from sql_agent.deterministic_compiler import (
     DeterministicSQLCompiler, _INDEPENDENT_SUBQUERY_REGISTRY,
 )
 from result_verifier import ResultVerifier
+
+import psycopg2
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _init_join_registry():
+    """One-time init of join registry for multi-table join resolution tests."""
+    PG_DSN = os.environ.get(
+        "PG_TEST_DSN",
+        "host=localhost port=5432 dbname=banking_dev user=banking_user password=securepass123",
+    )
+    try:
+        conn = psycopg2.connect(PG_DSN)
+        initialize_join_registry(conn)
+        conn.close()
+    except Exception:
+        pass  # tests requiring joins will fail with clear assertion
 from pg_repair_engine import PGRepairEngine, SQLMechanicalRepair
 from plan_refiner import PlanRefiner
 from shared.query_signing import sign_query_payload, verify_query_signature
@@ -1375,3 +1392,102 @@ class TestChangedSQLReplanning:
         # but does not add unauthorized new tables
         req = PlanRepairRequest(**recovery["plan_repair"])
         assert "remove" in req.requested_change.lower() or "missing" in req.requested_change.lower()
+
+
+class TestAggregateColumnFiltering:
+    """Regression: scalar aggregates must NOT include non-aggregated columns."""
+
+    def test_sum_scalar_excludes_non_aggregated_columns(self):
+        plan, cq = _build_and_compile(
+            task="aggregation",
+            query_text="total principal amount",
+            selected_tables=["loan_contracts"],
+            selected_columns={"loan_contracts": ["loan_id", "principal_amount", "status"]},
+            metrics=[],
+            filters_structured=[{"column": "loan_contracts.status", "operator": "=", "value": "actif"}],
+            requested_fields=["total", "principal_amount"],
+        )
+        sql = cq.sql
+        assert "loan_id" not in sql.split("FROM")[0]
+        assert sql.strip().startswith("SELECT SUM(loan_contracts.principal_amount)")
+
+    def test_avg_scalar_excludes_non_aggregated_columns(self):
+        plan, cq = _build_and_compile(
+            task="aggregation",
+            query_text="average risk score",
+            selected_tables=["customers"],
+            selected_columns={"customers": ["customer_id", "risk_score"]},
+            metrics=[],
+            filters_structured=[{"column": "customers.kyc_verified", "operator": "=", "value": True}],
+            requested_fields=["average", "risk_score"],
+        )
+        sql = cq.sql
+        assert "customer_id" not in sql.split("FROM")[0]
+        assert sql.strip().startswith("SELECT AVG(customers.risk_score)")
+
+    def test_aggregate_with_dimension_keeps_dim_columns(self):
+        plan, cq = _build_and_compile(
+            task="aggregation",
+            query_text="total balance by branch",
+            selected_tables=["accounts"],
+            selected_columns={"accounts": ["account_id", "balance", "branch_id"]},
+            metrics=[],
+            dimensions=["accounts.branch_id"],
+            filters_structured=[],
+            requested_fields=["total", "balance"],
+        )
+        sql = cq.sql
+        assert "branch_id" in sql.split("FROM")[0]
+        assert "GROUP BY" in sql
+
+
+class TestJoinAutoResolution:
+    """Regression: multi-table queries must auto-resolve joins via join_registry."""
+
+    def test_multi_table_two_tables_auto_joins(self):
+        plan, cq = _build_and_compile(
+            task="aggregation",
+            query_text="accounts by branch city",
+            selected_tables=["accounts", "branches"],
+            selected_columns={"accounts": ["account_id"], "branches": ["city"]},
+            metrics=[],
+            dimensions=[],
+            filters_structured=[],
+            requested_fields=[],
+        )
+        assert len(plan.joins) > 0
+        assert "JOIN" in cq.sql.upper()
+        assert "branches" in cq.sql.split("FROM")[1].split("WHERE")[0].split("GROUP")[0]
+
+    def test_multi_table_three_tables_auto_joins(self):
+        plan, cq = _build_and_compile(
+            task="aggregation",
+            query_text="customers with loans and accounts",
+            selected_tables=["customers", "accounts", "loan_contracts"],
+            selected_columns={
+                "customers": ["customer_id"],
+                "accounts": ["customer_id"],
+                "loan_contracts": ["customer_id"],
+            },
+            metrics=[],
+            dimensions=[],
+            filters_structured=[],
+            requested_fields=[],
+        )
+        assert len(plan.joins) >= 2
+        assert "JOIN" in cq.sql.upper()
+
+    def test_multi_table_with_dimension_auto_joins(self):
+        plan, cq = _build_and_compile(
+            task="aggregation",
+            query_text="count by branch city",
+            selected_tables=["accounts", "branches"],
+            selected_columns={"accounts": ["account_id"], "branches": ["city"]},
+            metrics=[],
+            dimensions=["branches.city"],
+            filters_structured=[],
+            requested_fields=[],
+        )
+        assert len(plan.joins) > 0
+        assert "JOIN" in cq.sql.upper()
+        assert "branches.city" in cq.sql.split("FROM")[0]

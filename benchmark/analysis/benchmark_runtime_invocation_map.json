@@ -1,0 +1,70 @@
+{
+  "classification": "C",
+  "classification_label": "Core NL-to-SQL Component Benchmark",
+  "runner_files": [
+    "benchmark/run_development.py",
+    "benchmark/run_smoke.py"
+  ],
+  "invoked_modules": [
+    {
+      "module": "QueryPlanBuilder",
+      "file": "services/sql_agent/query_plan_builder.py",
+      "role": "Builds QueryPlan from pre-resolved structured intent"
+    },
+    {
+      "module": "initialize_join_registry",
+      "file": "services/sql_agent/query_plan_builder.py",
+      "role": "Loads join graph from PostgreSQL"
+    },
+    {
+      "module": "DeterministicSQLCompiler",
+      "file": "services/sql_agent/deterministic_compiler.py",
+      "role": "Compiles QueryPlan to parameterized SQL"
+    },
+    {
+      "module": "ResultVerifier",
+      "file": "services/execution_agent/result_verifier.py",
+      "role": "Verifies query results against expected types"
+    },
+    {
+      "module": "PGRepairEngine",
+      "file": "services/execution_agent/pg_repair_engine.py",
+      "role": "Diagnoses PG errors (instantiated, safety-only)"
+    }
+  ],
+  "bypassed_components": [
+    "API Gateway (services/api_gateway/)",
+    "Orchestrator (services/orchestrator/)",
+    "Intent Agent (services/intent_agent/)",
+    "Schema Agent (services/schema_agent/)",
+    "Compliance Agent",
+    "Audit Agent",
+    "Entity Resolution Agent (services/entity_resolution_agent/)",
+    "Execution Agent full flow (services/execution_agent/main.py)"
+  ],
+  "pipeline_stages": [
+    "QueryPlanBuilder.build()",
+    "DeterministicSQLCompiler.compile()",
+    "Unsafe SQL pattern check",
+    "psycopg2.execute()",
+    "ResultVerifier.verify()",
+    "Ground truth comparison"
+  ],
+  "proves": [
+    "Core NL-to-SQL deterministic pipeline correctness",
+    "Aggregate handling",
+    "Multi-table join resolution",
+    "Governed metric compilation",
+    "Unsafe SQL blocking",
+    "Result verification logic"
+  ],
+  "does_not_prove": [
+    "Intent Agent free-text classification",
+    "Schema Agent table/column selection from NL",
+    "Orchestrator multi-agent coordination",
+    "HTTP endpoint end-to-end flow",
+    "Compliance Agent full-stack blocking",
+    "Concurrent load behavior"
+  ],
+  "holdout_implication": "A holdout on this benchmark validates the core NL-to-SQL engine strength, not the complete deployed agent system."
+}
