@@ -1,0 +1,1242 @@
+{
+  "benchmark": "integration_v1",
+  "timestamp": "2026-07-22T02:18:43.857709+00:00",
+  "gateway_url": "http://localhost:8000",
+  "scoring": {
+    "total_questions": 30,
+    "correct": 23,
+    "accuracy": 76.7,
+    "by_category": {
+      "business_en": {
+        "total": 5,
+        "correct": 5
+      },
+      "business_fr": {
+        "total": 5,
+        "correct": 5
+      },
+      "governed": {
+        "total": 4,
+        "correct": 4
+      },
+      "multi_table": {
+        "total": 4,
+        "correct": 4
+      },
+      "ranking": {
+        "total": 3,
+        "correct": 3
+      },
+      "ambiguous": {
+        "total": 2,
+        "correct": 0
+      },
+      "unsupported": {
+        "total": 2,
+        "correct": 0
+      },
+      "adversarial": {
+        "total": 2,
+        "correct": 0
+      },
+      "authorization": {
+        "total": 1,
+        "correct": 1
+      },
+      "malformed": {
+        "total": 1,
+        "correct": 0
+      },
+      "api_validation": {
+        "total": 1,
+        "correct": 1
+      }
+    },
+    "safety_checks": {
+      "unsupported_no_execute": false,
+      "adversarial_no_execute": false,
+      "unauthorized_blocked": true,
+      "malformed_rejected": false
+    },
+    "latency": {
+      "p50": 110856.99,
+      "p95": 180763.54,
+      "p99": 180836.04,
+      "mean": 92771.64
+    }
+  },
+  "agent_matrix": [
+    {
+      "agent": "intent",
+      "invoked_count": 27,
+      "success_count": 27,
+      "error_count": 0,
+      "never_invoked_questions": [
+        "I028",
+        "I029",
+        "I030"
+      ],
+      "evidence": [
+        {
+          "question_id": "I001",
+          "status": "success",
+          "response_hash": "51e84ad183ae"
+        },
+        {
+          "question_id": "I002",
+          "status": "success",
+          "response_hash": "559a65143686"
+        },
+        {
+          "question_id": "I003",
+          "status": "success",
+          "response_hash": "034ab54409bb"
+        },
+        {
+          "question_id": "I004",
+          "status": "success",
+          "response_hash": "2ca2a3c4c3af"
+        },
+        {
+          "question_id": "I005",
+          "status": "success",
+          "response_hash": "585a66ed4a4f"
+        },
+        {
+          "question_id": "I006",
+          "status": "success",
+          "response_hash": "52c22719bf76"
+        },
+        {
+          "question_id": "I007",
+          "status": "success",
+          "response_hash": "e35ee2d0e3dc"
+        },
+        {
+          "question_id": "I008",
+          "status": "success",
+          "response_hash": "f445f5b424e7"
+        },
+        {
+          "question_id": "I009",
+          "status": "success",
+          "response_hash": "b401ea1f6587"
+        },
+        {
+          "question_id": "I010",
+          "status": "success",
+          "response_hash": "e2a438ac317f"
+        },
+        {
+          "question_id": "I011",
+          "status": "success",
+          "response_hash": "a71914ba656c"
+        },
+        {
+          "question_id": "I012",
+          "status": "success",
+          "response_hash": "f0ce2972d626"
+        },
+        {
+          "question_id": "I013",
+          "status": "success",
+          "response_hash": "2a322f184f54"
+        },
+        {
+          "question_id": "I014",
+          "status": "success",
+          "response_hash": "a63a9759aafe"
+        },
+        {
+          "question_id": "I015",
+          "status": "success",
+          "response_hash": "a48c0272dc18"
+        },
+        {
+          "question_id": "I016",
+          "status": "success",
+          "response_hash": "984f6a790dfc"
+        },
+        {
+          "question_id": "I017",
+          "status": "success",
+          "response_hash": "7b7dfd689d2d"
+        },
+        {
+          "question_id": "I018",
+          "status": "success",
+          "response_hash": "ea61ab57a7c8"
+        },
+        {
+          "question_id": "I019",
+          "status": "success",
+          "response_hash": "93153b1efa44"
+        },
+        {
+          "question_id": "I020",
+          "status": "success",
+          "response_hash": "0ec7cfd25e7e"
+        },
+        {
+          "question_id": "I021",
+          "status": "success",
+          "response_hash": "5dec235466ab"
+        },
+        {
+          "question_id": "I022",
+          "status": "success",
+          "response_hash": "778604192551"
+        },
+        {
+          "question_id": "I023",
+          "status": "success",
+          "response_hash": "52c22719bf76"
+        },
+        {
+          "question_id": "I024",
+          "status": "success",
+          "response_hash": "fe4651f9436e"
+        },
+        {
+          "question_id": "I025",
+          "status": "success",
+          "response_hash": "9026627d4ba6"
+        },
+        {
+          "question_id": "I026",
+          "status": "success",
+          "response_hash": "29521020261a"
+        },
+        {
+          "question_id": "I027",
+          "status": "success",
+          "response_hash": "8cd6eb943577"
+        }
+      ]
+    },
+    {
+      "agent": "schema",
+      "invoked_count": 27,
+      "success_count": 27,
+      "error_count": 0,
+      "never_invoked_questions": [
+        "I028",
+        "I029",
+        "I030"
+      ],
+      "evidence": [
+        {
+          "question_id": "I001",
+          "status": "success",
+          "response_hash": "b361c4e52e46"
+        },
+        {
+          "question_id": "I002",
+          "status": "success",
+          "response_hash": "5e2b3ab5ff23"
+        },
+        {
+          "question_id": "I003",
+          "status": "success",
+          "response_hash": "a630077789e7"
+        },
+        {
+          "question_id": "I004",
+          "status": "success",
+          "response_hash": "5e2b3ab5ff23"
+        },
+        {
+          "question_id": "I005",
+          "status": "success",
+          "response_hash": "741d50c1a206"
+        },
+        {
+          "question_id": "I006",
+          "status": "success",
+          "response_hash": "1fe6da587c4c"
+        },
+        {
+          "question_id": "I007",
+          "status": "success",
+          "response_hash": "1fe6da587c4c"
+        },
+        {
+          "question_id": "I008",
+          "status": "success",
+          "response_hash": "b361c4e52e46"
+        },
+        {
+          "question_id": "I009",
+          "status": "success",
+          "response_hash": "1fe6da587c4c"
+        },
+        {
+          "question_id": "I010",
+          "status": "success",
+          "response_hash": "1fe6da587c4c"
+        },
+        {
+          "question_id": "I011",
+          "status": "success",
+          "response_hash": "5e2b3ab5ff23"
+        },
+        {
+          "question_id": "I012",
+          "status": "success",
+          "response_hash": "b84810047286"
+        },
+        {
+          "question_id": "I013",
+          "status": "success",
+          "response_hash": "1fe6da587c4c"
+        },
+        {
+          "question_id": "I014",
+          "status": "success",
+          "response_hash": "1fe6da587c4c"
+        },
+        {
+          "question_id": "I015",
+          "status": "success",
+          "response_hash": "7f09a11ff974"
+        },
+        {
+          "question_id": "I016",
+          "status": "success",
+          "response_hash": "8eabb635eed0"
+        },
+        {
+          "question_id": "I017",
+          "status": "success",
+          "response_hash": "1fe6da587c4c"
+        },
+        {
+          "question_id": "I018",
+          "status": "success",
+          "response_hash": "a630077789e7"
+        },
+        {
+          "question_id": "I019",
+          "status": "success",
+          "response_hash": "b361c4e52e46"
+        },
+        {
+          "question_id": "I020",
+          "status": "success",
+          "response_hash": "741d50c1a206"
+        },
+        {
+          "question_id": "I021",
+          "status": "success",
+          "response_hash": "741d50c1a206"
+        },
+        {
+          "question_id": "I022",
+          "status": "success",
+          "response_hash": "1fe6da587c4c"
+        },
+        {
+          "question_id": "I023",
+          "status": "success",
+          "response_hash": "1fe6da587c4c"
+        },
+        {
+          "question_id": "I024",
+          "status": "success",
+          "response_hash": "f4d14fe5f893"
+        },
+        {
+          "question_id": "I025",
+          "status": "success",
+          "response_hash": "1fe6da587c4c"
+        },
+        {
+          "question_id": "I026",
+          "status": "success",
+          "response_hash": "f4d14fe5f893"
+        },
+        {
+          "question_id": "I027",
+          "status": "success",
+          "response_hash": "b361c4e52e46"
+        }
+      ]
+    },
+    {
+      "agent": "entity_resolution",
+      "invoked_count": 27,
+      "success_count": 27,
+      "error_count": 0,
+      "never_invoked_questions": [
+        "I028",
+        "I029",
+        "I030"
+      ],
+      "evidence": [
+        {
+          "question_id": "I001",
+          "status": "success",
+          "response_hash": "552c55cbec71"
+        },
+        {
+          "question_id": "I002",
+          "status": "success",
+          "response_hash": "3282b4199cc3"
+        },
+        {
+          "question_id": "I003",
+          "status": "success",
+          "response_hash": "4f8460bc2b56"
+        },
+        {
+          "question_id": "I004",
+          "status": "success",
+          "response_hash": "3282b4199cc3"
+        },
+        {
+          "question_id": "I005",
+          "status": "success",
+          "response_hash": "00be5b43042e"
+        },
+        {
+          "question_id": "I006",
+          "status": "success",
+          "response_hash": "c56854b93951"
+        },
+        {
+          "question_id": "I007",
+          "status": "success",
+          "response_hash": "c56854b93951"
+        },
+        {
+          "question_id": "I008",
+          "status": "success",
+          "response_hash": "552c55cbec71"
+        },
+        {
+          "question_id": "I009",
+          "status": "success",
+          "response_hash": "c56854b93951"
+        },
+        {
+          "question_id": "I010",
+          "status": "success",
+          "response_hash": "c56854b93951"
+        },
+        {
+          "question_id": "I011",
+          "status": "success",
+          "response_hash": "3282b4199cc3"
+        },
+        {
+          "question_id": "I012",
+          "status": "success",
+          "response_hash": "e054094afedb"
+        },
+        {
+          "question_id": "I013",
+          "status": "success",
+          "response_hash": "c56854b93951"
+        },
+        {
+          "question_id": "I014",
+          "status": "success",
+          "response_hash": "c56854b93951"
+        },
+        {
+          "question_id": "I015",
+          "status": "success",
+          "response_hash": "eee71497b6ac"
+        },
+        {
+          "question_id": "I016",
+          "status": "success",
+          "response_hash": "659be50b682d"
+        },
+        {
+          "question_id": "I017",
+          "status": "success",
+          "response_hash": "c56854b93951"
+        },
+        {
+          "question_id": "I018",
+          "status": "success",
+          "response_hash": "4f8460bc2b56"
+        },
+        {
+          "question_id": "I019",
+          "status": "success",
+          "response_hash": "552c55cbec71"
+        },
+        {
+          "question_id": "I020",
+          "status": "success",
+          "response_hash": "00be5b43042e"
+        },
+        {
+          "question_id": "I021",
+          "status": "success",
+          "response_hash": "00be5b43042e"
+        },
+        {
+          "question_id": "I022",
+          "status": "success",
+          "response_hash": "c56854b93951"
+        },
+        {
+          "question_id": "I023",
+          "status": "success",
+          "response_hash": "c56854b93951"
+        },
+        {
+          "question_id": "I024",
+          "status": "success",
+          "response_hash": "5a4268e604e9"
+        },
+        {
+          "question_id": "I025",
+          "status": "success",
+          "response_hash": "c56854b93951"
+        },
+        {
+          "question_id": "I026",
+          "status": "success",
+          "response_hash": "5a4268e604e9"
+        },
+        {
+          "question_id": "I027",
+          "status": "success",
+          "response_hash": "552c55cbec71"
+        }
+      ]
+    },
+    {
+      "agent": "sql",
+      "invoked_count": 27,
+      "success_count": 27,
+      "error_count": 0,
+      "never_invoked_questions": [
+        "I028",
+        "I029",
+        "I030"
+      ],
+      "evidence": [
+        {
+          "question_id": "I001",
+          "status": "success",
+          "response_hash": "c3f04d9416fe"
+        },
+        {
+          "question_id": "I002",
+          "status": "success",
+          "response_hash": "86bb13430cd8"
+        },
+        {
+          "question_id": "I003",
+          "status": "success",
+          "response_hash": "a06da869da6a"
+        },
+        {
+          "question_id": "I004",
+          "status": "success",
+          "response_hash": "86bb13430cd8"
+        },
+        {
+          "question_id": "I005",
+          "status": "success",
+          "response_hash": "69e21c4133a8"
+        },
+        {
+          "question_id": "I006",
+          "status": "success",
+          "response_hash": "a143a7650d0e"
+        },
+        {
+          "question_id": "I007",
+          "status": "success",
+          "response_hash": "a143a7650d0e"
+        },
+        {
+          "question_id": "I008",
+          "status": "success",
+          "response_hash": "c3f04d9416fe"
+        },
+        {
+          "question_id": "I009",
+          "status": "success",
+          "response_hash": "a143a7650d0e"
+        },
+        {
+          "question_id": "I010",
+          "status": "success",
+          "response_hash": "a143a7650d0e"
+        },
+        {
+          "question_id": "I011",
+          "status": "success",
+          "response_hash": "86bb13430cd8"
+        },
+        {
+          "question_id": "I012",
+          "status": "success",
+          "response_hash": "2bbfaad9e241"
+        },
+        {
+          "question_id": "I013",
+          "status": "success",
+          "response_hash": "a143a7650d0e"
+        },
+        {
+          "question_id": "I014",
+          "status": "success",
+          "response_hash": "a143a7650d0e"
+        },
+        {
+          "question_id": "I015",
+          "status": "success",
+          "response_hash": "4055960491ad"
+        },
+        {
+          "question_id": "I016",
+          "status": "success",
+          "response_hash": "0b4981d117f4"
+        },
+        {
+          "question_id": "I017",
+          "status": "success",
+          "response_hash": "a143a7650d0e"
+        },
+        {
+          "question_id": "I018",
+          "status": "success",
+          "response_hash": "eb897c9d4499"
+        },
+        {
+          "question_id": "I019",
+          "status": "success",
+          "response_hash": "dcb2c2a0584f"
+        },
+        {
+          "question_id": "I020",
+          "status": "success",
+          "response_hash": "69e21c4133a8"
+        },
+        {
+          "question_id": "I021",
+          "status": "success",
+          "response_hash": "69e21c4133a8"
+        },
+        {
+          "question_id": "I022",
+          "status": "success",
+          "response_hash": "a143a7650d0e"
+        },
+        {
+          "question_id": "I023",
+          "status": "success",
+          "response_hash": "a143a7650d0e"
+        },
+        {
+          "question_id": "I024",
+          "status": "success",
+          "response_hash": "e4fbe6475b13"
+        },
+        {
+          "question_id": "I025",
+          "status": "success",
+          "response_hash": "a143a7650d0e"
+        },
+        {
+          "question_id": "I026",
+          "status": "success",
+          "response_hash": "e4fbe6475b13"
+        },
+        {
+          "question_id": "I027",
+          "status": "success",
+          "response_hash": "c3f04d9416fe"
+        }
+      ]
+    },
+    {
+      "agent": "validation",
+      "invoked_count": 27,
+      "success_count": 27,
+      "error_count": 0,
+      "never_invoked_questions": [
+        "I028",
+        "I029",
+        "I030"
+      ],
+      "evidence": [
+        {
+          "question_id": "I001",
+          "status": "success",
+          "response_hash": "b39e5235b9f6"
+        },
+        {
+          "question_id": "I002",
+          "status": "success",
+          "response_hash": "cdbc3347ff4d"
+        },
+        {
+          "question_id": "I003",
+          "status": "success",
+          "response_hash": "12d00a853567"
+        },
+        {
+          "question_id": "I004",
+          "status": "success",
+          "response_hash": "8d85aa05af3e"
+        },
+        {
+          "question_id": "I005",
+          "status": "success",
+          "response_hash": "64bdc77e0736"
+        },
+        {
+          "question_id": "I006",
+          "status": "success",
+          "response_hash": "a85d8e8b220e"
+        },
+        {
+          "question_id": "I007",
+          "status": "success",
+          "response_hash": "c98eee598c9f"
+        },
+        {
+          "question_id": "I008",
+          "status": "success",
+          "response_hash": "5e55fc3c844e"
+        },
+        {
+          "question_id": "I009",
+          "status": "success",
+          "response_hash": "5aeb9a85e282"
+        },
+        {
+          "question_id": "I010",
+          "status": "success",
+          "response_hash": "bdde56b4d3ac"
+        },
+        {
+          "question_id": "I011",
+          "status": "success",
+          "response_hash": "e781974b825a"
+        },
+        {
+          "question_id": "I012",
+          "status": "success",
+          "response_hash": "377f58a45722"
+        },
+        {
+          "question_id": "I013",
+          "status": "success",
+          "response_hash": "000ab6ad21d1"
+        },
+        {
+          "question_id": "I014",
+          "status": "success",
+          "response_hash": "449925a1ea73"
+        },
+        {
+          "question_id": "I015",
+          "status": "success",
+          "response_hash": "67ec5751f8f4"
+        },
+        {
+          "question_id": "I016",
+          "status": "success",
+          "response_hash": "95a86686a3ea"
+        },
+        {
+          "question_id": "I017",
+          "status": "success",
+          "response_hash": "7a555e9f7993"
+        },
+        {
+          "question_id": "I018",
+          "status": "success",
+          "response_hash": "edea2e3effac"
+        },
+        {
+          "question_id": "I019",
+          "status": "success",
+          "response_hash": "81cad7f0d564"
+        },
+        {
+          "question_id": "I020",
+          "status": "success",
+          "response_hash": "9b5892ee47ab"
+        },
+        {
+          "question_id": "I021",
+          "status": "success",
+          "response_hash": "7b0c3d6b84dd"
+        },
+        {
+          "question_id": "I022",
+          "status": "success",
+          "response_hash": "f7ac1e45e6f0"
+        },
+        {
+          "question_id": "I023",
+          "status": "success",
+          "response_hash": "ac0efc0fe42f"
+        },
+        {
+          "question_id": "I024",
+          "status": "success",
+          "response_hash": "c614c249234e"
+        },
+        {
+          "question_id": "I025",
+          "status": "success",
+          "response_hash": "496e5424d9af"
+        },
+        {
+          "question_id": "I026",
+          "status": "success",
+          "response_hash": "24be7d73fae4"
+        },
+        {
+          "question_id": "I027",
+          "status": "success",
+          "response_hash": "5f12132848a6"
+        }
+      ]
+    },
+    {
+      "agent": "compliance",
+      "invoked_count": 27,
+      "success_count": 27,
+      "error_count": 0,
+      "never_invoked_questions": [
+        "I028",
+        "I029",
+        "I030"
+      ],
+      "evidence": [
+        {
+          "question_id": "I001",
+          "status": "success",
+          "response_hash": "4972e88b141d"
+        },
+        {
+          "question_id": "I002",
+          "status": "success",
+          "response_hash": "4972e88b141d"
+        },
+        {
+          "question_id": "I003",
+          "status": "success",
+          "response_hash": "4972e88b141d"
+        },
+        {
+          "question_id": "I004",
+          "status": "success",
+          "response_hash": "4972e88b141d"
+        },
+        {
+          "question_id": "I005",
+          "status": "success",
+          "response_hash": "4972e88b141d"
+        },
+        {
+          "question_id": "I006",
+          "status": "success",
+          "response_hash": "4972e88b141d"
+        },
+        {
+          "question_id": "I007",
+          "status": "success",
+          "response_hash": "4972e88b141d"
+        },
+        {
+          "question_id": "I008",
+          "status": "success",
+          "response_hash": "4972e88b141d"
+        },
+        {
+          "question_id": "I009",
+          "status": "success",
+          "response_hash": "4972e88b141d"
+        },
+        {
+          "question_id": "I010",
+          "status": "success",
+          "response_hash": "4972e88b141d"
+        },
+        {
+          "question_id": "I011",
+          "status": "success",
+          "response_hash": "4972e88b141d"
+        },
+        {
+          "question_id": "I012",
+          "status": "success",
+          "response_hash": "4972e88b141d"
+        },
+        {
+          "question_id": "I013",
+          "status": "success",
+          "response_hash": "4972e88b141d"
+        },
+        {
+          "question_id": "I014",
+          "status": "success",
+          "response_hash": "4972e88b141d"
+        },
+        {
+          "question_id": "I015",
+          "status": "success",
+          "response_hash": "4972e88b141d"
+        },
+        {
+          "question_id": "I016",
+          "status": "success",
+          "response_hash": "4972e88b141d"
+        },
+        {
+          "question_id": "I017",
+          "status": "success",
+          "response_hash": "4972e88b141d"
+        },
+        {
+          "question_id": "I018",
+          "status": "success",
+          "response_hash": "4972e88b141d"
+        },
+        {
+          "question_id": "I019",
+          "status": "success",
+          "response_hash": "4972e88b141d"
+        },
+        {
+          "question_id": "I020",
+          "status": "success",
+          "response_hash": "4972e88b141d"
+        },
+        {
+          "question_id": "I021",
+          "status": "success",
+          "response_hash": "4972e88b141d"
+        },
+        {
+          "question_id": "I022",
+          "status": "success",
+          "response_hash": "4972e88b141d"
+        },
+        {
+          "question_id": "I023",
+          "status": "success",
+          "response_hash": "4972e88b141d"
+        },
+        {
+          "question_id": "I024",
+          "status": "success",
+          "response_hash": "4972e88b141d"
+        },
+        {
+          "question_id": "I025",
+          "status": "success",
+          "response_hash": "4972e88b141d"
+        },
+        {
+          "question_id": "I026",
+          "status": "success",
+          "response_hash": "4972e88b141d"
+        },
+        {
+          "question_id": "I027",
+          "status": "success",
+          "response_hash": "4972e88b141d"
+        }
+      ]
+    },
+    {
+      "agent": "execution",
+      "invoked_count": 28,
+      "success_count": 27,
+      "error_count": 1,
+      "never_invoked_questions": [
+        "I028",
+        "I030"
+      ],
+      "evidence": [
+        {
+          "question_id": "I001",
+          "status": "success",
+          "response_hash": "01e171984340"
+        },
+        {
+          "question_id": "I002",
+          "status": "success",
+          "response_hash": "1d4211e6a050"
+        },
+        {
+          "question_id": "I003",
+          "status": "success",
+          "response_hash": "8e8f2df81756"
+        },
+        {
+          "question_id": "I004",
+          "status": "success",
+          "response_hash": "1d4211e6a050"
+        },
+        {
+          "question_id": "I005",
+          "status": "success",
+          "response_hash": "041f39a3ad11"
+        },
+        {
+          "question_id": "I006",
+          "status": "success",
+          "response_hash": "01e171984340"
+        },
+        {
+          "question_id": "I007",
+          "status": "success",
+          "response_hash": "01e171984340"
+        },
+        {
+          "question_id": "I008",
+          "status": "success",
+          "response_hash": "01e171984340"
+        },
+        {
+          "question_id": "I009",
+          "status": "success",
+          "response_hash": "01e171984340"
+        },
+        {
+          "question_id": "I010",
+          "status": "success",
+          "response_hash": "01e171984340"
+        },
+        {
+          "question_id": "I011",
+          "status": "success",
+          "response_hash": "1d4211e6a050"
+        },
+        {
+          "question_id": "I012",
+          "status": "success",
+          "response_hash": "01e171984340"
+        },
+        {
+          "question_id": "I013",
+          "status": "success",
+          "response_hash": "01e171984340"
+        },
+        {
+          "question_id": "I014",
+          "status": "success",
+          "response_hash": "01e171984340"
+        },
+        {
+          "question_id": "I015",
+          "status": "success",
+          "response_hash": "8e8f2df81756"
+        },
+        {
+          "question_id": "I016",
+          "status": "success",
+          "response_hash": "8e8f2df81756"
+        },
+        {
+          "question_id": "I017",
+          "status": "success",
+          "response_hash": "01e171984340"
+        },
+        {
+          "question_id": "I018",
+          "status": "success",
+          "response_hash": "8e8f2df81756"
+        },
+        {
+          "question_id": "I019",
+          "status": "success",
+          "response_hash": "e4212e576545"
+        },
+        {
+          "question_id": "I020",
+          "status": "success",
+          "response_hash": "041f39a3ad11"
+        },
+        {
+          "question_id": "I021",
+          "status": "success",
+          "response_hash": "041f39a3ad11"
+        },
+        {
+          "question_id": "I022",
+          "status": "success",
+          "response_hash": "01e171984340"
+        },
+        {
+          "question_id": "I023",
+          "status": "success",
+          "response_hash": "01e171984340"
+        },
+        {
+          "question_id": "I024",
+          "status": "success",
+          "response_hash": "01e171984340"
+        },
+        {
+          "question_id": "I025",
+          "status": "success",
+          "response_hash": "01e171984340"
+        },
+        {
+          "question_id": "I026",
+          "status": "success",
+          "response_hash": "01e171984340"
+        },
+        {
+          "question_id": "I027",
+          "status": "success",
+          "response_hash": "01e171984340"
+        },
+        {
+          "question_id": "I029",
+          "status": "error",
+          "response_hash": "8e8f2df81756"
+        }
+      ]
+    },
+    {
+      "agent": "insights",
+      "invoked_count": 23,
+      "success_count": 23,
+      "error_count": 0,
+      "never_invoked_questions": [
+        "I003",
+        "I015",
+        "I016",
+        "I018",
+        "I028",
+        "I029",
+        "I030"
+      ],
+      "evidence": [
+        {
+          "question_id": "I001",
+          "status": "success",
+          "response_hash": "3abc27b9cf5e"
+        },
+        {
+          "question_id": "I002",
+          "status": "success",
+          "response_hash": "5e79bd2feda1"
+        },
+        {
+          "question_id": "I004",
+          "status": "success",
+          "response_hash": "c5427f871046"
+        },
+        {
+          "question_id": "I005",
+          "status": "success",
+          "response_hash": "43759db4b2e0"
+        },
+        {
+          "question_id": "I006",
+          "status": "success",
+          "response_hash": "6e3effff7d16"
+        },
+        {
+          "question_id": "I007",
+          "status": "success",
+          "response_hash": "afe043b3d47a"
+        },
+        {
+          "question_id": "I008",
+          "status": "success",
+          "response_hash": "d6ba04e23ede"
+        },
+        {
+          "question_id": "I009",
+          "status": "success",
+          "response_hash": "db6a77cecb10"
+        },
+        {
+          "question_id": "I010",
+          "status": "success",
+          "response_hash": "5effd2611c29"
+        },
+        {
+          "question_id": "I011",
+          "status": "success",
+          "response_hash": "2abed65dced3"
+        },
+        {
+          "question_id": "I012",
+          "status": "success",
+          "response_hash": "df5c1192d5dc"
+        },
+        {
+          "question_id": "I013",
+          "status": "success",
+          "response_hash": "129ea9596844"
+        },
+        {
+          "question_id": "I014",
+          "status": "success",
+          "response_hash": "ed3c5ab645fc"
+        },
+        {
+          "question_id": "I017",
+          "status": "success",
+          "response_hash": "a288858fa0d2"
+        },
+        {
+          "question_id": "I019",
+          "status": "success",
+          "response_hash": "cc3b2e437d5f"
+        },
+        {
+          "question_id": "I020",
+          "status": "success",
+          "response_hash": "786cbf0a0766"
+        },
+        {
+          "question_id": "I021",
+          "status": "success",
+          "response_hash": "b02ba7fa4a7a"
+        },
+        {
+          "question_id": "I022",
+          "status": "success",
+          "response_hash": "2c81ee244cb0"
+        },
+        {
+          "question_id": "I023",
+          "status": "success",
+          "response_hash": "3863bbc8604c"
+        },
+        {
+          "question_id": "I024",
+          "status": "success",
+          "response_hash": "a1099ddbe5ae"
+        },
+        {
+          "question_id": "I025",
+          "status": "success",
+          "response_hash": "a8668da9b2ef"
+        },
+        {
+          "question_id": "I026",
+          "status": "success",
+          "response_hash": "7b9300c9566e"
+        },
+        {
+          "question_id": "I027",
+          "status": "success",
+          "response_hash": "42569185ee8e"
+        }
+      ]
+    }
+  ]
+}

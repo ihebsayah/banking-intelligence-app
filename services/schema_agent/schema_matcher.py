@@ -10,22 +10,14 @@ from typing import Dict, List, Optional, Tuple, Any
 import sys
 import os
 
-if "schema_agent_models" not in sys.modules:
-    _schema_agent_dir = os.path.dirname(os.path.abspath(__file__))
-    if _schema_agent_dir not in sys.path:
-        sys.path.insert(0, _schema_agent_dir)
-    _prev_models = sys.modules.pop("models", None)
-    try:
-        import models
-        sys.modules["schema_agent_models"] = models
-    finally:
-        if _prev_models:
-            sys.modules["models"] = _prev_models
-else:
-    models = sys.modules["schema_agent_models"]
+_schema_agent_dir = os.path.dirname(os.path.abspath(__file__))
+if _schema_agent_dir not in sys.path:
+    sys.path.insert(0, _schema_agent_dir)
 
-JoinPath = models.JoinPath
-SchemaSelectionResponse = models.SchemaSelectionResponse
+import models as _svc_models  # noqa: E402 — always schema_agent/models.py
+
+JoinPath = _svc_models.JoinPath
+SchemaSelectionResponse = _svc_models.SchemaSelectionResponse
 
 logger = logging.getLogger(__name__)
 

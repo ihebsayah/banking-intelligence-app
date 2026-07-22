@@ -220,13 +220,15 @@ class ComplianceChecker:
         """
         Return False if the condition denies this role.
         Condition example: "user_role NOT IN (compliance, admin)"
+        means: deny roles that are NOT in the list — i.e., only
+        compliance and admin are allowed.
         """
         role = user_role.lower()
         if "NOT IN" in condition or "not in" in condition:
             try:
                 inner = condition.split("(")[1].split(")")[0]
-                denied_roles = [r.strip().lower() for r in inner.split(",")]
-                return role not in denied_roles
+                allowed_roles = [r.strip().lower() for r in inner.split(",")]
+                return role in allowed_roles
             except IndexError:
                 pass
         return True
