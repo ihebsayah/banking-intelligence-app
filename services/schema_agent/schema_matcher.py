@@ -49,7 +49,7 @@ DOMAIN_TO_TABLES: Dict[str, List[str]] = {
     "operational_analysis": ["transactions"],
     "geographic_analysis":  ["branches"],
     "product_analysis":     ["products"],
-    "compliance_analysis":  ["risk_flags", "kyc_status", "audit_logs"],
+    "compliance_analysis":  ["risk_flags", "kyc_cases", "compliance_violations"],
     "transaction_analysis": ["transactions"],
     "branch_analysis":      ["branches"],
 }

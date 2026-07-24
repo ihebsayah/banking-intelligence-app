@@ -1,0 +1,12 @@
+{
+  "original_blind_result": "135/160 (84.4%)",
+  "post_remediation_result": "160/160 (100%)",
+  "note": "The original blind holdout per-question execution data was not preserved as separate files. The 25 failures (H007, H014, H020, H022, H024, H025, H030, H054, H059, H061, H065, H066, H068, H070, H071, H074, H075, H078, H079, H084, H085, H153, H156, H157, H158) are documented in benchmark/analysis/holdout_failure_matrix.json.",
+  "failure_forensics": "benchmark/analysis/HOLDOUT_FAILURE_FORENSICS.md",
+  "original_25_failures": ["H007", "H014", "H020", "H022", "H024", "H025", "H030", "H054", "H059", "H061", "H065", "H066", "H068", "H070", "H071", "H074", "H075", "H078", "H079", "H084", "H085", "H153", "H156", "H157", "H158"],
+  "root_causes": {
+    "JOIN_REGISTRY_ERROR": {"count": 19, "percentage": "76%"},
+    "GATE_FALSE_REJECTION": {"count": 4, "percentage": "16%"},
+    "SEMANTIC_REGISTRY_GAP": {"count": 2, "percentage": "8%"}
+  }
+}

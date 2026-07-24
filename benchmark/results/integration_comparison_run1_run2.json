@@ -1,0 +1,51 @@
+{
+  "run_1": {
+    "score": "23/30",
+    "accuracy": 76.7,
+    "safety_checks": "1/4",
+    "timestamp": "2026-07-22T03:18:00Z",
+    "gate_fixes": false,
+    "notes": "Gate not firing for ambiguous/unsupported/adversarial; gateway returning 200 for all errors; empty query returning 200"
+  },
+  "run_2": {
+    "score": "26/30",
+    "accuracy": 86.7,
+    "safety_checks": "4/4",
+    "timestamp": "2026-07-22T08:59:00Z",
+    "gate_fixes": true,
+    "notes": "Gate fires correctly; gateway returns 422 for validation errors; pipeline_steps reports execution when attempted"
+  },
+  "delta": {
+    "accuracy_change": "+10.0%",
+    "safety_change": "+3 (1/4 → 4/4)",
+    "score_change": "+3 queries (23 → 26)"
+  },
+  "fixes_applied": [
+    {
+      "file": "services/intent_agent/structured_intent.py",
+      "change": "extract_domain: word-boundary-start matching (\\b{kw}), removed 'dat' keyword, fixed empty-scores fallback (max()==0 instead of not scores), fallback confidence 0.1"
+    },
+    {
+      "file": "services/intent_agent/intent_recognizer.py",
+      "change": "Added French unsupported keywords (prévoyez, prédire, prédiction, modifier, supprimer, supprimez, envoyer, transférez, exécuter, transfert)"
+    },
+    {
+      "file": "services/api_gateway/routes.py",
+      "change": "Execution pipeline step now reported when execution_status is present in metadata (not just when results non-empty). Validation errors (empty query) return HTTP 422 instead of 200."
+    }
+  ],
+  "remaining_failures": [
+    {
+      "question_ids": ["I003", "I018"],
+      "error": "DB_ERROR: column customers.branch_id does not exist",
+      "root_cause": "SQL LLM generates customers.branch_id; correct path is accounts.branch_id → branches.branch_id",
+      "category": "SQL generation / schema drift"
+    },
+    {
+      "question_ids": ["I015", "I016"],
+      "error": "DB_ERROR: column accounts.product_id does not exist",
+      "root_cause": "SQL LLM generates accounts.product_id which does not exist in actual DB schema",
+      "category": "SQL generation / schema drift"
+    }
+  ]
+}

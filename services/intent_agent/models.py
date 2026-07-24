@@ -40,4 +40,9 @@ class IntentResponse(BaseModel):
     clarification_question: Optional[str] = None
     requested_fields: Optional[List[str]] = None
 
+    # Request-gating fields
+    supported_capability: Optional[bool] = True
+    risk_level: Optional[str] = "safe"  # safe | suspicious | adversarial
+    rejection_reason: Optional[str] = None
+
 

@@ -32,7 +32,7 @@ DOMAINS = {
         "checking", "savings", "solde", "available balance", "disponible"
     ],
     "deposits": [
-        "deposit", "dépôt", "épargne", "dat", "term deposit", "placements", "avoirs"
+        "deposit", "dépôt", "épargne", "term deposit", "placements", "avoirs"
     ],
     "transactions": [
         "transaction", "payment", "transfer", "wire", "virement", "transfert",
@@ -40,18 +40,21 @@ DOMAINS = {
     ],
     "loans": [
         "loan", "loans", "credit", "prêt", "crédit", "mensualité", "outstanding",
-        "remboursement", "outstanding_balance", "outstanding balance", "principal", "échéancier"
+        "remboursement", "outstanding_balance", "outstanding balance", "principal", "échéancier",
+        "loan_contracts", "installment", "disbursement", "maturity"
     ],
     "credit risk": [
         "npl", "provision", "default", "défaut", "créances douteuses", "sinistre",
-        "risques", "risk", "credit risk", "delinquent", "classées", "souffrance"
+        "risques", "risk", "credit risk", "delinquent", "classées", "souffrance",
+        "non_performing", "npl_amount", "provision_amount"
     ],
     "liquidity": [
         "liquidity", "liquidité", "lcr", "nsfr", "tresorerie", "trésorerie", "ldr"
     ],
     "profitability": [
         "revenue", "income", "profit", "fee", "commission", "margin", "yield",
-        "pnb", "net banking income", "roe", "roa", "rentabilité", "bénéfice", "produit net bancaire"
+        "pnb", "net banking income", "roe", "roa", "rentabilité", "bénéfice", "produit net bancaire",
+        "fee_income", "interest_income"
     ],
     "kyc": [
         "kyc", "know your customer", "connaissance client", "diligence", "verified",
@@ -59,11 +62,13 @@ DOMAINS = {
     ],
     "aml": [
         "aml", "anti-money laundering", "blanchiment", "ctaf", "suspicious",
-        "fraude", "lbc", "lcb-ft", "soupçon"
+        "fraude", "lbc", "lcb-ft", "soupçon", "suspicious_activity_reports"
     ],
     "compliance": [
         "compliance", "regulatory", "audit", "requirement", "control", "policy",
-        "conformité", "réglementaire", "sox", "gdpr", "constats"
+        "conformité", "réglementaire", "sox", "gdpr", "constats",
+        "compliance_violations", "compliance_cases", "audit_findings",
+        "sanctions", "screening", "sanctions screening", "ofac", "lists"
     ],
     "branch and regional performance": [
         "branch", "region", "state", "city", "location", "succursale",
@@ -79,7 +84,8 @@ TASKS = {
     ],
     "aggregation": [
         "total", "sum", "average", "avg", "count", "somme", "moyenne", "nombre",
-        "totaliser", "calculer", "montant total", "compter", "quantité"
+        "totaliser", "calculer", "montant total", "compter", "quantité", "how many",
+        "combien"
     ],
     "comparison": [
         "compare", "versus", "vs", "comparer", "comparaison", "différence", "comparé"
@@ -113,14 +119,16 @@ TASKS = {
 # Dimension names mapping to canonical tables/columns
 DIMENSION_KEYWORDS = {
     "customers.segment": ["segment", "segment clientèle", "client segment"],
-    "branches.governorate": ["governorate", "gouvernorat"],
+    "branches.region_id": ["region", "région", "region_id"],
     "branches.name": ["branch", "agence", "branch name", "nom d'agence"],
-    "branches.region": ["region", "région"],
     "branches.state": ["state", "état"],
     "branches.city": ["city", "ville"],
     "accounts.account_type": ["account type", "type de compte", "account_type"],
     "customers.kyc_verified": ["kyc status", "statut kyc", "kyc_verified", "vérifié kyc"],
-    "customers.risk_score": ["risk level", "niveau de risque", "risk_score"]
+    "customers.risk_score": ["risk level", "niveau de risque", "risk_score"],
+    "loan_contracts.loan_type": ["loan type", "type de prêt", "loan_type"],
+    "loan_contracts.status": ["loan status", "statut prêt", "loan_status"],
+    "fee_income.fee_type": ["fee type", "type de frais", "fee_type"],
 }
 
 # Authoritative KPIs (metric_id -> Synonyms)
@@ -188,17 +196,17 @@ def extract_domain(query: str) -> tuple:
     scores = {dom: 0 for dom in DOMAINS}
     for dom, kws in DOMAINS.items():
         for kw in kws:
-            if kw in q_lower:
+            if re.search(rf'\b{re.escape(kw)}', q_lower):
                 scores[dom] += 2 if len(kw.split()) > 1 else 1
     
-    if not scores:
-        return "customer", 0.5  # default fallback
+    if max(scores.values()) == 0:
+        return "customer", 0.1  # low confidence — no domain keywords matched
     
     sorted_doms = sorted(scores.items(), key=lambda x: x[1], reverse=True)
     primary_domain = sorted_doms[0][0]
     score_val = sorted_doms[0][1]
     
-    confidence = min(0.5 + 0.1 * score_val, 0.99)
+    confidence = min(0.2 + 0.1 * score_val, 0.99)
     return primary_domain, confidence
 
 def extract_metrics(query: str) -> tuple:
@@ -243,7 +251,7 @@ def extract_task(query: str, detected_metrics: List[str] = []) -> tuple:
             
     # Listing verbs without aggregation keywords -> detail_listing
     if has_listing_verb and not has_agg_verb and not has_metric:
-        return "detail_listing", 0.95
+        return "detail_listing", 0.7
         
     # Fallback to standard keyword matching
     scores = {task: 0 for task in TASKS}
@@ -354,17 +362,28 @@ def detect_ambiguities_structured(query: str, domain: str) -> List[str]:
     q_lower = query.lower()
     amb = []
     if "risk" in q_lower or "risque" in q_lower:
-        if not any(w in q_lower for w in ["npl", "classées", "douteuses", "aml", "alertes", "score"]):
+        if not any(w in q_lower for w in ["npl", "classées", "douteuses", "aml", "alertes", "score", "kyc", "scoring"]):
             amb.append("ambiguous_risk_metric")
     if "revenue" in q_lower or "revenu" in q_lower or "pnb" in q_lower:
-        if not any(w in q_lower for w in ["commission", "intérêt", "pnb", "produit net bancaire", "bénéfice"]):
+        if not any(w in q_lower for w in ["commission", "intérêt", "pnb", "produit net bancaire", "bénéfice", "fee", "frais"]):
             amb.append("ambiguous_revenue_metric")
     if "compte" in q_lower or "account" in q_lower:
-        if not any(w in q_lower for w in ["courant", "épargne", "checking", "savings"]):
+        if not any(w in q_lower for w in ["courant", "épargne", "checking", "savings", "type", "solde", "balance"]):
             amb.append("ambiguous_account_type")
             
     # Generic short query check
-    if len(q_lower.split()) < 4:
+    # Exempt queries with explicit aggregation verbs or ranking verbs
+    has_explicit_task = any(w in q_lower for w in [
+        "total", "sum", "average", "count", "how many", "combien",
+        "top", "bottom", "rank", "classez", "plus", "moins",
+        "by", "par", "selon", "per", "pour", "les", "the", "which", "quel",
+        "list", "show", "afficher", "lister", "donner",
+        "customers", "clients", "branches", "accounts", "comptes",
+        "transactions", "loans", "prêts", "kyc", "aml", "compliance",
+    ])
+    if len(q_lower.split()) < 4 and not has_explicit_task:
+        amb.append("too_short_query")
+    elif len(q_lower.split()) < 6 and not has_explicit_task:
         amb.append("too_short_query")
         
     return amb
@@ -404,7 +423,23 @@ def build_structured_intent(query: str) -> Dict[str, Any]:
         filters.append({"column": "customers.risk_score", "operator": ">=", "value": 0.7})
         
     ambiguities = detect_ambiguities_structured(query, domain)
-    requires_clarification = len(ambiguities) > 0 and not ("kyc_verified = false" in q_lower or "average balance" in q_lower or "top 10" in q_lower)
+    # Exempt queries with explicit task verbs or domain keywords from requiring clarification
+    has_explicit_intent = (
+        "kyc_verified = false" in q_lower
+        or "average balance" in q_lower
+        or "top 10" in q_lower
+        or "how many" in q_lower
+        or "combien" in q_lower
+        or any(w in q_lower for w in [
+            "list", "show", "afficher", "lister", "donner",
+            "total", "sum", "count", "average", "somme", "moyenne", "nombre",
+            "top", "bottom", "rank", "classez",
+            "customers", "clients", "branches", "accounts", "comptes",
+            "transactions", "loans", "prêts", "kyc", "aml", "compliance",
+            "products", "produits", "employees", "employés",
+        ])
+    )
+    requires_clarification = len(ambiguities) > 0 and not has_explicit_intent
     
     clarification_question = None
     if requires_clarification:

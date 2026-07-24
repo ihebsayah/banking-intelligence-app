@@ -44,62 +44,77 @@ SEMANTIC_LAYER_ENABLED = os.getenv("SEMANTIC_LAYER_ENABLED", "false").lower() ==
 # Any column not in this set is rejected / ignored.
 # ──────────────────────────────────────────────────────────────────────────────
 ALLOWED_COLUMNS: Dict[str, List[str]] = {
-    # Core tables (original)
     "customers": [
         "customer_id", "name", "email", "phone",
-        "kyc_verified", "risk_score", "segment", "created_at",
-        # Extended Tunisian fields
-        "cin_number", "nationality", "date_of_birth", "gender",
-        "address", "city", "governorate", "postal_code", "country",
-        "customer_type", "occupation", "annual_income",
-        "onboarding_date", "relationship_manager_id",
+        "kyc_verified", "risk_score", "segment", "created_at", "updated_at",
     ],
     "accounts": [
         "account_id", "customer_id", "account_type",
         "balance", "available_balance", "currency", "status", "branch_id",
         "created_at",
-        # Extended
-        "account_number", "iban", "product_id", "interest_rate",
-        "overdraft_limit", "last_transaction_date", "account_officer_id",
     ],
     "transactions": [
         "transaction_id", "account_id", "customer_id", "amount",
         "transaction_type", "status", "description", "transaction_date",
         "created_at",
-        # Extended
-        "reference_number", "channel", "currency", "exchange_rate",
-        "fee_amount", "beneficiary_account", "beneficiary_bank", "direction",
     ],
     "branches": [
         "branch_id", "name", "state", "city", "manager_id", "created_at",
-        # Extended
-        "branch_code", "address", "region", "governorate", "phone",
-        "is_active", "opened_date",
+        "region_id",
     ],
     "products": [
         "product_id", "name", "category", "description", "created_at",
-        # Extended
-        "product_code", "interest_rate", "min_balance", "max_balance",
-        "fee_structure", "currency", "is_active", "launch_date",
     ],
     "risk_flags": [
         "id", "customer_id", "flag_type", "severity",
         "description", "resolved", "created_at",
-        # Extended
         "account_id", "transaction_id", "resolved_at", "resolved_by",
         "risk_category", "source",
     ],
-    # Tunisian banking extended tables
-    "loans": [
+    "loan_contracts": [
         "loan_id", "customer_id", "account_id", "branch_id",
-        "loan_type", "principal_amount", "outstanding_balance",
-        "interest_rate", "monthly_payment", "start_date", "end_date",
-        "status", "collateral_type", "collateral_value",
-        "credit_score", "created_at",
+        "loan_product_id", "loan_type", "principal_amount", "currency",
+        "interest_rate", "term_months", "installment_amount",
+        "disbursement_date", "maturity_date", "status",
+        "outstanding_balance", "days_past_due", "created_at", "updated_at",
+    ],
+    "non_performing_loans": [
+        "npl_id", "loan_id", "npl_amount", "npl_date",
+        "classification", "recovery_status", "created_at",
+    ],
+    "provisions": [
+        "provision_id", "loan_id", "provision_date", "provision_amount",
+        "calculation_model", "created_at",
     ],
     "employees": [
-        "employee_id", "branch_id", "name", "role", "email",
-        "hire_date", "is_active", "department", "salary_band", "created_at",
+        "employee_id", "branch_id", "department_id", "first_name", "last_name",
+        "title", "role", "hire_date", "is_active", "email",
+        "supervisor_id", "created_at",
+    ],
+    "fee_income": [
+        "fee_income_id", "customer_id", "account_id", "fee_type",
+        "amount", "value_date", "created_at",
+    ],
+    "interest_income": [
+        "interest_id", "loan_id", "customer_id", "amount", "period",
+    ],
+    "kyc_cases": [
+        "kyc_case_id", "customer_id", "case_type", "status",
+        "risk_level", "assigned_to", "opened_at", "closed_at",
+        "due_date", "notes", "created_at",
+    ],
+    "aml_alerts": [
+        "alert_id", "customer_id", "transaction_id", "severity", "status",
+        "created_at",
+    ],
+    "compliance_violations": [
+        "id", "query_id", "user_id", "violation_type", "severity",
+        "description", "regulation", "detected_at", "status",
+        "resolution_notes",
+    ],
+    "suspicious_activity_reports": [
+        "sar_id", "alert_id", "customer_id", "report_date", "status",
+        "ctaf_reference", "description", "created_at",
     ],
     "cards": [
         "card_id", "account_id", "customer_id", "card_type",
@@ -111,21 +126,19 @@ ALLOWED_COLUMNS: Dict[str, List[str]] = {
         "bank_name", "account_number", "iban", "currency",
         "country", "is_active", "created_at",
     ],
-    "fees": [
-        "fee_id", "account_id", "transaction_id", "fee_type",
-        "amount", "currency", "fee_date", "status", "created_at",
+    "audit_findings": [
+        "finding_id", "title", "description", "source", "severity",
+        "status", "target_resolution_date", "resolved_date", "created_at",
     ],
-    "exchange_rates": [
-        "rate_id", "from_currency", "to_currency", "rate",
-        "effective_date", "source", "created_at",
-    ],
-    "compliance_checks": [
-        "check_id", "customer_id", "check_type", "result",
-        "checked_at", "checked_by", "notes", "next_review_date", "created_at",
-    ],
-    "audit_log": [
-        "log_id", "user_id", "action", "table_name", "record_id",
+    "user_activity_log": [
+        "id", "user_id", "action", "table_name", "record_id",
         "old_values", "new_values", "ip_address", "created_at",
+    ],
+    "compliance_cases": [
+        "id", "user_id", "status", "description", "created_at",
+    ],
+    "regulatory_reports": [
+        "id", "report_type", "status", "created_at",
     ],
 }
 
@@ -276,14 +289,15 @@ def _validate_column(table: str, column: str) -> bool:
     return column in ALLOWED_COLUMNS.get(table, []) or column == "*"
 
 
-def _safe_columns(tables: List[str], requested: Optional[List[str]]) -> str:
+def _safe_columns(tables: List[str], requested: Optional[List[str]], primary_table: Optional[str] = None) -> str:
     """
     Build SELECT column list — validated against whitelist.
     Falls back to <primary_table>.* if nothing valid.
     """
+    fallback_table = primary_table or (tables[0] if tables else None)
     if not requested:
-        if tables:
-            return f"{tables[0]}.*"
+        if fallback_table:
+            return f"{fallback_table}.*"
         return "*"
 
     valid_cols = []
@@ -301,7 +315,7 @@ def _safe_columns(tables: List[str], requested: Optional[List[str]]) -> str:
             else:
                 logger.warning("Column not whitelisted: %s (col %s) — skipped", col, colname)
 
-    return ", ".join(valid_cols) if valid_cols else f"{tables[0]}.*"
+    return ", ".join(valid_cols) if valid_cols else f"{fallback_table}.*"
 
 
 def _validate_joins_against_registry(join_paths: List[JoinPathInput]) -> Tuple[List[JoinPathInput], List[str]]:
@@ -449,11 +463,16 @@ def _inject_metric_formulas(
 
 
 def _build_joins(join_paths: List[JoinPathInput]) -> str:
-    """Build JOIN clauses from resolved join paths."""
+    """Build JOIN clauses from resolved join paths. Deduplicates identical joins."""
     if not join_paths:
         return ""
     parts = []
+    seen: Set[str] = set()
     for jp in join_paths:
+        dedup_key = f"{jp.from_table.lower()}|{jp.to_table.lower()}|{jp.condition.lower()}"
+        if dedup_key in seen:
+            continue
+        seen.add(dedup_key)
         join_type = jp.join_type if jp.join_type in (
             "INNER JOIN", "LEFT JOIN", "RIGHT JOIN", "LEFT OUTER JOIN"
         ) else "INNER JOIN"
@@ -617,7 +636,7 @@ class SQLBuilder:
             semantic_trace.extend(metric_notes)
 
         # SELECT columns
-        select_cols = _safe_columns(tables, columns)
+        select_cols = _safe_columns(tables, columns, primary_table)
 
         # FROM + JOINs
         join_sql = _build_joins(validated_joins)

@@ -1,0 +1,806 @@
+[
+  {
+    "question_id": "H007",
+    "query": "What is the total outstanding loan balance?",
+    "category": "business_en",
+    "expected_behavior": "pipeline_complete",
+    "root_cause": "JOIN_REGISTRY_ERROR",
+    "failure_mode": "accounts.product_id does not exist",
+    "pipeline_stopped_at": "sql_execution",
+    "intent_result": {
+      "primary_category": "revenue_analysis",
+      "confidence": 0.95,
+      "requires_clarification": false,
+      "supported_capability": true
+    },
+    "semantic_objects": {
+      "selected_tables": ["products", "accounts", "customers"],
+      "join_paths_used": ["products->accounts", "products->customers"]
+    },
+    "query_plan": {
+      "task": "detail_listing",
+      "primary_entity": "product",
+      "primary_table": "products"
+    },
+    "generated_sql": "SELECT accounts.* FROM products LEFT JOIN accounts ON products.product_id = accounts.product_id LEFT JOIN customers ON products.product_id = customers.product_id LIMIT 100",
+    "actual_db_columns": {
+      "accounts": ["id", "account_id", "customer_id", "account_type", "status", "balance", "available_balance", "currency", "branch_id", "created_at"],
+      "products": ["id", "product_id", "name", "category", "description", "created_at"]
+    },
+    "join_registry_entry": "products->accounts via product_id (NOT IN join_registry; invented by SQL builder)",
+    "db_error": "column accounts.product_id does not exist",
+    "explanation": "Entity resolution selected 'product' as primary entity. SQL builder attempted to JOIN products.product_id = accounts.product_id, but accounts has no product_id column. The correct path to loans is accounts.account_id -> loan_contracts.account_id -> loan_contracts.outstanding_balance. The join_registry has no entry connecting products to accounts; the builder invented the join.",
+    "recommended_fix": "Add cross-domain join paths to join_registry: products.category -> accounts.account_type (product-to-account), and products.product_id -> loan_contracts.loan_product_id (product-to-loan). The SQL builder should validate proposed JOINs against the registry before emitting SQL.",
+    "recovery_if_fixed": true
+  },
+  {
+    "question_id": "H014",
+    "query": "How many transactions were processed in each branch?",
+    "category": "business_en",
+    "expected_behavior": "pipeline_complete",
+    "root_cause": "JOIN_REGISTRY_ERROR",
+    "failure_mode": "branches.transaction_id does not exist",
+    "pipeline_stopped_at": "sql_execution",
+    "intent_result": {
+      "primary_category": "transaction_analysis",
+      "confidence": 0.95,
+      "requires_clarification": false,
+      "supported_capability": true
+    },
+    "semantic_objects": {
+      "selected_tables": ["transactions", "accounts", "branches"],
+      "join_paths_used": ["transactions->accounts", "transactions->branches"]
+    },
+    "query_plan": {
+      "task": "aggregation",
+      "primary_entity": "transaction",
+      "primary_table": "transactions"
+    },
+    "generated_sql": "SELECT accounts.* FROM transactions LEFT JOIN accounts ON transactions.account_id = accounts.account_id LEFT JOIN branches ON transactions.transaction_id = branches.transaction_id LIMIT 100",
+    "actual_db_columns": {
+      "transactions": ["id", "transaction_id", "account_id", "customer_id", "amount", "transaction_type", "status", "description", "transaction_date", "created_at"],
+      "branches": ["id", "branch_id", "name", "state", "city", "manager_id", "created_at", "region_id"]
+    },
+    "join_registry_entry": "transactions->branches is NOT in join_registry. Correct path: transactions.account_id -> accounts.account_id -> accounts.branch_id -> branches.branch_id",
+    "db_error": "column branches.transaction_id does not exist",
+    "explanation": "Entity resolution selected 'transaction' as primary entity. SQL builder generated a direct JOIN transactions.transaction_id = branches.transaction_id, but branches has no transaction_id column. The correct 3-hop path is transactions->accounts->branches via account_id and branch_id respectively. The join_registry has transactions->accounts but not the transitive path to branches.",
+    "recommended_fix": "The join_registry should include transitive path hints: when queries need transactions+branches, the system should resolve transactions->accounts (registered) then accounts->branches (registered). The SQL builder needs a BFS/DFS over the join_registry graph to discover multi-hop paths.",
+    "recovery_if_fixed": true
+  },
+  {
+    "question_id": "H020",
+    "query": "List all loan products with their interest rates",
+    "category": "business_en",
+    "expected_behavior": "pipeline_complete",
+    "root_cause": "JOIN_REGISTRY_ERROR",
+    "failure_mode": "accounts.product_id does not exist",
+    "pipeline_stopped_at": "sql_execution",
+    "intent_result": {
+      "primary_category": "product_analysis",
+      "confidence": 0.95,
+      "requires_clarification": false,
+      "supported_capability": true
+    },
+    "semantic_objects": {
+      "selected_tables": ["products", "accounts", "transactions"],
+      "join_paths_used": ["products->accounts", "products->transactions"]
+    },
+    "query_plan": {
+      "task": "detail_listing",
+      "primary_entity": "product",
+      "primary_table": "products"
+    },
+    "generated_sql": "SELECT accounts.* FROM products LEFT JOIN accounts ON products.product_id = accounts.product_id LEFT JOIN transactions ON products.product_id = transactions.product_id LIMIT 100",
+    "actual_db_columns": {
+      "products": ["id", "product_id", "name", "category", "description", "created_at"]
+    },
+    "join_registry_entry": "No products->accounts or products->transactions entry exists",
+    "db_error": "column accounts.product_id does not exist",
+    "explanation": "Query asks about loan products. The correct table is loan_contracts (which has loan_product_id and interest_rate). Schema agent selected 'products' as the product table, but products has no interest_rate column. Entity resolution then tried to JOIN products to accounts/transactions via a non-existent product_id FK.",
+    "recommended_fix": "The schema agent needs to map 'loan products' to loan_contracts.loan_product_id + loan_contracts.interest_rate, not products.product_id. Add semantic synonym: 'loan product' -> loan_contracts table. Also register products.category -> accounts.account_type as a valid join.",
+    "recovery_if_fixed": true
+  },
+  {
+    "question_id": "H022",
+    "query": "What is the monthly growth rate of total deposits?",
+    "category": "business_en",
+    "expected_behavior": "pipeline_complete",
+    "root_cause": "JOIN_REGISTRY_ERROR",
+    "failure_mode": "transactions.product_id does not exist",
+    "pipeline_stopped_at": "sql_execution",
+    "intent_result": {
+      "primary_category": "revenue_analysis",
+      "confidence": 0.95,
+      "requires_clarification": false,
+      "supported_capability": true
+    },
+    "semantic_objects": {
+      "selected_tables": ["products", "transactions"],
+      "join_paths_used": ["products->transactions"]
+    },
+    "query_plan": {
+      "task": "aggregation",
+      "primary_entity": "product",
+      "primary_table": "products"
+    },
+    "generated_sql": "SELECT products.* FROM products LEFT JOIN transactions ON products.product_id = transactions.product_id LIMIT 100",
+    "actual_db_columns": {
+      "transactions": ["id", "transaction_id", "account_id", "customer_id", "amount", "transaction_type", "status", "description", "transaction_date", "created_at"]
+    },
+    "join_registry_entry": "No products->transactions entry exists",
+    "db_error": "column transactions.product_id does not exist",
+    "explanation": "Query asks about deposit growth. Deposits are account balances (accounts.balance), not transactions. Entity resolution incorrectly selected 'product' as primary entity and tried to JOIN products to transactions via product_id. Correct path: aggregate accounts.balance GROUP BY date_trunc('month', accounts.created_at).",
+    "recommended_fix": "The schema agent should map 'deposits' to accounts.balance. The intent agent should recognize 'monthly growth rate' as requiring time-series aggregation on accounts, not products.",
+    "recovery_if_fixed": true
+  },
+  {
+    "question_id": "H024",
+    "query": "Show me the distribution of account balances by branch and account type",
+    "category": "business_en",
+    "expected_behavior": "pipeline_complete",
+    "root_cause": "JOIN_REGISTRY_ERROR",
+    "failure_mode": "customers.branch_id does not exist",
+    "pipeline_stopped_at": "sql_execution",
+    "intent_result": {
+      "primary_category": "customer_analysis",
+      "confidence": 0.55,
+      "requires_clarification": false,
+      "supported_capability": true
+    },
+    "semantic_objects": {
+      "selected_tables": ["branches", "accounts", "customers"],
+      "join_paths_used": ["branches->accounts", "branches->customers"]
+    },
+    "query_plan": {
+      "task": "aggregation",
+      "primary_entity": "branch",
+      "primary_table": "branches"
+    },
+    "generated_sql": "SELECT accounts.* FROM branches LEFT JOIN accounts ON branches.branch_id = accounts.branch_id LEFT JOIN customers ON branches.branch_id = customers.branch_id LIMIT 100",
+    "actual_db_columns": {
+      "customers": ["id", "customer_id", "name", "email", "phone", "kyc_verified", "risk_score", "segment", "created_at", "updated_at"]
+    },
+    "join_registry_entry": "branches->customers is NOT in join_registry. Correct path: branches.branch_id -> accounts.branch_id -> accounts.customer_id -> customers.customer_id",
+    "db_error": "column customers.branch_id does not exist",
+    "explanation": "Query only needs branches + accounts (branch_id and account_type are both in accounts). Entity resolution unnecessarily added customers and tried a direct branches.branch_id = customers.branch_id join. customers has no branch_id column.",
+    "recommended_fix": "The SQL builder should detect when a table is unnecessary for the query and drop it. This query only needs accounts (which has branch_id, account_type, balance). No customer join needed. Also, the join_registry needs the 2-hop path branches->accounts->customers for when customers IS needed.",
+    "recovery_if_fixed": true
+  },
+  {
+    "question_id": "H025",
+    "query": "What is the total fee income collected per branch per quarter?",
+    "category": "business_en",
+    "expected_behavior": "pipeline_complete",
+    "root_cause": "JOIN_REGISTRY_ERROR",
+    "failure_mode": "branches.customer_id does not exist",
+    "pipeline_stopped_at": "sql_execution",
+    "intent_result": {
+      "primary_category": "revenue_analysis",
+      "confidence": 0.95,
+      "requires_clarification": false,
+      "supported_capability": true
+    },
+    "semantic_objects": {
+      "selected_tables": ["customers", "accounts", "branches", "products"],
+      "join_paths_used": ["customers->accounts", "customers->branches", "accounts->products"]
+    },
+    "query_plan": {
+      "task": "aggregation",
+      "primary_entity": "customer",
+      "primary_table": "customers"
+    },
+    "generated_sql": "SELECT accounts.* FROM customers LEFT JOIN accounts ON customers.customer_id = accounts.customer_id LEFT JOIN branches ON customers.customer_id = branches.customer_id LEFT JOIN products ON accounts.account_type = products.category LIMIT 100",
+    "actual_db_columns": {
+      "branches": ["id", "branch_id", "name", "state", "city", "manager_id", "created_at", "region_id"],
+      "fee_income": ["fee_id", "account_id", "fee_type", "amount", "fee_date", "description"]
+    },
+    "join_registry_entry": "customers->branches NOT in registry. Correct path: customers->accounts (registered) then accounts->branches (registered via accounts.branch_id -> branches.branch_id)",
+    "db_error": "column branches.customer_id does not exist",
+    "explanation": "Entity resolution selected 'customer' as primary entity and tried a direct customers.customer_id = branches.customer_id join. branches has no customer_id column. The correct path is customers->accounts->branches (2-hop). Also, fee_income table exists and should be used instead of joining products.",
+    "recommended_fix": "Register customers->accounts->branches as a transitive path. Also map 'fee income' to the fee_income table (which has account_id for joining to accounts->branches).",
+    "recovery_if_fixed": true
+  },
+  {
+    "question_id": "H030",
+    "query": "What is the average days past due for loans by branch?",
+    "category": "business_en",
+    "expected_behavior": "pipeline_complete",
+    "root_cause": "JOIN_REGISTRY_ERROR",
+    "failure_mode": "branches.product_id does not exist",
+    "pipeline_stopped_at": "sql_execution",
+    "intent_result": {
+      "primary_category": "risk_analysis",
+      "confidence": 0.95,
+      "requires_clarification": false,
+      "supported_capability": true
+    },
+    "semantic_objects": {
+      "selected_tables": ["products", "branches"],
+      "join_paths_used": ["products->branches"]
+    },
+    "query_plan": {
+      "task": "aggregation",
+      "primary_entity": "product",
+      "primary_table": "products"
+    },
+    "generated_sql": "SELECT branches.* FROM products LEFT JOIN branches ON products.product_id = branches.product_id LIMIT 100",
+    "actual_db_columns": {
+      "branches": ["id", "branch_id", "name", "state", "city", "manager_id", "created_at", "region_id"],
+      "loan_contracts": ["loan_id", "customer_id", "account_id", "branch_id", "loan_product_id", "loan_type", "principal_amount", "currency", "interest_rate", "term_months", "installment_amount", "disbursement_date", "maturity_date", "status", "outstanding_balance", "days_past_due", "created_at", "updated_at"]
+    },
+    "join_registry_entry": "No products->branches entry. Correct table: loan_contracts has both branch_id and days_past_due",
+    "db_error": "column branches.product_id does not exist",
+    "explanation": "Query asks about loan days past due by branch. The data lives in loan_contracts (which has both branch_id and days_past_due). Entity resolution incorrectly selected 'product' as primary entity and tried products.product_id = branches.product_id. The correct query is: SELECT branch_id, AVG(days_past_due) FROM loan_contracts GROUP BY branch_id.",
+    "recommended_fix": "Map 'loan' queries to loan_contracts table. loan_contracts already has branch_id, so no JOIN to branches is needed for this query. The schema agent should recognize 'days past due' as a column in loan_contracts.",
+    "recovery_if_fixed": true
+  },
+  {
+    "question_id": "H054",
+    "query": "Affichez les 5 branches avec le plus de prêts actifs",
+    "category": "business_fr",
+    "expected_behavior": "pipeline_complete",
+    "root_cause": "GATE_FALSE_REJECTION",
+    "failure_mode": "too_short_query ambiguity triggered incorrectly",
+    "pipeline_stopped_at": "intent",
+    "intent_result": {
+      "primary_category": "branch_analysis",
+      "confidence": 0.467,
+      "requires_clarification": true,
+      "supported_capability": true,
+      "gate_reason": "Insufficient confidence to proceed"
+    },
+    "semantic_objects": null,
+    "query_plan": null,
+    "generated_sql": null,
+    "actual_db_columns": null,
+    "join_registry_entry": null,
+    "db_error": null,
+    "explanation": "French ranking query with 7 words. The structured_intent detects 'too_short_query' (len < 6 without aggregation/ranking keywords), but 'branches' and 'prêts' should map to branch+loan domain. The keyword 'branches' matches the domain but 'prêts' (loans) triggers a secondary category match. The overall confidence drops below 0.50 due to domain_conf=0.1 (the word 'branches' is a domain keyword but the structured_intent calculates low confidence for FR queries).",
+    "recommended_fix": "The 'too_short_query' ambiguity check in detect_ambiguities_structured() should exempt queries that contain both a domain keyword AND a ranking verb. This query has 'branches' (domain) and 'le plus de' (ranking). Also, French ranking synonyms 'le plus de' should be added to the ranking verb list.",
+    "recovery_if_fixed": true
+  },
+  {
+    "question_id": "H059",
+    "query": "List all compliance violations with critical severity",
+    "category": "governed",
+    "expected_behavior": "pipeline_complete",
+    "root_cause": "SEMANTIC_REGISTRY_GAP",
+    "failure_mode": "audit_logs table does not exist (actual: compliance_violations)",
+    "pipeline_stopped_at": "sql_execution",
+    "intent_result": {
+      "primary_category": "compliance_analysis",
+      "confidence": 0.95,
+      "requires_clarification": false,
+      "supported_capability": true
+    },
+    "semantic_objects": {
+      "selected_tables": ["customers", "audit_logs", "kyc_status", "risk_flags"],
+      "join_paths_used": ["customers->audit_logs", "customers->kyc_status", "customers->risk_flags"]
+    },
+    "query_plan": {
+      "task": "detail_listing",
+      "primary_entity": "customer",
+      "primary_table": "customers"
+    },
+    "generated_sql": "SELECT audit_logs.* FROM customers LEFT JOIN audit_logs ON customers.customer_id = audit_logs.customer_id LEFT JOIN kyc_status ON customers.customer_id = kyc_status.customer_id LEFT JOIN risk_flags ON customers.customer_id = risk_flags.customer_id LIMIT 100",
+    "actual_db_columns": {
+      "compliance_violations": ["violation_id", "rule_id", "entity_type", "entity_id", "severity", "description", "detected_at", "status", "resolved_at"]
+    },
+    "join_registry_entry": "audit_logs is not a real table. compliance_violations exists with violation_id, severity columns",
+    "db_error": "relation 'audit_logs' does not exist",
+    "explanation": "Schema agent returned 'audit_logs' as a table name, but the actual table is 'compliance_violations'. The schema agent's table_metadata cache maps 'compliance' domain to the wrong table. Additionally, kyc_status is not a real table (actual: kyc_cases).",
+    "recommended_fix": "Update table_metadata to map 'compliance' domain to compliance_violations (not audit_logs). Update the schema agent's domain-to-table mapping. The actual DB has 74 tables but the schema agent only knows about a subset.",
+    "recovery_if_fixed": true
+  },
+  {
+    "question_id": "H061",
+    "query": "What is the total amount of suspicious activity reports filed?",
+    "category": "governed",
+    "expected_behavior": "pipeline_complete",
+    "root_cause": "SEMANTIC_REGISTRY_GAP",
+    "failure_mode": "audit_logs table does not exist (actual: suspicious_activity_reports)",
+    "pipeline_stopped_at": "sql_execution",
+    "intent_result": {
+      "primary_category": "compliance_analysis",
+      "confidence": 0.95,
+      "requires_clarification": false,
+      "supported_capability": true
+    },
+    "semantic_objects": {
+      "selected_tables": ["customers", "audit_logs", "kyc_status", "risk_flags"],
+      "join_paths_used": ["customers->audit_logs", "customers->kyc_status", "customers->risk_flags"]
+    },
+    "query_plan": {
+      "task": "aggregation",
+      "primary_entity": "customer",
+      "primary_table": "customers"
+    },
+    "generated_sql": "SELECT audit_logs.* FROM customers LEFT JOIN audit_logs ON customers.customer_id = audit_logs.customer_id LEFT JOIN kyc_status ON customers.customer_id = kyc_status.customer_id LEFT JOIN risk_flags ON customers.customer_id = risk_flags.customer_id LIMIT 100",
+    "actual_db_columns": {
+      "suspicious_activity_reports": ["sar_id", "account_id", "customer_id", "filing_date", "amount", "status", "filing_type", "description"]
+    },
+    "join_registry_entry": "audit_logs does not exist. suspicious_activity_reports has amount and customer_id",
+    "db_error": "relation 'audit_logs' does not exist",
+    "explanation": "Same issue as H059. Schema agent maps compliance domain to non-existent audit_logs table. The actual table is suspicious_activity_reports which has amount and customer_id columns.",
+    "recommended_fix": "Same as H059: update table_metadata/domain mapping. Also add suspicious_activity_reports to the join_registry with accounts (via account_id) and customers (via customer_id).",
+    "recovery_if_fixed": true
+  },
+  {
+    "question_id": "H065",
+    "query": "How many sanctions screening checks were completed last month?",
+    "category": "governed",
+    "expected_behavior": "pipeline_complete",
+    "root_cause": "GATE_FALSE_REJECTION",
+    "failure_mode": "too_short_query ambiguity triggered on 10-word query",
+    "pipeline_stopped_at": "intent",
+    "intent_result": {
+      "primary_category": "compliance_analysis",
+      "confidence": 0.467,
+      "requires_clarification": true,
+      "supported_capability": true,
+      "gate_reason": "Insufficient confidence to proceed"
+    },
+    "semantic_objects": null,
+    "query_plan": null,
+    "generated_sql": null,
+    "actual_db_columns": null,
+    "join_registry_entry": null,
+    "db_error": null,
+    "explanation": "This 10-word query has 'how many' (aggregation) and 'sanctions screening' (domain). But the structured_intent confidence is low because 'sanctions' maps to kyc domain with low score, and 'screening' is not a recognized keyword. The gate fires because confidence < 0.50 and requires_clarification is true.",
+    "recommended_fix": "Add 'sanctions' and 'screening' as recognized keywords in the kyc/compliance domain. The phrase 'how many' should boost aggregation task_conf. The ambiguity detector should not flag queries with explicit aggregation verbs.",
+    "recovery_if_fixed": true
+  },
+  {
+    "question_id": "H066",
+    "query": "Show me customers who have both accounts and active loans",
+    "category": "multi_table",
+    "expected_behavior": "pipeline_complete",
+    "root_cause": "JOIN_REGISTRY_ERROR",
+    "failure_mode": "accounts.product_id does not exist",
+    "pipeline_stopped_at": "sql_execution",
+    "intent_result": {
+      "primary_category": "customer_analysis",
+      "confidence": 0.95,
+      "requires_clarification": false,
+      "supported_capability": true
+    },
+    "semantic_objects": {
+      "selected_tables": ["products", "accounts", "customers"],
+      "join_paths_used": ["products->accounts", "products->customers"]
+    },
+    "query_plan": {
+      "task": "detail_listing",
+      "primary_entity": "product",
+      "primary_table": "products"
+    },
+    "generated_sql": "SELECT accounts.* FROM products LEFT JOIN accounts ON products.product_id = accounts.product_id LEFT JOIN customers ON products.product_id = customers.product_id LIMIT 100",
+    "actual_db_columns": {
+      "accounts": ["id", "account_id", "customer_id", "account_type", "status", "balance", "available_balance", "currency", "branch_id", "created_at"]
+    },
+    "join_registry_entry": "No products->accounts entry. Correct: customers->accounts (registered) then accounts->loan_contracts (registered)",
+    "db_error": "column accounts.product_id does not exist",
+    "explanation": "Query needs customers + accounts + loan_contracts. Entity resolution selected 'product' as primary entity (misinterpreting 'accounts' as products). The correct path: customers.customer_id -> accounts.customer_id (registered), accounts.account_id -> loan_contracts.account_id (registered).",
+    "recommended_fix": "The entity resolver should select 'customer' as primary entity when the query asks about 'customers who have...'. The join_registry already has the correct paths customers->accounts and accounts->loan_contracts.",
+    "recovery_if_fixed": true
+  },
+  {
+    "question_id": "H068",
+    "query": "Which customers have accounts in more than one branch?",
+    "category": "multi_table",
+    "expected_behavior": "pipeline_complete",
+    "root_cause": "JOIN_REGISTRY_ERROR",
+    "failure_mode": "customers.branch_id does not exist",
+    "pipeline_stopped_at": "sql_execution",
+    "intent_result": {
+      "primary_category": "customer_analysis",
+      "confidence": 0.95,
+      "requires_clarification": false,
+      "supported_capability": true
+    },
+    "semantic_objects": {
+      "selected_tables": ["branches", "accounts", "customers"],
+      "join_paths_used": ["branches->accounts", "branches->customers"]
+    },
+    "query_plan": {
+      "task": "aggregation",
+      "primary_entity": "branch",
+      "primary_table": "branches"
+    },
+    "generated_sql": "SELECT accounts.* FROM branches LEFT JOIN accounts ON branches.branch_id = accounts.branch_id LEFT JOIN customers ON branches.branch_id = customers.branch_id LIMIT 100",
+    "actual_db_columns": {
+      "customers": ["id", "customer_id", "name", "email", "phone", "kyc_verified", "risk_score", "segment", "created_at", "updated_at"]
+    },
+    "join_registry_entry": "branches->customers NOT registered. Correct: branches->accounts (registered), accounts->customers (registered)",
+    "db_error": "column customers.branch_id does not exist",
+    "explanation": "Query needs customers + accounts (which has branch_id). Entity resolution selected 'branch' as primary and tried direct branches.branch_id = customers.branch_id. customers has no branch_id. Correct path: accounts.customer_id -> customers.customer_id, accounts.branch_id -> branches.branch_id.",
+    "recommended_fix": "Entity resolver should select 'customer' as primary entity. The join_registry already has customers->accounts and accounts->branches. The SQL builder should use the registered 2-hop path.",
+    "recovery_if_fixed": true
+  },
+  {
+    "question_id": "H070",
+    "query": "List all loan installments that are overdue, with the customer name and branch",
+    "category": "multi_table",
+    "expected_behavior": "pipeline_complete",
+    "root_cause": "JOIN_REGISTRY_ERROR",
+    "failure_mode": "accounts.product_id does not exist",
+    "pipeline_stopped_at": "sql_execution",
+    "intent_result": {
+      "primary_category": "operational_analysis",
+      "confidence": 0.95,
+      "requires_clarification": false,
+      "supported_capability": true
+    },
+    "semantic_objects": {
+      "selected_tables": ["products", "accounts", "branches", "customers"],
+      "join_paths_used": ["products->accounts", "products->branches", "products->customers"]
+    },
+    "query_plan": {
+      "task": "detail_listing",
+      "primary_entity": "product",
+      "primary_table": "products"
+    },
+    "generated_sql": "SELECT accounts.* FROM products LEFT JOIN accounts ON products.product_id = accounts.product_id LEFT JOIN branches ON products.product_id = branches.product_id LEFT JOIN customers ON products.product_id = customers.product_id LIMIT 100",
+    "actual_db_columns": {
+      "loan_installments": ["installment_id", "loan_id", "installment_number", "due_date", "amount_due", "amount_paid", "status", "days_overdue"]
+    },
+    "join_registry_entry": "No products->accounts/branches/customers entries. Correct: loan_installments has installment_id, loan_id, status, days_overdue. loan_contracts.loan_id -> loan_installments.loan_id (registered). loan_contracts has customer_id, branch_id.",
+    "db_error": "column accounts.product_id does not exist",
+    "explanation": "Query asks about loan installments. The data is in loan_installments table (which has status, days_overdue, loan_id). Entity resolution selected 'product' instead of 'loan_installment'. Correct path: loan_installments.loan_id -> loan_contracts.loan_id (registered), loan_contracts.customer_id -> customers.customer_id (registered), loan_contracts.branch_id -> branches.branch_id (registered).",
+    "recommended_fix": "Map 'loan installment' to the loan_installments table. The schema agent should recognize 'overdue' as mapping to loan_installments.status or loan_installments.days_overdue.",
+    "recovery_if_fixed": true
+  },
+  {
+    "question_id": "H071",
+    "query": "Show me the total transactions per customer per branch for the last 30 days",
+    "category": "multi_table",
+    "expected_behavior": "pipeline_complete",
+    "root_cause": "JOIN_REGISTRY_ERROR",
+    "failure_mode": "branches.transaction_id does not exist",
+    "pipeline_stopped_at": "sql_execution",
+    "intent_result": {
+      "primary_category": "transaction_analysis",
+      "confidence": 0.95,
+      "requires_clarification": false,
+      "supported_capability": true
+    },
+    "semantic_objects": {
+      "selected_tables": ["transactions", "accounts", "branches", "customers"],
+      "join_paths_used": ["transactions->accounts", "transactions->branches", "transactions->customers"]
+    },
+    "query_plan": {
+      "task": "aggregation",
+      "primary_entity": "transaction",
+      "primary_table": "transactions"
+    },
+    "generated_sql": "SELECT accounts.* FROM transactions LEFT JOIN accounts ON transactions.account_id = accounts.account_id LEFT JOIN branches ON transactions.transaction_id = branches.transaction_id LEFT JOIN customers ON transactions.customer_id = customers.customer_id LIMIT 100",
+    "actual_db_columns": {
+      "branches": ["id", "branch_id", "name", "state", "city", "manager_id", "created_at", "region_id"]
+    },
+    "join_registry_entry": "transactions->branches NOT registered. Correct 3-hop: transactions.account_id -> accounts.account_id -> accounts.branch_id -> branches.branch_id",
+    "db_error": "column branches.transaction_id does not exist",
+    "explanation": "Same as H014. The SQL builder tries a direct transactions.transaction_id = branches.transaction_id join. The correct path is transactions->accounts->branches (2 registered hops).",
+    "recommended_fix": "Same as H014: implement multi-hop path resolution in the SQL builder using the join_registry graph.",
+    "recovery_if_fixed": true
+  },
+  {
+    "question_id": "H074",
+    "query": "Show me each branch's total balance and number of loan accounts",
+    "category": "multi_table",
+    "expected_behavior": "pipeline_complete",
+    "root_cause": "JOIN_REGISTRY_ERROR",
+    "failure_mode": "accounts.product_id does not exist",
+    "pipeline_stopped_at": "sql_execution",
+    "intent_result": {
+      "primary_category": "branch_analysis",
+      "confidence": 0.95,
+      "requires_clarification": false,
+      "supported_capability": true
+    },
+    "semantic_objects": {
+      "selected_tables": ["products", "accounts", "branches", "customers"],
+      "join_paths_used": ["products->accounts", "products->branches", "products->customers"]
+    },
+    "query_plan": {
+      "task": "aggregation",
+      "primary_entity": "product",
+      "primary_table": "products"
+    },
+    "generated_sql": "SELECT accounts.* FROM products LEFT JOIN accounts ON products.product_id = accounts.product_id LEFT JOIN branches ON products.product_id = branches.product_id LEFT JOIN customers ON products.product_id = customers.product_id LIMIT 100",
+    "actual_db_columns": {
+      "accounts": ["id", "account_id", "customer_id", "account_type", "status", "balance", "available_balance", "currency", "branch_id", "created_at"]
+    },
+    "join_registry_entry": "Correct path: accounts has branch_id, account_type, balance. accounts->branches (registered). No products join needed.",
+    "db_error": "column accounts.product_id does not exist",
+    "explanation": "Query only needs accounts (has balance, account_type, branch_id) joined to branches. Entity resolution selected 'product' as primary entity and tried products.product_id = accounts.product_id. accounts has no product_id. Correct query: SELECT branch_id, SUM(balance), COUNT(*) FROM accounts WHERE account_type='loan' GROUP BY branch_id.",
+    "recommended_fix": "Entity resolver should select 'branch' or 'account' as primary entity, not 'product'. The accounts table has all needed columns (balance, branch_id, account_type).",
+    "recovery_if_fixed": true
+  },
+  {
+    "question_id": "H075",
+    "query": "List customers with their KYC status, risk score, and total account balance",
+    "category": "multi_table",
+    "expected_behavior": "pipeline_complete",
+    "root_cause": "GATE_FALSE_REJECTION",
+    "failure_mode": "Too many ambiguities to proceed safely",
+    "pipeline_stopped_at": "intent",
+    "intent_result": {
+      "primary_category": "customer_analysis",
+      "confidence": 0.5,
+      "requires_clarification": true,
+      "supported_capability": true,
+      "risk_level": "suspicious",
+      "rejection_reason": "Too many ambiguities to proceed safely"
+    },
+    "semantic_objects": null,
+    "query_plan": null,
+    "generated_sql": null,
+    "actual_db_columns": null,
+    "join_registry_entry": null,
+    "db_error": null,
+    "explanation": "The intent agent detects 4+ ambiguities (KYC, risk, balance, customer all have ambiguous meanings) and sets risk_level='suspicious' with rejection_reason='Too many ambiguities'. The gate rejects because risk_level is 'suspicious'. This is a valid query that the system is too conservative about.",
+    "recommended_fix": "Reduce the number of ambiguities detected. KYC status maps to kyc_cases.kyc_verified (unambiguous). Risk score maps to customers.risk_score (unambiguous). Balance maps to accounts.balance (unambiguous). The ambiguity detector is over-reporting because it doesn't know the schema.",
+    "recovery_if_fixed": true
+  },
+  {
+    "question_id": "H078",
+    "query": "Show me the bottom 5 branches by transaction volume",
+    "category": "ranking",
+    "expected_behavior": "pipeline_complete",
+    "root_cause": "JOIN_REGISTRY_ERROR",
+    "failure_mode": "branches.transaction_id does not exist",
+    "pipeline_stopped_at": "sql_execution",
+    "intent_result": {
+      "primary_category": "transaction_analysis",
+      "confidence": 0.95,
+      "requires_clarification": false,
+      "supported_capability": true
+    },
+    "semantic_objects": {
+      "selected_tables": ["transactions", "accounts", "branches"],
+      "join_paths_used": ["transactions->accounts", "transactions->branches"]
+    },
+    "query_plan": {
+      "task": "ranking",
+      "primary_entity": "transaction",
+      "primary_table": "transactions"
+    },
+    "generated_sql": "SELECT accounts.* FROM transactions LEFT JOIN accounts ON transactions.account_id = accounts.account_id LEFT JOIN branches ON transactions.transaction_id = branches.transaction_id LIMIT 100",
+    "actual_db_columns": {
+      "branches": ["id", "branch_id", "name", "state", "city", "manager_id", "created_at", "region_id"]
+    },
+    "join_registry_entry": "transactions->branches NOT registered. Correct: transactions->accounts (registered), accounts->branches (registered via accounts.branch_id)",
+    "db_error": "column branches.transaction_id does not exist",
+    "explanation": "Same as H014 and H071. Direct transactions.transaction_id = branches.transaction_id is invalid.",
+    "recommended_fix": "Same as H014: multi-hop path resolution.",
+    "recovery_if_fixed": true
+  },
+  {
+    "question_id": "H079",
+    "query": "Rank customers by total deposits across all their accounts",
+    "category": "ranking",
+    "expected_behavior": "pipeline_complete",
+    "root_cause": "JOIN_REGISTRY_ERROR",
+    "failure_mode": "accounts.product_id does not exist",
+    "pipeline_stopped_at": "sql_execution",
+    "intent_result": {
+      "primary_category": "customer_analysis",
+      "confidence": 0.95,
+      "requires_clarification": false,
+      "supported_capability": true
+    },
+    "semantic_objects": {
+      "selected_tables": ["products", "accounts", "customers"],
+      "join_paths_used": ["products->accounts", "products->customers"]
+    },
+    "query_plan": {
+      "task": "ranking",
+      "primary_entity": "product",
+      "primary_table": "products"
+    },
+    "generated_sql": "SELECT accounts.* FROM products LEFT JOIN accounts ON products.product_id = accounts.product_id LEFT JOIN customers ON products.product_id = customers.product_id LIMIT 100",
+    "actual_db_columns": {
+      "accounts": ["id", "account_id", "customer_id", "account_type", "status", "balance", "available_balance", "currency", "branch_id", "created_at"]
+    },
+    "join_registry_entry": "No products->accounts. Correct: customers.customer_id -> accounts.customer_id (registered). Query only needs customers + accounts.",
+    "db_error": "column accounts.product_id does not exist",
+    "explanation": "Query needs customers + accounts (for balance). Entity resolution selected 'product' as primary entity. Correct: customers->accounts (registered). accounts.balance is the deposit total.",
+    "recommended_fix": "Entity resolver should select 'customer' as primary entity when query asks about 'customers'.",
+    "recovery_if_fixed": true
+  },
+  {
+    "question_id": "H084",
+    "query": "Which 10 customers have the most transactions?",
+    "category": "ranking",
+    "expected_behavior": "pipeline_complete",
+    "root_cause": "GATE_FALSE_REJECTION",
+    "failure_mode": "Insufficient confidence to proceed",
+    "pipeline_stopped_at": "intent",
+    "intent_result": {
+      "primary_category": "transaction_analysis",
+      "confidence": 0.467,
+      "requires_clarification": true,
+      "supported_capability": true,
+      "gate_reason": "Insufficient confidence to proceed"
+    },
+    "semantic_objects": null,
+    "query_plan": null,
+    "generated_sql": null,
+    "actual_db_columns": null,
+    "join_registry_entry": null,
+    "db_error": null,
+    "explanation": "Query has 7 words, 'which' and 'most' are ranking signals but 'customers' and 'transactions' don't boost confidence enough. The structured_intent gives low domain_conf because 'customers' matches customer domain but 'transactions' matches transaction domain, creating ambiguity. Overall confidence < 0.50.",
+    "recommended_fix": "When both a primary entity (customer) and a target entity (transaction) are detected, boost confidence if the join_registry has a registered path between them (customers->transactions IS registered). The entity resolution confidence should feed back into the gate decision.",
+    "recovery_if_fixed": true
+  },
+  {
+    "question_id": "H085",
+    "query": "Rank branches by total outstanding loan balance",
+    "category": "ranking",
+    "expected_behavior": "pipeline_complete",
+    "root_cause": "JOIN_REGISTRY_ERROR",
+    "failure_mode": "accounts.product_id does not exist",
+    "pipeline_stopped_at": "sql_execution",
+    "intent_result": {
+      "primary_category": "branch_analysis",
+      "confidence": 0.95,
+      "requires_clarification": false,
+      "supported_capability": true
+    },
+    "semantic_objects": {
+      "selected_tables": ["products", "accounts", "branches", "customers"],
+      "join_paths_used": ["products->accounts", "products->branches", "products->customers"]
+    },
+    "query_plan": {
+      "task": "ranking",
+      "primary_entity": "product",
+      "primary_table": "products"
+    },
+    "generated_sql": "SELECT accounts.* FROM products LEFT JOIN accounts ON products.product_id = accounts.product_id LEFT JOIN branches ON products.product_id = branches.product_id LEFT JOIN customers ON products.product_id = customers.product_id LIMIT 100",
+    "actual_db_columns": {
+      "loan_contracts": ["loan_id", "customer_id", "account_id", "branch_id", "outstanding_balance"]
+    },
+    "join_registry_entry": "No products->accounts/branches. Correct: loan_contracts has branch_id and outstanding_balance. loan_contracts->branches not needed (branch_id is direct).",
+    "db_error": "column accounts.product_id does not exist",
+    "explanation": "Query needs loan_contracts.outstanding_balance grouped by branch_id. Entity resolution selected 'product' instead of 'loan'. Correct: SELECT branch_id, SUM(outstanding_balance) FROM loan_contracts GROUP BY branch_id ORDER BY 2 DESC LIMIT N.",
+    "recommended_fix": "Map 'outstanding loan balance' to loan_contracts table. Entity resolver should select 'loan' as primary entity.",
+    "recovery_if_fixed": true
+  },
+  {
+    "question_id": "H153",
+    "query": "Show me each customer's total loan obligations versus total deposits",
+    "category": "business_en",
+    "expected_behavior": "pipeline_complete",
+    "root_cause": "JOIN_REGISTRY_ERROR",
+    "failure_mode": "accounts.product_id does not exist",
+    "pipeline_stopped_at": "sql_execution",
+    "intent_result": {
+      "primary_category": "customer_analysis",
+      "confidence": 0.95,
+      "requires_clarification": false,
+      "supported_capability": true
+    },
+    "semantic_objects": {
+      "selected_tables": ["products", "accounts", "customers"],
+      "join_paths_used": ["products->accounts", "products->customers"]
+    },
+    "query_plan": {
+      "task": "aggregation",
+      "primary_entity": "product",
+      "primary_table": "products"
+    },
+    "generated_sql": "SELECT accounts.* FROM products LEFT JOIN accounts ON products.product_id = accounts.product_id LEFT JOIN customers ON products.product_id = customers.product_id LIMIT 100",
+    "actual_db_columns": {
+      "loan_contracts": ["loan_id", "customer_id", "outstanding_balance"],
+      "accounts": ["customer_id", "balance"]
+    },
+    "join_registry_entry": "No products->accounts. Correct: customers->accounts (registered, for deposits), customers->loan_contracts (registered, for loans)",
+    "db_error": "column accounts.product_id does not exist",
+    "explanation": "Query needs customer + accounts (balance) + loan_contracts (outstanding_balance). Entity resolution selected 'product'. Correct: customers.customer_id -> accounts.customer_id (registered), customers.customer_id -> loan_contracts.customer_id (registered).",
+    "recommended_fix": "Entity resolver should select 'customer' as primary entity.",
+    "recovery_if_fixed": true
+  },
+  {
+    "question_id": "H156",
+    "query": "Show me the total provisions set aside for non-performing loans by branch",
+    "category": "governed",
+    "expected_behavior": "pipeline_complete",
+    "root_cause": "JOIN_REGISTRY_ERROR",
+    "failure_mode": "branches.product_id does not exist",
+    "pipeline_stopped_at": "sql_execution",
+    "intent_result": {
+      "primary_category": "risk_analysis",
+      "confidence": 0.95,
+      "requires_clarification": false,
+      "supported_capability": true
+    },
+    "semantic_objects": {
+      "selected_tables": ["products", "branches"],
+      "join_paths_used": ["products->branches"]
+    },
+    "query_plan": {
+      "task": "aggregation",
+      "primary_entity": "product",
+      "primary_table": "products"
+    },
+    "generated_sql": "SELECT branches.* FROM products LEFT JOIN branches ON products.product_id = branches.product_id LIMIT 100",
+    "actual_db_columns": {
+      "provisions": ["provision_id", "loan_id", "provision_amount", "provision_date", "status"],
+      "non_performing_loans": ["npl_id", "loan_id", "npl_amount", "classification_date", "status"]
+    },
+    "join_registry_entry": "No products->branches. Correct: provisions has loan_id. loan_contracts.loan_id -> provisions.loan_id (registered). loan_contracts has branch_id.",
+    "db_error": "column branches.product_id does not exist",
+    "explanation": "Query needs provisions + loan_contracts (for branch_id). Entity resolution selected 'product'. Correct: provisions.loan_id -> loan_contracts.loan_id (registered), loan_contracts has branch_id directly.",
+    "recommended_fix": "Map 'provisions' to the provisions table. Map 'non-performing loans' to non_performing_loans table. Register provisions->loan_contracts and non_performing_loans->loan_contracts joins.",
+    "recovery_if_fixed": true
+  },
+  {
+    "question_id": "H157",
+    "query": "Show me each customer's risk score, total deposits, and total loan balance",
+    "category": "multi_table",
+    "expected_behavior": "pipeline_complete",
+    "root_cause": "JOIN_REGISTRY_ERROR",
+    "failure_mode": "accounts.product_id does not exist",
+    "pipeline_stopped_at": "sql_execution",
+    "intent_result": {
+      "primary_category": "customer_analysis",
+      "confidence": 0.95,
+      "requires_clarification": false,
+      "supported_capability": true
+    },
+    "semantic_objects": {
+      "selected_tables": ["products", "accounts", "customers", "risk_flags"],
+      "join_paths_used": ["products->accounts", "products->customers", "products->risk_flags"]
+    },
+    "query_plan": {
+      "task": "aggregation",
+      "primary_entity": "product",
+      "primary_table": "products"
+    },
+    "generated_sql": "SELECT accounts.* FROM products LEFT JOIN accounts ON products.product_id = accounts.product_id LEFT JOIN customers ON products.product_id = customers.product_id LEFT JOIN risk_flags ON products.product_id = risk_flags.product_id LIMIT 100",
+    "actual_db_columns": {
+      "customers": ["customer_id", "risk_score"],
+      "accounts": ["customer_id", "balance"],
+      "loan_contracts": ["customer_id", "outstanding_balance"]
+    },
+    "join_registry_entry": "No products->accounts/customers/risk_flags. Correct: customers has risk_score. customers->accounts (registered), customers->loan_contracts (registered).",
+    "db_error": "column accounts.product_id does not exist",
+    "explanation": "Query needs customer.risk_score + accounts.balance + loan_contracts.outstanding_balance. Entity resolution selected 'product'. Correct: customers.risk_score (direct), customers->accounts (registered), customers->loan_contracts (registered).",
+    "recommended_fix": "Entity resolver should select 'customer' as primary entity.",
+    "recovery_if_fixed": true
+  },
+  {
+    "question_id": "H158",
+    "query": "Rank regions by total outstanding loan balance",
+    "category": "ranking",
+    "expected_behavior": "pipeline_complete",
+    "root_cause": "JOIN_REGISTRY_ERROR",
+    "failure_mode": "accounts.product_id does not exist",
+    "pipeline_stopped_at": "sql_execution",
+    "intent_result": {
+      "primary_category": "branch_analysis",
+      "confidence": 0.95,
+      "requires_clarification": false,
+      "supported_capability": true
+    },
+    "semantic_objects": {
+      "selected_tables": ["products", "accounts", "branches", "customers"],
+      "join_paths_used": ["products->accounts", "products->branches", "products->customers"]
+    },
+    "query_plan": {
+      "task": "ranking",
+      "primary_entity": "product",
+      "primary_table": "products"
+    },
+    "generated_sql": "SELECT accounts.* FROM products LEFT JOIN accounts ON products.product_id = accounts.product_id LEFT JOIN branches ON products.product_id = branches.product_id LEFT JOIN customers ON products.product_id = customers.product_id LIMIT 100",
+    "actual_db_columns": {
+      "loan_contracts": ["loan_id", "branch_id", "outstanding_balance"],
+      "branches": ["branch_id", "region_id"],
+      "regions": ["region_id", "name"]
+    },
+    "join_registry_entry": "No products->accounts/branches/customers. Correct: loan_contracts has branch_id + outstanding_balance. branches has region_id. loan_contracts->branches not in registry but loan_contracts.branch_id -> branches.branch_id is a valid FK.",
+    "db_error": "column accounts.product_id does not exist",
+    "explanation": "Query needs loan_contracts.outstanding_balance grouped by region. Entity resolution selected 'product'. Correct: loan_contracts.branch_id -> branches.branch_id (registered? need to verify), branches.region_id -> regions.region_id.",
+    "recommended_fix": "Register loan_contracts->branches (via branch_id). Map 'outstanding loan balance' to loan_contracts. Map 'regions' to the regions table.",
+    "recovery_if_fixed": true
+  }
+]

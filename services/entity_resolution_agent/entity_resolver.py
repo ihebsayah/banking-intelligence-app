@@ -17,6 +17,7 @@ from semantic_id_mapper import (
     get_primary_table,
     get_tables_containing_key,
     find_join_key,
+    TABLE_ENTITY_COLUMNS,
 )
 
 logger = logging.getLogger(__name__)
@@ -268,29 +269,44 @@ class EntityResolver:
                 primary_table, tables
             )
 
-        if "products" in join_targets and "accounts" not in join_targets and primary_table != "accounts":
-            join_targets.append("accounts")
-
         join_paths: List[JoinPath] = []
         for target in join_targets:
-            if target == "products":
+            join_key = find_join_key(primary_table, target)
+            if join_key:
+                condition = f"{primary_table}.{join_key} = {target}.{join_key}"
                 join_paths.append(JoinPath(
-                    from_table="accounts",
-                    to_table="products",
-                    join_key="account_type",
+                    from_table=primary_table,
+                    to_table=target,
+                    join_key=join_key,
                     join_type="LEFT JOIN",
-                    condition="accounts.account_type = products.category",
+                    condition=condition,
                 ))
-                continue
-            join_key = find_join_key(primary_table, target) or primary_key
-            condition = f"{primary_table}.{join_key} = {target}.{join_key}"
-            join_paths.append(JoinPath(
-                from_table=primary_table,
-                to_table=target,
-                join_key=join_key,
-                join_type="LEFT JOIN",
-                condition=condition,
-            ))
+            else:
+                # No registered join key — try transitive via accounts
+                if target == "products" and "accounts" in tables:
+                    join_paths.append(JoinPath(
+                        from_table="accounts",
+                        to_table="products",
+                        join_key="account_type",
+                        join_type="LEFT JOIN",
+                        condition="accounts.account_type = products.category",
+                    ))
+                elif primary_key and hasattr(primary_key, '__iter__') or isinstance(primary_key, str):
+                    pk = primary_key if isinstance(primary_key, str) else "id"
+                    if pk in TABLE_ENTITY_COLUMNS.get(target, []):
+                        condition = f"{primary_table}.{pk} = {target}.{pk}"
+                        join_paths.append(JoinPath(
+                            from_table=primary_table,
+                            to_table=target,
+                            join_key=pk,
+                            join_type="LEFT JOIN",
+                            condition=condition,
+                        ))
+                    else:
+                        logger.warning(
+                            "No join key found for %s → %s — skipped",
+                            primary_table, target
+                        )
 
         notes = (
             f"Single table '{primary_table}' — no joins needed."

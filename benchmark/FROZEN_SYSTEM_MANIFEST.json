@@ -1,0 +1,67 @@
+{
+  "frozen_at": "2026-07-22T09:00:00Z",
+  "git_commit": "d03cb280cd37ff701fe5752c99ddfc90332062ed",
+  "git_tag": "benchmark-v1-holdout-candidate-1-gd03cb28",
+  "integration_run_2": {
+    "score": "26/30",
+    "accuracy_pct": 86.7,
+    "safety_checks": "4/4",
+    "summary_file": "benchmark/results/integration_summary_run2.json"
+  },
+  "gate_config": {
+    "intent_confidence_threshold": 0.50,
+    "gate_logic_location": "services/orchestrator/orchestrator_agent.py:83-95",
+    "gate_fields": ["supported_capability", "risk_level", "requires_clarification", "confidence"]
+  },
+  "services": {
+    "api_gateway": { "port": 8000, "container": "banking_api_gateway" },
+    "intent_agent": { "port": 8002, "container": "banking_intent_agent" },
+    "schema_agent": { "port": 8003, "container": "banking_schema_agent" },
+    "entity_resolution": { "port": 8004, "container": "banking_entity_resolution" },
+    "sql_agent": { "port": 8005, "container": "banking_sql_agent" },
+    "validation_agent": { "port": 8006, "container": "banking_validation_agent" },
+    "compliance_agent": { "port": 8007, "container": "banking_compliance_agent" },
+    "execution_agent": { "port": 8008, "container": "banking_execution_agent" },
+    "insights_agent": { "port": 8009, "container": "banking_insights_agent" },
+    "orchestrator": { "port": 8010, "container": "banking_orchestrator" },
+    "postgres_main": { "port": 5432, "container": "banking_postgres_main", "db": "banking_dev", "user": "banking_user" },
+    "redis": { "port": 6379, "container": "banking_redis" }
+  },
+  "file_hashes": {
+    "services/intent_agent/structured_intent.py": "bffc09411a8cbff7",
+    "services/intent_agent/intent_recognizer.py": "1afddb5858cd4fd9",
+    "services/intent_agent/models.py": "dfdbe9014c20f053",
+    "services/orchestrator/orchestrator_agent.py": "4c0b1c49bf8c5b36",
+    "services/api_gateway/routes.py": "237832e80cd41568",
+    "services/sql_agent/sql_builder.py": "e08910a0958817f1",
+    "services/schema_agent/progressive_schema.py": "f4c09a6db9cf7e60",
+    "benchmark/integration/questions.json": "40a7aad638cd2fa4",
+    "benchmark/integration/run_integration.py": "a9c24aefe62d95a3"
+  },
+  "benchmark_questions": {
+    "integration_file": "benchmark/integration/questions.json",
+    "count": 30,
+    "categories": {
+      "business_en": 5,
+      "business_fr": 5,
+      "governed": 4,
+      "multi_table": 4,
+      "ranking": 3,
+      "ambiguous": 2,
+      "unsupported": 2,
+      "adversarial": 2,
+      "authorization": 1,
+      "malformed": 1,
+      "api_validation": 1
+    }
+  },
+  "known_failures": {
+    "count": 4,
+    "root_cause": "SQL LLM generates wrong column references (customers.branch_id, accounts.product_id)",
+    "affected_questions": ["I003", "I015", "I016", "I018"],
+    "classification": "SQL generation / schema drift — not gate-related"
+  },
+  "test_regression": {
+    "test_request_gating.py": { "tests": 17, "status": "all_pass" }
+  }
+}

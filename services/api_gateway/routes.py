@@ -575,6 +575,17 @@ async def submit_query(
     ip_address = request.client.host if request.client else "unknown"
     logger.info("Query received", extra={"user_id": user.user_id, "role": user.user_role, "query": body.query[:80]})
 
+    q_stripped = body.query.strip()
+    if not q_stripped or not any(c.isalpha() for c in q_stripped) or q_stripped.lower() in ("null", "undefined", "none", "nan", "false", "true"):
+        raise HTTPException(status_code=422, detail={"error": "VALIDATION_ERROR",
+            "message": "Query contains no readable content"})
+    if "<" in q_stripped and ">" in q_stripped and "/" in q_stripped:
+        raise HTTPException(status_code=422, detail={"error": "VALIDATION_ERROR",
+            "message": "Query contains markup"})
+    if "{{" in q_stripped or "{%" in q_stripped:
+        raise HTTPException(status_code=422, detail={"error": "VALIDATION_ERROR",
+            "message": "Query contains template syntax"})
+
     try:
         async with httpx.AsyncClient(timeout=300.0) as client:
             response = await client.post(
@@ -615,13 +626,15 @@ async def submit_query(
             step_data = pipeline[step_name]
             is_success = step_data and (isinstance(step_data, dict) and not step_data.get("error"))
             pipeline_steps.append({"agent": step_name, "status": "success" if is_success else "error", "response": step_data})
-    if "results" in pipeline_result:
-        pipeline_steps.append({"agent": "execution", "status": "success" if pipeline_result.get("status") == "success" else "error",
-            "response": {"rows_returned": len(pipeline_result.get("results") or [])}})
+    meta = pipeline_result.get("metadata", {})
+    exec_status = meta.get("execution_status")
+    if exec_status or pipeline_result.get("results"):
+        pipeline_steps.append({"agent": "execution", "status": "success" if exec_status == "success" else "error",
+            "response": {"rows_returned": len(pipeline_result.get("results") or []), "error": meta.get("error")}})
     if "insights" in pipeline_result and pipeline_result.get("insights"):
         pipeline_steps.append({"agent": "insights", "status": "success", "response": pipeline_result.get("insights")})
 
-    return {
+    body_dict = {
         "status": pipeline_result.get("status"),
         "results": pipeline_result.get("results"),
         "metadata": pipeline_result.get("metadata", {}),
@@ -632,6 +645,11 @@ async def submit_query(
         "request_id": pipeline_result.get("request_id"),
         "debug_url": pipeline_result.get("debug_url"),
     }
+    if pipeline_status == "error":
+        err_msg = str(pipeline_result.get("error", ""))
+        if "Query must not be empty" in err_msg or "Query is null" in err_msg:
+            raise HTTPException(status_code=422, detail=body_dict)
+    return body_dict
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

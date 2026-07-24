@@ -1,0 +1,7 @@
+{
+  "run": "regression_160_run_2",
+  "result": "160/160 (100%)",
+  "description": "Post-remediation regression run. Same 160 questions as the original blind holdout, executed after 7 code fixes were applied. This result validates correction of known failures but is NOT an independent estimate of generalization.",
+  "methodology_note": "The initial 160-question execution was the blind holdout evaluation (135/160, 84.4%). After its failures were inspected and the implementation was modified, the same dataset became a remediation and regression suite. The 160/160 result confirms correction of known failures but is not an independent estimate of generalization.",
+  "timestamp": "2026-07-23T20:13:56Z"
+}

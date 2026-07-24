@@ -79,7 +79,21 @@ class OrchestratorAgent:
             intent_data = intent_response["data"]
             logger.info(f"[ORCHESTRATOR] ← Intent: {intent_data.get('primary_category', 'unknown')}")
             await self._log("intent", f"Identified intent: {intent_data.get('primary_category', 'unknown')}")
-            
+
+            # ── Intent-gate decision ────────────────────────────────────────────
+            gate_reason = None
+            if not intent_data.get("supported_capability", True):
+                gate_reason = intent_data.get("rejection_reason", "Unsupported query")
+            elif intent_data.get("risk_level") in ("adversarial", "suspicious"):
+                gate_reason = intent_data.get("rejection_reason", "Query flagged by risk assessment")
+            elif intent_data.get("requires_clarification") and (intent_data.get("intent_confidence") or intent_data.get("confidence", 1.0)) < self.config.INTENT_CONFIDENCE_THRESHOLD:
+                gate_reason = intent_data.get("clarification_question") or "Insufficient confidence to proceed"
+
+            if gate_reason:
+                await self._log("intent", f"Gate REJECTED: {gate_reason}", "warning")
+                return self._error_response(gate_reason)
+            # ─────────────────────────────────────────────────────────────────────
+
             # Step 2: Schema Understanding
             logger.info("[ORCHESTRATOR] → Schema Agent")
             await self._log("schema", "Mapping intent to database domains and tables...")

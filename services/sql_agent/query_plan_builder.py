@@ -357,12 +357,15 @@ APPROVED_METRICS: Dict[str, Dict[str, Any]] = {
 
 _DIMENSION_TO_GRAIN: Dict[str, str] = {
     "customers.segment": "segment",
-    "branches.governorate": "governorate",
+    "branches.region_id": "region",
     "branches.region": "region",
     "branches.name": "branch",
     "branches.state": "branch",
     "branches.city": "branch",
     "accounts.account_type": "account_type",
+    "loan_contracts.loan_type": "loan_type",
+    "loan_contracts.status": "loan_status",
+    "fee_income.fee_type": "fee_type",
     "time": "time",
 }
 
@@ -377,11 +380,14 @@ ENTITY_IDENTITIES: Dict[str, Dict[str, Any]] = {
     "employees": {"identity": "employee_id", "source_table": "employees"},
     "cards": {"identity": "card_id", "source_table": "cards"},
     "products": {"identity": "product_id", "source_table": "products"},
-    "risk_flags": {"identity": "flag_id", "source_table": "risk_flags"},
+    "risk_flags": {"identity": "id", "source_table": "risk_flags"},
     "kyc_cases": {"identity": "kyc_case_id", "source_table": "kyc_cases"},
     "aml_alerts": {"identity": "alert_id", "source_table": "aml_alerts"},
     "non_performing_loans": {"identity": "npl_id", "source_table": "non_performing_loans"},
     "provisions": {"identity": "provision_id", "source_table": "provisions"},
+    "fee_income": {"identity": "fee_income_id", "source_table": "fee_income"},
+    "compliance_violations": {"identity": "id", "source_table": "compliance_violations"},
+    "suspicious_activity_reports": {"identity": "sar_id", "source_table": "suspicious_activity_reports"},
 }
 
 # ─── Boolean columns for conditional aggregation ─────────────────────────────
@@ -391,18 +397,26 @@ _BOOLEAN_COLUMNS: Dict[str, Set[str]] = {
     "branches": {"is_active"},
     "employees": {"is_active"},
     "products": {"is_active"},
+    "kyc_cases": set(),
 }
 
 # ─── Entity keyword → table mapping (for "count customers" detection) ────────
 
 _ENTITY_KEYWORDS: Dict[str, str] = {
-    "customer": "customers", "client": "customers", "client": "customers",
+    "customer": "customers", "client": "customers",
     "account": "accounts", "compte": "accounts",
     "loan": "loan_contracts", "pret": "loan_contracts", "prêt": "loan_contracts",
+    "prêts": "loan_contracts", "credits": "loan_contracts",
+    "provision": "provisions", "provisions": "provisions",
     "transaction": "transactions", "virement": "transactions",
     "branch": "branches", "agence": "branches", "succursale": "branches",
     "employee": "employees", "employé": "employees",
     "card": "cards", "carte": "cards",
+    "fee": "fee_income", "commission": "fee_income", "frais": "fee_income",
+    "kyc": "kyc_cases",
+    "aml": "aml_alerts", "suspicious": "suspicious_activity_reports",
+    "compliance": "compliance_violations", "violation": "compliance_violations",
+    "product": "products", "produit": "products",
 }
 
 # ─── Valid column whitelist ──────────────────────────────────────────────────
@@ -410,50 +424,45 @@ _ENTITY_KEYWORDS: Dict[str, str] = {
 _VALID_COLUMNS: Dict[str, Set[str]] = {
     "customers": {
         "customer_id", "name", "email", "phone", "kyc_verified", "risk_score",
-        "segment", "created_at", "cin_number", "nationality", "date_of_birth",
-        "gender", "address", "city", "governorate", "postal_code", "country",
-        "customer_type", "occupation", "annual_income", "onboarding_date",
-        "relationship_manager_id",
+        "segment", "created_at", "updated_at",
     },
     "accounts": {
         "account_id", "customer_id", "account_type", "balance",
         "available_balance", "currency", "status", "branch_id", "created_at",
-        "account_number", "iban", "product_id", "interest_rate",
-        "overdraft_limit", "last_transaction_date", "account_officer_id",
     },
     "transactions": {
         "transaction_id", "account_id", "customer_id", "amount",
         "transaction_type", "status", "description", "transaction_date",
-        "created_at", "reference_number", "channel", "currency",
-        "exchange_rate", "fee_amount", "beneficiary_account",
-        "beneficiary_bank", "direction",
+        "created_at",
     },
     "branches": {
         "branch_id", "name", "state", "city", "manager_id", "created_at",
-        "branch_code", "address", "region", "governorate", "phone",
-        "is_active", "opened_date",
+        "region_id",
     },
     "loan_contracts": {
-        "loan_id", "customer_id", "account_id", "branch_id", "loan_type",
-        "principal_amount", "outstanding_balance", "interest_rate",
-        "monthly_payment", "start_date", "end_date", "status",
-        "collateral_type", "collateral_value", "credit_score", "created_at",
-        "days_past_due",
+        "loan_id", "customer_id", "account_id", "branch_id", "loan_product_id",
+        "loan_type", "principal_amount", "currency", "interest_rate",
+        "term_months", "installment_amount", "disbursement_date",
+        "maturity_date", "status", "outstanding_balance", "days_past_due",
+        "created_at", "updated_at",
     },
     "non_performing_loans": {
-        "npl_id", "loan_id", "customer_id", "npl_amount",
-        "classification", "status",
+        "npl_id", "loan_id", "npl_amount", "npl_date",
+        "classification", "recovery_status", "created_at",
     },
     "provisions": {
-        "provision_id", "loan_id", "provision_amount", "period",
+        "provision_id", "loan_id", "provision_date", "provision_amount",
+        "calculation_model", "created_at",
     },
     "risk_flags": {
-        "flag_id", "customer_id", "flag_type", "severity", "created_at",
+        "id", "customer_id", "flag_type", "severity", "created_at",
         "account_id", "transaction_id", "resolved_at", "resolved_by",
         "risk_category", "source",
     },
     "kyc_cases": {
-        "kyc_case_id", "customer_id", "status", "created_at",
+        "kyc_case_id", "customer_id", "case_type", "status",
+        "risk_level", "assigned_to", "opened_at", "closed_at",
+        "due_date", "notes", "created_at",
     },
     "aml_alerts": {
         "alert_id", "customer_id", "transaction_id", "severity", "status",
@@ -467,14 +476,16 @@ _VALID_COLUMNS: Dict[str, Set[str]] = {
         "snapshot_id", "period", "total_assets", "total_equity",
     },
     "fee_income": {
-        "fee_id", "account_id", "customer_id", "amount", "fee_date",
+        "fee_income_id", "customer_id", "account_id", "fee_type",
+        "amount", "value_date", "created_at",
     },
     "interest_income": {
         "interest_id", "loan_id", "customer_id", "amount", "period",
     },
     "employees": {
-        "employee_id", "branch_id", "name", "role", "email",
-        "hire_date", "is_active", "department",
+        "employee_id", "branch_id", "department_id", "first_name", "last_name",
+        "title", "role", "hire_date", "is_active", "email",
+        "supervisor_id", "created_at",
     },
     "cards": {
         "card_id", "account_id", "customer_id", "card_type",
@@ -482,9 +493,16 @@ _VALID_COLUMNS: Dict[str, Set[str]] = {
         "daily_limit", "monthly_limit", "issued_date",
     },
     "products": {
-        "product_id", "name", "category", "description", "product_code",
-        "interest_rate", "min_balance", "max_balance", "fee_structure",
-        "currency", "is_active", "launch_date",
+        "product_id", "name", "category", "description",
+    },
+    "compliance_violations": {
+        "id", "query_id", "user_id", "violation_type", "severity",
+        "description", "regulation", "detected_at", "status",
+        "resolution_notes",
+    },
+    "suspicious_activity_reports": {
+        "sar_id", "alert_id", "customer_id", "report_date", "status",
+        "ctaf_reference", "description", "created_at",
     },
 }
 

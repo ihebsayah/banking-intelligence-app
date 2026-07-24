@@ -99,6 +99,7 @@ class Settings(BaseSettings):
     MAX_SQL_REPAIR_ATTEMPTS: int = Field(default=2)
     EXPLAIN_COST_CHECK_ENABLED: bool = Field(default=False)
     BENCHMARK_MODE: bool = Field(default=False)
+    INTENT_CONFIDENCE_THRESHOLD: float = Field(default=0.31, description="Below this confidence, intent gate rejects query")
 
     class Config:
         env_file = ".env"

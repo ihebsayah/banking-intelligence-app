@@ -287,6 +287,11 @@ class IntentRecognizer:
             ambiguities.append("'balance' could mean account balance or revenue balance")
         if "customer" in q and "branch" in q:
             ambiguities.append("Unclear primary entity: customer or branch?")
+        # Vague informational requests — user asks for "info" without specifying
+        # what data they need. These must not be overridden by structured intent.
+        if any(pat in q for pat in ["need info", "info about", "informations sur",
+                                     "besoin d'informations", "informations sur les"]):
+            ambiguities.append("Query too vague — no clear category detected")
         if primary == "risk_analysis" and "high risk" in q:
             ambiguities.append("What is 'high risk'? Define threshold (e.g. risk_score > 0.7)")
         if primary == "risk_analysis" and not any(
@@ -378,11 +383,128 @@ class IntentRecognizer:
                     # Merge ambiguities
                     res[k] = list(set(res.get(k, []) + v))
                 elif k == "requires_clarification":
-                    res[k] = res.get(k, False) or v
+                    # Structured intent can override keyword recognizer's
+                    # requires_clarification=True ONLY when:
+                    # 1. Structured intent says no clarification needed
+                    # 2. Structured intent detected no ambiguities
+                    # 3. Keyword recognizer's ambiguities are all "soft" (confidence-
+                    #    related, not content-related like "too vague")
+                    # This prevents overriding real ambiguity signals.
+                    if not v:
+                        kw_ambiguities = res.get("ambiguities", [])
+                        has_hard_ambiguity = any(
+                            "too short" in a.lower()
+                            for a in kw_ambiguities
+                        )
+                        # Also check query text for vague informational patterns
+                        if not has_hard_ambiguity:
+                            vague_query_pats = [
+                                "need info", "info about",
+                                "informations sur", "besoin d'informations",
+                            ]
+                            q_lower_check = query.lower()
+                            has_hard_ambiguity = any(
+                                vp in q_lower_check for vp in vague_query_pats
+                            )
+                        if not has_hard_ambiguity:
+                            res[k] = False
+                    else:
+                        res[k] = res.get(k, False) or v
                 else:
-                    res[k] = v
+                    res[k] = res.get(k, False) or v
         except Exception as exc:
             logger.warning("Failed to parse structured intent fields: %s", exc)
+
+        # Phase 6D: general vagueness check — if structured intent confidence
+        # is very low, the query is too vague to process regardless of keyword
+        # matching. This catches queries like "Show me data", "I need info",
+        # "Summarize everything" that the keyword matcher misclassifies.
+        try:
+            # Use structured intent confidence; fall back to keyword confidence
+            intent_conf = res.get("intent_confidence") or res.get("confidence", 1.0)
+            if intent_conf < 0.2:
+                res["requires_clarification"] = True
+                if not res.get("clarification_question"):
+                    res["clarification_question"] = (
+                        "Votre question est trop générale. Souhaitez-vous lister les détails ou calculer une agrégation ?"
+                    )
+        except Exception:
+            pass
+
+        # ── Request-gating assessment ──────────────────────────────────────────
+        supported_capability = True
+        risk_level = "safe"
+        rejection_reason = None
+        q_lower = query.lower()
+
+        # Adversarial: SQL injection / prompt injection / social engineering
+        adversarial_patterns = [
+            r"\b(drop|truncate|delete)\s+(table|database)\b",
+            r"\bdrop\s+(all\s+)?(tables?|data|database)\b",
+            r"\bunion\s+select\b",
+            r";\s*(select|insert|update|delete)\b",
+            r"ignore\s+(all\s+)?(previous|prior|above|any)\s+(instructions|rules)",
+            r"ignore\s+\w+\s+(previous|prior)\s+(instructions|rules)",
+            r"ignorez\s+(les\s+)?(instructions|r[èe]gles|consignes)",
+            r"act[\s_]+as[\s_]+(admin|root|superuser)",
+            r"(vous\s+)?[êe]tes?\s+ maintenant\s+en\s+mode\s+admin",
+            r"mode\s+administrateur",
+            r"\bpretend\b.*\b(you\s+are|to\s+be)\b",
+            r"\bpretend\b.*\b(no\s+restrictions|unrestricted)\b",
+            r"bypass\s+(all\s+)?(auth|compliance|validation|safety|security)",
+            r"bypass\s+toutes\s+les",
+            r"bypassez\s+(toutes?\s+les?\s+)?(v[ée]rifications?|s[ée]curit[ée]|contr[ôo]les?)",
+            r"reveal\s+(all|every|the)\s+(data|rows|records|table)",
+            r"password|secret|token|credential",
+            r"identifiants?\s+(de\s+)?(la\s+)?(base|donn[ée]es)",
+            r"\b(exfiltrate|dump|export\s+all)\b",
+        ]
+        for pat in adversarial_patterns:
+            if __import__("re").search(pat, q_lower):
+                risk_level = "adversarial"
+                supported_capability = False
+                rejection_reason = "Query contains potentially adversarial patterns"
+                break
+
+        # Unsupported capabilities (English + French)
+        unsupported_keywords = [
+            "predict", "forecast", "what will", "future value",
+            "prévoyez", "prédis", "prédire", "prévision",
+            "real-time", "real time", "live feed", "streaming",
+            "modify", "update", "insert", "delete",
+            "modifier", "mettre à jour", "insérer", "supprimer",
+            "send", "email", "sms", "create", "print", "schedule",
+            "envoyer", "envoyez", "créer", "créez", "supprimez", "modifiez",
+            "transfer", "initiate payment", "execute transaction",
+            "transférer", "initier paiement", "exécuter transaction",
+            "deploy", "restart", "shutdown",
+            "déployer", "redémarrer", "arrêter",
+        ]
+        if risk_level == "safe":
+            for kw in unsupported_keywords:
+                if kw in q_lower:
+                    supported_capability = False
+                    risk_level = "suspicious"
+                    rejection_reason = f"Query requests unsupported capability: '{kw}'"
+                    break
+
+        # Strong ambiguity escalation (already flagged by ambiguity detection)
+        if risk_level == "safe" and len(ambiguities) >= 4:
+            risk_level = "suspicious"
+            rejection_reason = "Too many ambiguities to proceed safely"
+
+        # Phase 6C override: if structured intent found no ambiguities and cleared
+        # requires_clarification, also clear the risk_level escalation — the keyword
+        # recognizer's ambiguity detector often false-positives on well-specified queries
+        # that happen to mention multiple entities (e.g. "KYC status + risk score + balance").
+        if res.get("requires_clarification") is False and risk_level == "suspicious":
+            if rejection_reason and "ambiguities" in rejection_reason.lower():
+                risk_level = "safe"
+                rejection_reason = None
+
+        res["supported_capability"] = supported_capability
+        res["risk_level"] = risk_level
+        res["rejection_reason"] = rejection_reason
 
         return res
 

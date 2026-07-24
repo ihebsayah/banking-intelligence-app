@@ -53,8 +53,12 @@ _DATE_COLUMNS = {
     "kyc_cases": "created_at",
     "aml_alerts": "created_at",
     "risk_flags": "created_at",
+    "fee_income": "value_date",
+    "provisions": "provision_date",
     "income_statement_snapshots": "period",
     "balance_sheet_snapshots": "period",
+    "compliance_violations": "detected_at",
+    "suspicious_activity_reports": "report_date",
 }
 
 # ─── Increment 3.1: Independent subquery registry ───────────────────────────
@@ -391,8 +395,12 @@ FROM
             "loan_contracts": {"created_at", "branch_id", "currency"},
             "accounts": {"created_at", "branch_id", "currency"},
             "non_performing_loans": {"created_at"},
+            "fee_income": {"created_at", "value_date", "account_id"},
+            "provisions": {"created_at", "provision_date", "loan_id"},
             "income_statement_snapshots": {"period"},
             "balance_sheet_snapshots": {"period"},
+            "compliance_violations": {"detected_at"},
+            "suspicious_activity_reports": {"report_date"},
         }
 
         def _col_exists_in_table(table: str, col: str) -> bool:
