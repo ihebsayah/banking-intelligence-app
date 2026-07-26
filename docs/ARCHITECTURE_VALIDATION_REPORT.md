@@ -203,7 +203,7 @@ Summary: Statistical computation is genuine. Context, trends, and recommendation
 - `join_registry` — valid join paths between tables
 
 ### Current Status
-**Mostly disabled.** Only intent-agent has SEMANTIC_LAYER_ENABLED=true. All other services use hardcoded fallbacks.
+**Fully disabled.** All 7 services with conditional semantic layer code have SEMANTIC_LAYER_ENABLED=false. The entire pipeline runs in hardcoded fallback mode. No semantic layer table queries are executed at runtime.
 
 ---
 
@@ -326,7 +326,7 @@ See BENCHMARK_METRIC_STANDARD.md for metric definitions.
 ## 21. Known Limitations
 
 1. **Confidence gate is dead code** — requires_clarification override makes threshold unreachable
-2. **Semantic layer mostly disabled** — only intent-agent active
+2. **Semantic layer fully disabled** — all 7 services have SEMANTIC_LAYER_ENABLED=false; hardcoded fallbacks used everywhere
 3. **Insights are template-driven** — not genuine analytical reasoning
 4. **Adversarial detection gaps** — misses conversational prompt injection
 5. **No SQL correctness scoring** — pipeline completion ≠ correct results
@@ -348,7 +348,7 @@ See BENCHMARK_METRIC_STANDARD.md for metric definitions.
 5. Add mutation verb detection
 
 ### Important (Before Wider Deployment)
-6. Enable SEMANTIC_LAYER_ENABLED across all services consistently
+6. Enable SEMANTIC_LAYER_ENABLED across all services (currently all `false`, semantic layer tables seeded but never queried)
 7. Replace insights template with query-specific analysis
 8. Add SQL correctness scoring to benchmarks
 9. Implement Secrets Manager

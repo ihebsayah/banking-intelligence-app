@@ -19,11 +19,11 @@
 
 **Deductions:**
 - Confidence gate is dead code due to requires_clarification override (-1)
-- Semantic layer inconsistently enabled across services (-1)
+- Semantic layer fully disabled (all services have SEMANTIC_LAYER_ENABLED=false) (-1)
 
 **What would improve it:**
 - Fix the confidence gate to actually evaluate the threshold
-- Enable semantic layer consistently
+- Enable SEMANTIC_LAYER_ENABLED across all services
 
 ---
 
@@ -145,6 +145,24 @@
 - LLM quality limited by tinyllama model (-1)
 - Confidence calculation is heuristic density, not calibrated probability (-1)
 
+### AI Reasoning Maturity by Subsystem
+
+| Subsystem | Maturity | Technique | Assessment |
+|-----------|----------|-----------|------------|
+| **Intent Classification** | ML (Not LLM) | spaCy tokenization + keyword scoring | Adequate for banking domain. Heuristic confidence (token density), not calibrated. Bilingual via keyword tables. |
+| **Structured Intent Extraction** | Rule-based | Domain/task/metric/filter extraction from keyword tables | Deterministic, predictable. Overrides confidence gate (dead code). |
+| **Schema Mapping** | Deterministic | Static dict lookup (8 categories → tables) | Zero AI. Reliable but inflexible. Cannot handle novel intent patterns. |
+| **Entity Resolution** | Deterministic | Static join key lookup + BFS graph traversal (when semantic layer enabled) | Zero AI. Currently hardcoded fallback only (semantic layer disabled). |
+| **SQL Generation** | Deterministic | Template + parameterization + column whitelist | Zero AI. Safe, predictable, no hallucination risk. |
+| **Validation** | Deterministic | 5 regex checks + sqlparse + HMAC | Zero AI. Machine-perfect consistency. |
+| **Compliance** | Deterministic | Rule-based GDPR/PCI/SOX/AML/KYC | Zero AI. Regulatory rules are explicit, no reasoning needed. |
+| **Execution** | Deterministic | asyncpg parameterized query + RBAC filter + PII mask | Zero AI. Correct by construction. |
+| **Insights Generation** | LLM (with template fallback) | Ollama tinyllama for NL summaries | Low quality. 65-70% template. LLM limited to 2KB context. yoy_growth hardcoded 12.5%. |
+| **Audit Logging** | Deterministic | WORM INSERT | Zero AI. Immutable by design. |
+| **Confidence Gate** | Dead Code | Threshold at 0.31 — unreachable | requires_clarification override makes this ineffective. Known issue. |
+
+**Summary:** 9 of 11 subsystems are deterministic (zero AI). 1 uses ML (spaCy). 1 uses LLM (Ollama). The core pipeline has no AI dependency — it is a rule-based translation engine. AI is only used for intent classification (spaCy) and insight summaries (Ollama).
+
 ---
 
 ## 8. SQL Correctness — B- (Partial)
@@ -186,6 +204,61 @@
 - No rate limiting implementation (documented but not verified) (-0.5)
 - No horizontal scaling configuration (-0.5)
 - No disaster recovery plan (-0.5)
+
+### Three-Tier Enterprise Readiness
+
+#### Tier 1: Internal Demo / Proof of Concept — ✅ READY
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| Core pipeline functional | ✅ | 88.8% routing accuracy, 98.3% completion |
+| Authentication exists | ✅ | JWT with mock fallback (DEV_MODE) |
+| Basic audit trail | ✅ | WORM logging via Audit Agent |
+| Docker deployment | ✅ | docker-compose up works |
+| Health checks | ✅ | All services have /health endpoints |
+| No external dependencies | ✅ | Runs locally with Ollama |
+
+**Verdict:** System works as an internal demo. DEV_MODE is acceptable for internal use.
+
+#### Tier 2: Controlled Pilot (Limited Users, Staging) — ⚠️ PARTIAL
+
+| Requirement | Status | Blocker |
+|-------------|--------|---------|
+| Real authentication | ❌ | DEV_MODE must be False, real JWT secrets |
+| Authorization enforcement | ❌ | 0/5 auth tests pass under DEV_MODE |
+| Secrets management | ❌ | Demo signing key in code |
+| Basic monitoring | ❌ | Empty monitoring directory |
+| SQL correctness validation | ❌ | No correctness scoring in benchmark |
+| Adversarial detection | ⚠️ | 6/8 patterns caught, prompt injection missed |
+| Mutation detection | ❌ | close/approve/simulate not rejected |
+| Rate limiting | ⚠️ | Documented but not verified |
+| Documentation | ✅ | Architecture, security, benchmark docs complete |
+
+**Blockers for Tier 2:**
+1. Set DEV_MODE=False and test with real JWT tokens
+2. Replace demo signing key with proper secrets
+3. Add basic monitoring (Prometheus/Grafana)
+4. Expand adversarial pattern detection
+5. Add mutation verb detection
+
+#### Tier 3: Production (External Users, Compliance) — ❌ NOT READY
+
+| Requirement | Status | Gap |
+|-------------|--------|-----|
+| Production secrets management | ❌ | No Vault/KMS integration |
+| Full RBAC enforcement | ❌ | Authorization not tested in production mode |
+| Monitoring + alerting | ❌ | No Prometheus, Grafana, PagerDuty |
+| Distributed tracing | ❌ | No Jaeger/Zipkin/OpenTelemetry |
+| Disaster recovery | ❌ | No backup/restore automation |
+| Horizontal scaling | ❌ | Docker Compose single-host only |
+| SQL correctness guarantee | ❌ | No correctness scoring |
+| GDPR compliance audit | ⚠️ | PII masking exists but not audited |
+| Penetration testing | ❌ | No external pen test |
+| SOC 2 compliance | ❌ | No audit of audit system |
+| SLA definition | ❌ | No uptime/latency commitments |
+| Load testing | ❌ | No concurrent user benchmarking |
+
+**Gap for Tier 3:** Minimum 12 items need resolution. Estimated effort: 4-8 weeks for a team of 2-3 engineers.
 
 ---
 
