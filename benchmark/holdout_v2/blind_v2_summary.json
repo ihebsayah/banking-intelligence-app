@@ -1,0 +1,16 @@
+{
+  "total": 160,
+  "success_http": 155,
+  "http_error_rate": 3.1,
+  "pipeline_complete": 129,
+  "execution_complete": 0,
+  "clarification": 0,
+  "unsupported": 0,
+  "http_errors": 5,
+  "pipeline_complete_rate": 80.6,
+  "avg_confidence": 0.85,
+  "avg_latency_seconds": 0.52,
+  "p50_latency_seconds": 0.61,
+  "p95_latency_seconds": 0.88,
+  "timestamp": "2026-07-24T04:35:54"
+}

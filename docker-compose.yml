@@ -150,7 +150,7 @@ services:
       - "8002:8002"
     environment:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      - SEMANTIC_LAYER_ENABLED=true
+      - SEMANTIC_LAYER_ENABLED=false
       - DATABASE_URL=postgresql://${POSTGRES_MAIN_USER:-banking_user}:${POSTGRES_MAIN_PASSWORD:-securepass123}@postgres-main:5432/${POSTGRES_MAIN_DB:-banking_dev}
     networks:
       - banking-network

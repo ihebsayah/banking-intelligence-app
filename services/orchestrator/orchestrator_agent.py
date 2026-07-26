@@ -88,6 +88,8 @@ class OrchestratorAgent:
                 gate_reason = intent_data.get("rejection_reason", "Query flagged by risk assessment")
             elif intent_data.get("requires_clarification") and (intent_data.get("intent_confidence") or intent_data.get("confidence", 1.0)) < self.config.INTENT_CONFIDENCE_THRESHOLD:
                 gate_reason = intent_data.get("clarification_question") or "Insufficient confidence to proceed"
+            elif (intent_data.get("intent_confidence") or intent_data.get("confidence", 1.0)) < self.config.INTENT_CONFIDENCE_THRESHOLD:
+                gate_reason = "Query confidence below threshold"
 
             if gate_reason:
                 await self._log("intent", f"Gate REJECTED: {gate_reason}", "warning")

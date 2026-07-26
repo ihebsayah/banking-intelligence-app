@@ -92,6 +92,7 @@ TASKS = {
     ],
     "ranking": [
         "top", "bottom", "best", "worst", "highest", "lowest", "max", "min",
+        "most", "fewest",
         "plus grand", "plus petit", "meilleur", "pire", "maximum", "minimum"
     ],
     "trend": [
@@ -341,7 +342,14 @@ def extract_time_range(query: str) -> Dict[str, Any]:
         return {"type": "relative", "value": "last_quarter"}
     if m_ytd_en or m_ytd_fr:
         return {"type": "relative", "value": "ytd"}
-        
+
+    m_year_fr_en = re.search(r"\ben\s+(20\d{2})\b", q_lower)
+    if m_year_fr_en:
+        return {"type": "absolute", "value": m_year_fr_en.group(1)}
+    m_year_en = re.search(r"\bin\s+(20\d{2})\b", q_lower)
+    if m_year_en:
+        return {"type": "absolute", "value": m_year_en.group(1)}
+
     return {"type": "none", "value": None}
 
 def extract_limit(query: str) -> Optional[int]:
@@ -355,6 +363,16 @@ def extract_limit(query: str) -> Optional[int]:
     if m_limit:
         limit_val = m_limit.group(1) or m_limit.group(2)
         return int(limit_val)
+    _WORD_NUMS = {
+        "ten": 10, "twenty": 20, "thirty": 30, "forty": 40, "fifty": 50,
+        "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90, "hundred": 100,
+    }
+    m_word_top = re.search(r"\btop\s+(\w+)\b", q_lower)
+    if m_word_top and m_word_top.group(1) in _WORD_NUMS:
+        return _WORD_NUMS[m_word_top.group(1)]
+    m_word_limit = re.search(r"\b(\w+)\s+(?:customers?|clients?|accounts?|comptes?|branches?|loans?|prêts?)\b", q_lower)
+    if m_word_limit and m_word_limit.group(1) in _WORD_NUMS:
+        return _WORD_NUMS[m_word_limit.group(1)]
     return None
 
 def detect_ambiguities_structured(query: str, domain: str) -> List[str]:
@@ -421,6 +439,11 @@ def build_structured_intent(query: str) -> Dict[str, Any]:
             filters.append({"column": "customers.risk_score", "operator": op, "value": val})
     elif "haut risque" in q_lower or "high-risk" in q_lower:
         filters.append({"column": "customers.risk_score", "operator": ">=", "value": 0.7})
+
+    if any(w in q_lower for w in ["overdue", "past due", "en retard", "impayés"]):
+        filters.append({"column": "loan_contracts.status", "operator": "=", "value": "overdue"})
+    if any(w in q_lower for w in ["clôturés", "cloturés", "closed", "fermés"]):
+        filters.append({"column": "accounts.status", "operator": "=", "value": "closed"})
         
     ambiguities = detect_ambiguities_structured(query, domain)
     # Exempt queries with explicit task verbs or domain keywords from requiring clarification

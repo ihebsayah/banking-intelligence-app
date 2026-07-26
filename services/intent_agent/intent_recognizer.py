@@ -287,11 +287,6 @@ class IntentRecognizer:
             ambiguities.append("'balance' could mean account balance or revenue balance")
         if "customer" in q and "branch" in q:
             ambiguities.append("Unclear primary entity: customer or branch?")
-        # Vague informational requests — user asks for "info" without specifying
-        # what data they need. These must not be overridden by structured intent.
-        if any(pat in q for pat in ["need info", "info about", "informations sur",
-                                     "besoin d'informations", "informations sur les"]):
-            ambiguities.append("Query too vague — no clear category detected")
         if primary == "risk_analysis" and "high risk" in q:
             ambiguities.append("What is 'high risk'? Define threshold (e.g. risk_score > 0.7)")
         if primary == "risk_analysis" and not any(
@@ -396,18 +391,21 @@ class IntentRecognizer:
                             "too short" in a.lower()
                             for a in kw_ambiguities
                         )
-                        # Also check query text for vague informational patterns
                         if not has_hard_ambiguity:
-                            vague_query_pats = [
-                                "need info", "info about",
-                                "informations sur", "besoin d'informations",
-                            ]
-                            q_lower_check = query.lower()
-                            has_hard_ambiguity = any(
-                                vp in q_lower_check for vp in vague_query_pats
+                            has_structure = (
+                                struct.get("domain")
+                                and struct.get("intent_confidence", 0) >= 0.3
+                                and struct.get("task")
+                                and (
+                                    struct.get("metrics")
+                                    or struct.get("filters_structured")
+                                    or (struct.get("time_range") or {}).get("value")
+                                    or struct.get("limit_requested")
+                                    or struct.get("dimensions")
+                                )
                             )
-                        if not has_hard_ambiguity:
-                            res[k] = False
+                            if has_structure:
+                                res[k] = False
                     else:
                         res[k] = res.get(k, False) or v
                 else:
