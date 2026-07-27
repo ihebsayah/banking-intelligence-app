@@ -35,7 +35,7 @@ from pydantic import BaseModel, Field
 
 from shared.config import get_settings
 from shared.database import DatabaseConnector
-from shared.errors import AuthenticationError, TokenExpiredError, InvalidTokenError
+from shared.errors import AuthenticationError, TokenExpiredError, InvalidTokenError, AmbiguousRoleMappingError
 from shared.logger import get_logger
 from shared.models import (
     AuditLogEntry,
@@ -47,6 +47,7 @@ from shared.models import (
     UserRole,
 )
 from auth import authenticate_user_db, create_access_token, verify_token, MOCK_USERS, pwd_context
+from keycloak_auth import validate_keycloak_token, KeycloakTokenValidationError
 
 try:
     from kpi_service import KPIService
@@ -350,24 +351,221 @@ class AdminActivityLog(BaseModel):
 
 
 
+# ─── Keycloak Role → Application Role Mapping ────────────────────────────────
+
+KEYCLOAK_ROLE_MAP = {
+    "banking_analyst": "analyst",
+    "executive_manager": "manager",
+    "risk_officer": "analyst",
+    "compliance_officer": "compliance",
+    "internal_auditor": "compliance",
+    "administrator": "admin",
+}
+
+
+def _map_keycloak_roles_to_application_role(realm_roles: list) -> Optional[str]:
+    """
+    Map Keycloak realm roles to a single application role.
+    Returns None if no roles map (authenticate but deny protected endpoints).
+    Returns error if multiple distinct app roles map (ambiguous).
+    """
+    priority = {"admin": 4, "compliance": 3, "manager": 2, "analyst": 1}
+    best_role = None
+    best_priority = 0
+    mapped_roles = set()
+    for kr in realm_roles:
+        app_role = KEYCLOAK_ROLE_MAP.get(kr)
+        if app_role:
+            mapped_roles.add(app_role)
+            if priority.get(app_role, 0) > best_priority:
+                best_role = app_role
+                best_priority = priority[app_role]
+    if len(mapped_roles) > 1:
+        raise AmbiguousRoleMappingError(mapped_roles)
+    return best_role
+
+
 # ─── Auth Dependency ──────────────────────────────────────────────────────────
+
+async def _load_application_user(db, user_id: str) -> dict:
+    """Load user from the application database. Returns the row or None."""
+    if db is None:
+        return None
+    try:
+        return await db.fetch_one(
+            "SELECT user_id, role, status, permissions FROM users WHERE user_id = $1",
+            [user_id],
+        )
+    except Exception:
+        return None
+
+
+async def _load_user_permissions(db, role: str, custom_perms_raw) -> list:
+    """Load merged role + custom permissions from the database."""
+    role_perms = []
+    if db is not None:
+        try:
+            rows = await db.fetch_all(
+                "SELECT permission_key FROM role_permissions WHERE role_id = $1",
+                [role],
+            )
+            role_perms = [r["permission_key"] for r in rows]
+        except Exception:
+            pass
+
+    custom_perms = custom_perms_raw or []
+    if isinstance(custom_perms, str):
+        import json
+        try:
+            custom_perms = json.loads(custom_perms)
+        except Exception:
+            custom_perms = [custom_perms]
+
+    return list(set(role_perms) | set(custom_perms))
+
+
+async def _resolve_keycloak_user(db, subject: str, claims: dict) -> Optional[User]:
+    """
+    Resolve a Keycloak-authenticated subject to an application User.
+
+    Strategy:
+    1. Look up user by identity_provider_subject
+    2. Map Keycloak realm roles to application role
+    3. Load business permissions from database
+    """
+    if db is None:
+        if settings.DEV_MODE and settings.KEYCLOAK_DEV_TRANSIENT_USERS_ENABLED:
+            # In DEV_MODE without DB, create a transient user from claims
+            realm_roles = claims.get("realm_roles", [])
+            app_role = _map_keycloak_roles_to_application_role(realm_roles)
+            if app_role is None:
+                app_role = "unmapped"
+            return User(
+                user_id=claims.get("preferred_username", subject),
+                user_role=app_role,
+                permissions=[],
+                authentication_provider="keycloak",
+                keycloak_subject=subject,
+                keycloak_realm_roles=realm_roles,
+                email=claims.get("email"),
+                username=claims.get("preferred_username"),
+            )
+        return None
+
+    # Find application user by identity_provider_subject
+    row = None
+    try:
+        row = await db.fetch_one(
+            "SELECT user_id, role, status, permissions FROM users WHERE identity_provider_subject = $1",
+            [subject],
+        )
+    except Exception:
+        row = None
+
+    if row is None:
+        # No linked application user — return None (user must be linked first)
+        return None
+
+    status_val = row.get("status") or "active"
+    if status_val != "active":
+        return None  # Suspended/inactive — reject
+
+    app_role = row["role"]
+    permissions = await _load_user_permissions(db, row["role"], row.get("permissions"))
+
+    return User(
+        user_id=row["user_id"],
+        user_role=app_role,
+        permissions=permissions,
+        authentication_provider="keycloak",
+        keycloak_subject=subject,
+        keycloak_realm_roles=claims.get("realm_roles", []),
+        email=claims.get("email"),
+        username=claims.get("preferred_username"),
+    )
+
 
 async def get_current_user(
     request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ) -> User:
-    """FastAPI dependency — extracts, validates Bearer JWT, and loads fresh user context."""
+    """FastAPI dependency — extracts, validates Bearer JWT, and loads fresh user context.
+
+    Supports dual authentication mode:
+    - AUTH_PROVIDER=legacy: validates HS256 tokens (original behavior)
+    - AUTH_PROVIDER=keycloak: validates RS256 Keycloak tokens
+    - AUTH_PROVIDER=keycloak + AUTH_COMPATIBILITY_MODE=true: tries Keycloak first, falls back to legacy
+    """
     if not credentials:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"error": "AUTH_REQUIRED", "message": "Authorization header missing"},
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    token = credentials.credentials
+    auth_provider = settings.AUTH_PROVIDER
+    compat_mode = settings.AUTH_COMPATIBILITY_MODE
+    db = getattr(request.app.state, "db", None)
+
+    # ── Keycloak mode ────────────────────────────────────────────────────────
+    if auth_provider == "keycloak":
+        try:
+            subject, claims = validate_keycloak_token(token)
+            user = await _resolve_keycloak_user(db, subject, claims)
+            if user is None:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail={"error": "USER_NOT_FOUND", "message": "Keycloak user not linked to application account"},
+                )
+            logger.info("Keycloak auth success", extra={"user_id": user.user_id, "provider": "keycloak"})
+            return user
+        except AmbiguousRoleMappingError as amb_err:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=amb_err.to_dict(),
+            )
+        except KeycloakTokenValidationError as kc_err:
+            if compat_mode:
+                # Try legacy fallback
+                logger.info("Keycloak validation failed, trying legacy fallback", extra={"error": kc_err.message})
+                try:
+                    user = await _authenticate_legacy(token, db)
+                    # Log compatibility mode acceptance
+                    logger.warning(
+                        "COMPAT_MODE_LEGACY_TOKEN_ACCEPTED",
+                        extra={
+                            "event": "COMPAT_MODE_LEGACY_TOKEN_ACCEPTED",
+                            "authentication_provider": "legacy",
+                            "user_id": user.user_id,
+                            "migration_mode": True,
+                            "request_id": getattr(request.state, "request_id", None),
+                        },
+                    )
+                    return user
+                except HTTPException:
+                    pass
+            # Strict mode or legacy also failed — return Keycloak error
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail={"error": "AUTH_FAILED", "message": kc_err.message},
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        except HTTPException:
+            raise
+        except TokenExpiredError as e:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=e.to_dict(),
+                                headers={"WWW-Authenticate": "Bearer"})
+
+    # ── Legacy mode (default) ────────────────────────────────────────────────
+    return await _authenticate_legacy(token, db)
+
+
+async def _authenticate_legacy(token: str, db) -> User:
+    """Validate a legacy HS256 JWT and return the authenticated user."""
     try:
-        user_id, user_role = verify_token(credentials.credentials)
-        
-        # Load user details (including status, permissions) from DB
-        db = getattr(request.app.state, "db", None)
+        user_id, user_role = verify_token(token)
+
         permissions = []
         if db is not None:
             row = await db.fetch_one(
@@ -385,38 +583,18 @@ async def get_current_user(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail={"error": "USER_SUSPENDED", "message": "User is suspended/inactive"},
                 )
-            
-            # Fetch role's dynamic permissions from the junction table
-            try:
-                role_permissions_rows = await db.fetch_all(
-                    "SELECT permission_key FROM role_permissions WHERE role_id = $1",
-                    [row["role"]]
-                )
-                role_perms = [r["permission_key"] for r in role_permissions_rows]
-            except Exception as e:
-                logger.error("Failed to load role permissions in dependency", extra={"error": str(e)})
-                role_perms = []
-                
-            custom_perms = row.get("permissions") or []
-            if isinstance(custom_perms, str):
-                import json
-                try:
-                    custom_perms = json.loads(custom_perms)
-                except Exception:
-                    custom_perms = [custom_perms]
-            
-            permissions = list(set(role_perms) | set(custom_perms))
+            permissions = await _load_user_permissions(db, row["role"], row.get("permissions"))
         else:
-            # db is None, if DEV_MODE, check MOCK_USERS
             if settings.DEV_MODE:
                 mock_user = MOCK_USERS.get(user_id)
                 if mock_user:
                     permissions = mock_user.get("permissions") or []
-                    
+
         return User(
             user_id=user_id,
             user_role=user_role,
-            permissions=permissions
+            permissions=permissions,
+            authentication_provider="legacy",
         )
     except HTTPException:
         raise
@@ -535,6 +713,13 @@ async def login(
     username: str = Form(...),
     password: str = Form(...),
 ) -> LoginResponse:
+    # In strict Keycloak mode, legacy login is disabled
+    if settings.AUTH_PROVIDER == "keycloak" and not settings.AUTH_COMPATIBILITY_MODE:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "LEGACY_LOGIN_DISABLED", "message": "Legacy login is disabled. Use your identity provider."},
+        )
+
     start_time = time.monotonic()
     ip_address = request.client.host if request.client else "unknown"
 

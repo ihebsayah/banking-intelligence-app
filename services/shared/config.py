@@ -80,11 +80,59 @@ class Settings(BaseSettings):
     # ─── Logging ──────────────────────────────────────────────────────────────
     LOG_LEVEL: str = Field(default="INFO")
 
+    # ─── Auth Provider ───────────────────────────────────────────────────────
+    AUTH_PROVIDER: str = Field(
+        default="legacy",
+        description="Authentication provider: 'legacy' (HS256 JWT) or 'keycloak' (RS256 OIDC)",
+    )
+    AUTH_COMPATIBILITY_MODE: bool = Field(
+        default=False,
+        description="When AUTH_PROVIDER=keycloak, also accept legacy tokens (temporary migration aid)",
+    )
+
+    # ─── Keycloak ─────────────────────────────────────────────────────────────
+    KEYCLOAK_INTERNAL_URL: str = Field(
+        default="http://keycloak:8080",
+        description="Internal Keycloak base URL (Docker network)",
+    )
+    KEYCLOAK_PUBLIC_URL: str = Field(
+        default="http://localhost:8080",
+        description="Public-facing Keycloak base URL",
+    )
+    KEYCLOAK_REALM: str = Field(
+        default="banking-intelligence",
+        description="Keycloak realm name",
+    )
+    KEYCLOAK_API_CLIENT_ID: str = Field(
+        default="banking-portal-api",
+        description="Keycloak client ID representing the API audience",
+    )
+    KEYCLOAK_EXPECTED_AUDIENCE: str = Field(
+        default="banking-portal-api",
+        description="Expected audience claim in Keycloak access tokens",
+    )
+    KEYCLOAK_JWKS_CACHE_TTL_SECONDS: int = Field(
+        default=600,
+        description="How long to cache JWKS keys (seconds)",
+    )
+    KEYCLOAK_HTTP_TIMEOUT_SECONDS: int = Field(
+        default=5,
+        description="HTTP timeout for Keycloak JWKS fetch (seconds)",
+    )
+    KEYCLOAK_CLOCK_SKEW_SECONDS: int = Field(
+        default=30,
+        description="Allowed clock skew for token exp/nbf validation (seconds)",
+    )
+
     # ─── Feature flags ────────────────────────────────────────────────────────
     ENABLE_INSIGHTS_AGENT: bool = Field(default=True)
     ENABLE_COMPLIANCE_AGENT: bool = Field(default=True)
     ENABLE_CACHING: bool = Field(default=True)
     DEV_MODE: bool = Field(default=True, description="Enable development fallback/mocks")
+    KEYCLOAK_DEV_TRANSIENT_USERS_ENABLED: bool = Field(
+        default=False,
+        description="Allow transient Keycloak users without DB linking. Requires DEV_MODE=true.",
+    )
     SEMANTIC_LAYER_ENABLED: bool = Field(default=False)
     STRUCTURED_QUERY_PLAN_ENABLED: bool = Field(default=False)
     DETERMINISTIC_SQL_COMPILER_ENABLED: bool = Field(default=False)

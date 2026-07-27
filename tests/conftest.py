@@ -113,7 +113,16 @@ _ensure_shared_importable()
 
 
 # ─── Stub: PyJWT ──────────────────────────────────────────────────────────────
-if "jwt" not in sys.modules:
+# Try loading real PyJWT first; only stub if unavailable.
+_jwt_real = False
+try:
+    import jwt as _real_jwt
+    if hasattr(_real_jwt, "decode") and hasattr(_real_jwt, "encode"):
+        _jwt_real = True
+except ImportError:
+    pass
+
+if not _jwt_real and "jwt" not in sys.modules:
     import json
     import base64
 
@@ -125,12 +134,10 @@ if "jwt" not in sys.modules:
 
     def encode(payload, key, algorithm=None):
         payload_json = json.dumps(payload)
-        # return token encoded in base64 without padding
         return base64.urlsafe_b64encode(payload_json.encode()).decode().rstrip("=")
 
     def decode(token, key, algorithms=None):
         try:
-            # Re-add base64 padding
             padded = token + "=" * (4 - len(token) % 4)
             payload_json = base64.urlsafe_b64decode(padded.encode()).decode()
             payload = json.loads(payload_json)

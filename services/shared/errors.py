@@ -53,6 +53,18 @@ class InvalidTokenError(AuthenticationError):
         self.error_code = "TOKEN_INVALID"
 
 
+class AmbiguousRoleMappingError(AuthenticationError):
+    """Raised when Keycloak roles map to multiple distinct application roles."""
+
+    def __init__(self, mapped_roles: set):
+        super().__init__(
+            f"Token maps to conflicting application roles: {sorted(mapped_roles)}. "
+            "Each token must resolve to exactly one application role."
+        )
+        self.error_code = "AMBIGUOUS_ROLE_MAPPING"
+        self.mapped_roles = mapped_roles
+
+
 # ─── Database ─────────────────────────────────────────────────────────────────
 
 class DatabaseError(BankingBaseError):

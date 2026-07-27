@@ -1,0 +1,238 @@
+{
+  "id": "banking-intelligence",
+  "realm": "banking-intelligence",
+  "displayName": "Banking Intelligence System",
+  "displayNameHtml": "<strong>Banking Intelligence</strong>",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "maxFailureWaitSeconds": 900,
+  "minimumQuickLoginWaitSeconds": 60,
+  "waitIncrementSeconds": 60,
+  "quickLoginCheckMilliSeconds": 1000,
+  "maxDeltaTimeSeconds": 43200,
+  "failureFactor": 5,
+  "passwordPolicy": "length(8) and upperCase(1) and lowerCase(1) and digits(1)",
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "accessTokenLifespanForImplicitFlow": 900,
+  "accessCodeLifespan": 60,
+  "accessCodeLifespanUserAction": 300,
+  "roles": {
+    "realm": [
+      {
+        "name": "banking_analyst",
+        "description": "Banking analyst - access to business data, KPIs, risk overview"
+      },
+      {
+        "name": "executive_manager",
+        "description": "Executive manager - access to business data, reports, summaries"
+      },
+      {
+        "name": "risk_officer",
+        "description": "Risk officer - maps to analyst in Increment 1A, dedicated role later"
+      },
+      {
+        "name": "compliance_officer",
+        "description": "Compliance officer - access to compliance, audit logs, PII"
+      },
+      {
+        "name": "internal_auditor",
+        "description": "Internal auditor - maps to compliance in Increment 1A, dedicated role later"
+      },
+      {
+        "name": "administrator",
+        "description": "Administrator - full system access including user management"
+      },
+      {
+        "name": "custom_unknown_role",
+        "description": "Test-only: unmapped role for validation testing"
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "banking-portal-web",
+      "name": "Banking Portal Web Client",
+      "description": "React frontend - Authorization Code Flow with PKCE",
+      "enabled": true,
+      "clientAuthenticatorType": "client-dummy",
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://localhost:3000/*",
+        "http://localhost:3000/callback"
+      ],
+      "webOrigins": [
+        "http://localhost:3000"
+      ],
+      "defaultClientScopes": [
+        "openid",
+        "profile",
+        "email",
+        "roles"
+      ],
+      "protocolMappers": [
+        {
+          "name": "realm-roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "config": {
+            "multivalued": "true",
+            "userinfo.token.claim": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "realm_roles",
+            "jsonType.label": "String",
+            "usermodel.realmRoleMapping.roleAttribute": "attribute"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "banking-portal-api",
+      "name": "Banking Portal API",
+      "description": "API audience for access tokens",
+      "enabled": true,
+      "clientAuthenticatorType": "client-dummy",
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [],
+      "webOrigins": [],
+      "protocolMappers": [
+        {
+          "name": "audience-mapper",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "banking-portal-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "userinfo.token.claim": "false"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "kc_analyst_001",
+      "email": "analyst001@banking.local",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Analyst",
+      "lastName": "User One",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "Analyst123!",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["banking_analyst"],
+      "clientRoles": {}
+    },
+    {
+      "username": "kc_manager_001",
+      "email": "manager001@banking.local",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Manager",
+      "lastName": "User One",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "Manager123!",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["executive_manager"],
+      "clientRoles": {}
+    },
+    {
+      "username": "kc_compliance_001",
+      "email": "compliance001@banking.local",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Compliance",
+      "lastName": "Officer One",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "Compliance123!",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["compliance_officer"],
+      "clientRoles": {}
+    },
+    {
+      "username": "kc_admin_001",
+      "email": "admin001@banking.local",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Admin",
+      "lastName": "User One",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "Admin123!",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["administrator"],
+      "clientRoles": {}
+    },
+    {
+      "username": "kc_unknown_001",
+      "email": "unknown001@banking.local",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Unknown",
+      "lastName": "Role User",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "Unknown123!",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["custom_unknown_role"],
+      "clientRoles": {}
+    },
+    {
+      "username": "kc_disabled_001",
+      "email": "disabled001@banking.local",
+      "emailVerified": true,
+      "enabled": false,
+      "firstName": "Disabled",
+      "lastName": "User",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "Disabled123!",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["banking_analyst"],
+      "clientRoles": {}
+    }
+  ],
+  "scopeMappings": [],
+  "clientScopeMappings": {}
+}

@@ -16,6 +16,7 @@ class UserRole(str, Enum):
     COMPLIANCE = "compliance"
     MANAGER = "manager"
     ADMIN = "admin"
+    UNMAPPED = "unmapped"  # Token valid but no mapped application role
 
 
 class AuditStatus(str, Enum):
@@ -36,10 +37,16 @@ class QueryStatus(str, Enum):
 # ─── User & Auth Models ───────────────────────────────────────────────────────
 
 class User(BaseModel):
-    """Authenticated user context, populated from JWT claims."""
+    """Authenticated user context, populated from JWT claims or Keycloak tokens."""
     user_id: str
     user_role: UserRole
     permissions: List[str] = Field(default_factory=list)
+    authentication_provider: str = Field(default="legacy", description="'legacy' or 'keycloak'")
+    keycloak_subject: Optional[str] = None
+    keycloak_realm_roles: List[str] = Field(default_factory=list)
+    keycloak_client_roles: List[str] = Field(default_factory=list)
+    email: Optional[str] = None
+    username: Optional[str] = None
 
     class Config:
         use_enum_values = True

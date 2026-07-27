@@ -53,33 +53,38 @@ except Exception as e:
     raise
 
 async def apply_migrations(db: DatabaseConnector) -> None:
-    """Execute the migration SQL file against the main database.
-    Uses raw asyncpg pool so we can run a full multi-statement script at once.
+    """Execute migration SQL files against the main database.
+    Runs each init script in order; IF NOT EXISTS makes them idempotent.
     """
-    migration_path = "/app/init/02-users-kpis.sql"
-    if not os.path.exists(migration_path):
-        migration_path = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "../../init/02-users-kpis.sql")
+    init_dir = "/app/init"
+    if not os.path.exists(init_dir):
+        init_dir = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "../../init")
         )
 
-    if not os.path.exists(migration_path):
-        logger.warning(f"Migration file not found at {migration_path} — skipping")
+    if not os.path.exists(init_dir):
+        logger.warning(f"Init directory not found at {init_dir} — skipping")
         return
 
-    try:
-        logger.info(f"Applying database migrations from {migration_path}")
-        with open(migration_path, "r") as f:
-            sql = f.read()
-        # Use the internal pool directly so we can execute a multi-statement script
-        pool = db._pool
-        if pool is None:
-            logger.warning("Pool not ready — skipping migration")
-            return
-        async with pool.acquire() as conn:
-            await conn.execute(sql)
-        logger.info("Database migrations applied successfully")
-    except Exception as exc:
-        logger.error("Failed to apply database migrations", extra={"error": str(exc)})
+    migration_files = sorted(
+        f for f in os.listdir(init_dir) if f.endswith(".sql")
+    )
+
+    pool = db._pool
+    if pool is None:
+        logger.warning("Pool not ready — skipping migration")
+        return
+
+    for fname in migration_files:
+        fpath = os.path.join(init_dir, fname)
+        try:
+            with open(fpath, "r") as f:
+                sql = f.read()
+            async with pool.acquire() as conn:
+                await conn.execute(sql)
+            logger.info(f"Applied migration: {fname}")
+        except Exception as exc:
+            logger.warning(f"Migration {fname} had issues (may be idempotent): {exc}")
 
 
 try:

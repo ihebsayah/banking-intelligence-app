@@ -46,6 +46,12 @@ services:
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-change-this-in-production}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - SEMANTIC_LAYER_ENABLED=false
+      - AUTH_PROVIDER=${AUTH_PROVIDER:-legacy}
+      - AUTH_COMPATIBILITY_MODE=${AUTH_COMPATIBILITY_MODE:-false}
+      - KEYCLOAK_INTERNAL_URL=${KEYCLOAK_INTERNAL_URL:-http://keycloak:8080}
+      - KEYCLOAK_REALM=${KEYCLOAK_REALM:-banking-intelligence}
+      - KEYCLOAK_API_CLIENT_ID=${KEYCLOAK_API_CLIENT_ID:-banking-portal-api}
+      - KEYCLOAK_EXPECTED_AUDIENCE=${KEYCLOAK_EXPECTED_AUDIENCE:-banking-portal-api}
     depends_on:
       postgres-main:
         condition: service_healthy
@@ -474,6 +480,60 @@ services:
       bash -c "pip install -q -r requirements.txt && uvicorn main:app --host 0.0.0.0 --port 8012 --reload"
 
   # ============================================================================
+  # KEYCLOAK IDENTITY PROVIDER
+  # ============================================================================
+
+  postgres-keycloak:
+    container_name: banking_postgres_keycloak
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${KEYCLOAK_DB:-keycloak}
+      POSTGRES_USER: ${KEYCLOAK_DB_USER:-keycloak_user}
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-CHANGE_ME_KEYCLOAK_DB}
+    volumes:
+      - postgres_keycloak_data:/var/lib/postgresql/data
+    networks:
+      - banking-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${KEYCLOAK_DB_USER:-keycloak_user} -d ${KEYCLOAK_DB:-keycloak}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  keycloak:
+    container_name: banking_keycloak
+    image: quay.io/keycloak/keycloak:25.0
+    restart: unless-stopped
+    command: start-dev --import-realm
+    ports:
+      - "8080:8080"
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres-keycloak:5432/${KEYCLOAK_DB:-keycloak}
+      KC_DB_USERNAME: ${KEYCLOAK_DB_USER:-keycloak_user}
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-CHANGE_ME_KEYCLOAK_DB}
+      KC_HOSTNAME_STRICT: "false"
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-CHANGE_ME_KEYCLOAK_ADMIN}
+    volumes:
+      - ./keycloak/realm-banking-dev.json:/opt/keycloak/data/import/realm-banking-dev.json:ro
+      - keycloak_data:/opt/keycloak/data
+    depends_on:
+      postgres-keycloak:
+        condition: service_healthy
+    networks:
+      - banking-network
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q '200'"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  # ============================================================================
   # DATABASES
   # ============================================================================
 
@@ -497,6 +557,7 @@ services:
       - ./init/06-finance-gl-domain.sql:/docker-entrypoint-initdb.d/06-finance-gl.sql
       - ./init/07-org-customer-ext.sql:/docker-entrypoint-initdb.d/07-org-customer.sql
       - ./init/08-semantic-layer-seed.sql:/docker-entrypoint-initdb.d/08-sem-seed.sql
+      - ./init/09-keycloak-identity-linking.sql:/docker-entrypoint-initdb.d/09-keycloak.sql
     networks:
       - banking-network
     healthcheck:
@@ -596,9 +657,11 @@ volumes:
   postgres_main_data:
   postgres_audit_data:
   postgres_embeddings_data:
+  postgres_keycloak_data:
   redis_data:
   ollama_data:
   banking_secrets_volume:
+  keycloak_data:
 
 networks:
   banking-network:
