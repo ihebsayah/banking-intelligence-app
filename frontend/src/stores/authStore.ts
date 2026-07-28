@@ -19,11 +19,17 @@ export const useAuthStore = create<AuthState & AuthActions>()(
       isLoading: false,
       error: null,
       setUser: (user, token) => {
-        localStorage.setItem('auth_token', token);
-        set({ user, token, isAuthenticated: true, error: null });
+        // In Keycloak mode, don't persist tokens to localStorage (Keycloak-js manages its own storage)
+        // In legacy mode, store as before
+        if (token !== 'keycloak') {
+          localStorage.setItem('auth_token', token);
+        }
+        set({ user, token: token === 'keycloak' ? 'keycloak' : token, isAuthenticated: true, error: null });
       },
       logout: () => {
         localStorage.removeItem('auth_token');
+        localStorage.removeItem('user_role');
+        localStorage.removeItem('user_id');
         set({ user: null, token: null, isAuthenticated: false, error: null });
       },
       setLoading: (isLoading) => set({ isLoading }),
@@ -31,7 +37,12 @@ export const useAuthStore = create<AuthState & AuthActions>()(
     }),
     {
       name: 'banking-auth',
-      partialize: (state) => ({ user: state.user, token: state.token, isAuthenticated: state.isAuthenticated }),
+      partialize: (state) => ({
+        // Only persist user info in Keycloak mode, not tokens
+        user: state.user,
+        token: state.token === 'keycloak' ? null : state.token,
+        isAuthenticated: state.isAuthenticated,
+      }),
     }
   )
 );

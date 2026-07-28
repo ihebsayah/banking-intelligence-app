@@ -20,7 +20,9 @@ import {
   Shield
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
+import { useAuth } from '../../auth/AuthProvider';
 import { useUIStore } from '../../stores/uiStore';
+import { env } from '../../config/env';
 import { clsx } from 'clsx';
 
 const NAV_ITEMS = [
@@ -37,18 +39,15 @@ const NAV_ITEMS = [
   { to: '/settings',   icon: Settings,         label: 'Settings', roles: ['analyst', 'manager', 'compliance', 'admin'] },
 ];
 
-export function BankingSidebar() {
-  const { user, logout } = useAuthStore();
+interface SidebarUser {
+  user_id: string;
+  name: string;
+  role: string;
+}
+
+function SidebarShell({ user, onLogout }: { user: SidebarUser | null; onLogout: () => void }) {
   const { sidebarCollapsed, toggleSidebar, notifications } = useUIStore();
-  const navigate = useNavigate();
   const unread = notifications.filter((n) => !n.read).length;
-
-  function handleLogout() {
-    logout();
-    navigate('/login', { replace: true });
-  }
-
-  // Filter items by user role
   const userRole = user?.role ?? 'analyst';
   const visibleNavItems = NAV_ITEMS.filter(item => item.roles.includes(userRole));
 
@@ -57,7 +56,6 @@ export function BankingSidebar() {
       'flex flex-col h-screen bg-[#06101e] border-r border-[#0f2040] transition-all duration-300 flex-shrink-0',
       sidebarCollapsed ? 'w-[68px]' : 'w-[220px]'
     )}>
-      {/* Logo */}
       <div className={clsx('flex items-center h-16 border-b border-[#0f2040] px-4 flex-shrink-0', sidebarCollapsed && 'justify-center px-0')}>
         <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#0066CC] to-[#003366] flex items-center justify-center flex-shrink-0 shadow-[0_0_16px_rgba(0,102,204,0.3)]">
           <Building2 size={16} className="text-white" />
@@ -70,7 +68,6 @@ export function BankingSidebar() {
         )}
       </div>
 
-      {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
         {visibleNavItems.map(({ to, icon: Icon, label }) => (
           <NavLink key={to} to={to} className={({ isActive }) => clsx(
@@ -82,7 +79,6 @@ export function BankingSidebar() {
           )}>
             <Icon size={17} className="flex-shrink-0" />
             {!sidebarCollapsed && <span className="truncate">{label}</span>}
-            {/* Tooltip on collapsed */}
             {sidebarCollapsed && (
               <div className="absolute left-full ml-2 px-2 py-1 bg-[#0d1f3c] border border-[#1e3459] rounded text-xs text-white whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
                 {label}
@@ -92,9 +88,7 @@ export function BankingSidebar() {
         ))}
       </nav>
 
-      {/* Bottom: user + collapse */}
       <div className="border-t border-[#0f2040] p-3 space-y-2 flex-shrink-0">
-        {/* Notifications */}
         <button className={clsx(
           'flex items-center gap-3 w-full rounded-lg px-3 py-2 text-slate-400 hover:bg-[#0a1a30] hover:text-slate-200 transition-all duration-200 text-sm relative',
           sidebarCollapsed && 'justify-center px-0'
@@ -108,7 +102,6 @@ export function BankingSidebar() {
           )}
         </button>
 
-        {/* User Card */}
         {!sidebarCollapsed && user && (
           <div className="flex flex-col gap-1.5 px-3 py-2 rounded-lg bg-[#0a1628] border border-[#0f2040]">
             <div className="flex items-center gap-2.5">
@@ -135,7 +128,6 @@ export function BankingSidebar() {
           </div>
         )}
 
-        {/* Developer Monitor for Admins Only */}
         {!sidebarCollapsed && user?.role === 'admin' && (
           <NavLink
             to="/dev"
@@ -146,9 +138,8 @@ export function BankingSidebar() {
           </NavLink>
         )}
 
-        {/* Logout */}
         <button
-          onClick={handleLogout}
+          onClick={onLogout}
           className={clsx(
             'flex items-center gap-3 w-full rounded-lg px-3 py-2 text-slate-500 hover:bg-red-500/10 hover:text-red-400 transition-all duration-200 text-sm',
             sidebarCollapsed && 'justify-center px-0'
@@ -158,7 +149,6 @@ export function BankingSidebar() {
           {!sidebarCollapsed && 'Logout'}
         </button>
 
-        {/* Collapse toggle */}
         <button
           onClick={toggleSidebar}
           className={clsx(
@@ -171,4 +161,20 @@ export function BankingSidebar() {
       </div>
     </aside>
   );
+}
+
+function BankingSidebarKeycloak() {
+  const { applicationUser, logout } = useAuth();
+  return <SidebarShell user={applicationUser} onLogout={logout} />;
+}
+
+function BankingSidebarLegacy() {
+  const { user, logout } = useAuthStore();
+  const navigate = useNavigate();
+  return <SidebarShell user={user} onLogout={() => { logout(); navigate('/login', { replace: true }); }} />;
+}
+
+export function BankingSidebar() {
+  const isKeycloak = env.AUTH_PROVIDER === 'keycloak';
+  return isKeycloak ? <BankingSidebarKeycloak /> : <BankingSidebarLegacy />;
 }

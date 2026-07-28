@@ -1,5 +1,4 @@
 services:
-
   # ============================================================================
   # FRONTEND DASHBOARD
   # ============================================================================
@@ -62,7 +61,11 @@ services:
     networks:
       - banking-network
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\" || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://localhost:8000/health'')" || exit 1',
+        ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -108,7 +111,11 @@ services:
     networks:
       - banking-network
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8001/health')\" || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://localhost:8001/health'')" || exit 1',
+        ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -131,14 +138,17 @@ services:
     networks:
       - banking-network
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8099/health')\" || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://localhost:8099/health'')" || exit 1',
+        ]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 60s
     command: >
       bash -c "pip install fastapi uvicorn websockets requests && python main.py"
-
 
   # ============================================================================
   # MICROSERVICE AGENTS
@@ -161,7 +171,11 @@ services:
     networks:
       - banking-network
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8002/health')\" || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://localhost:8002/health'')" || exit 1',
+        ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -189,7 +203,11 @@ services:
     networks:
       - banking-network
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8003/health')\" || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://localhost:8003/health'')" || exit 1',
+        ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -219,7 +237,11 @@ services:
     networks:
       - banking-network
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8004/health')\" || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://localhost:8004/health'')" || exit 1',
+        ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -246,7 +268,11 @@ services:
     networks:
       - banking-network
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8005/health')\" || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://localhost:8005/health'')" || exit 1',
+        ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -272,7 +298,11 @@ services:
     networks:
       - banking-network
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8006/health')\" || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://localhost:8006/health'')" || exit 1',
+        ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -303,7 +333,11 @@ services:
     networks:
       - banking-network
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8007/health')\" || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://localhost:8007/health'')" || exit 1',
+        ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -330,7 +364,11 @@ services:
     networks:
       - banking-network
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8008/health')\" || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://localhost:8008/health'')" || exit 1',
+        ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -361,7 +399,11 @@ services:
     networks:
       - banking-network
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8009/health')\" || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://localhost:8009/health'')" || exit 1',
+        ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -384,7 +426,11 @@ services:
     networks:
       - banking-network
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8010/health')\" || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://localhost:8010/health'')" || exit 1',
+        ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -416,7 +462,11 @@ services:
     networks:
       - banking-network
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8013/health')\" || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://localhost:8013/health'')" || exit 1',
+        ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -442,7 +492,11 @@ services:
     networks:
       - banking-network
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8011/health')\" || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://localhost:8011/health'')" || exit 1',
+        ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -471,7 +525,11 @@ services:
     networks:
       - banking-network
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8012/health')\" || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          'python -c "import urllib.request; urllib.request.urlopen(''http://localhost:8012/health'')" || exit 1',
+        ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -496,7 +554,11 @@ services:
     networks:
       - banking-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${KEYCLOAK_DB_USER:-keycloak_user} -d ${KEYCLOAK_DB:-keycloak}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${KEYCLOAK_DB_USER:-keycloak_user} -d ${KEYCLOAK_DB:-keycloak}",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -516,8 +578,10 @@ services:
       KC_HOSTNAME_STRICT: "false"
       KC_HTTP_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
+      KC_PROXY_HEADERS: xforwarded
+      KC_PROXY_ADDRESS_FORWARDING: "true"
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-CHANGE_ME_KEYCLOAK_ADMIN}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
     volumes:
       - ./keycloak/realm-banking-dev.json:/opt/keycloak/data/import/realm-banking-dev.json:ro
       - keycloak_data:/opt/keycloak/data
@@ -527,7 +591,11 @@ services:
     networks:
       - banking-network
     healthcheck:
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q '200'"]
+      test:
+        [
+          "CMD-SHELL",
+          "exec 3<>/dev/tcp/localhost/8080 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q '200'",
+        ]
       interval: 30s
       timeout: 10s
       retries: 10
@@ -561,7 +629,11 @@ services:
     networks:
       - banking-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_MAIN_USER:-banking_user} -d ${POSTGRES_MAIN_DB:-banking_dev}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_MAIN_USER:-banking_user} -d ${POSTGRES_MAIN_DB:-banking_dev}",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -582,7 +654,11 @@ services:
     networks:
       - banking-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_AUDIT_USER:-audit_user} -d ${POSTGRES_AUDIT_DB:-audit_logs}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_AUDIT_USER:-audit_user} -d ${POSTGRES_AUDIT_DB:-audit_logs}",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -603,7 +679,11 @@ services:
     networks:
       - banking-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_EMBEDDINGS_USER:-embedding_user} -d ${POSTGRES_EMBEDDINGS_DB:-embeddings}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_EMBEDDINGS_USER:-embedding_user} -d ${POSTGRES_EMBEDDINGS_DB:-embeddings}",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5

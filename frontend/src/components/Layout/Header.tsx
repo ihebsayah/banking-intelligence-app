@@ -1,9 +1,11 @@
 // src/components/Layout/Header.tsx
 import React, { useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Bell, LogIn, LogOut, User, Key } from 'lucide-react';
+import { LogIn, LogOut, User, Key } from 'lucide-react';
 import { useQueryStore } from '../../stores/queryStore';
 import { login } from '../../api/queries';
+import { useAuth } from '../../auth/AuthProvider';
+import { env } from '../../config/env';
 
 const PAGE_TITLES: Record<string, { title: string; sub: string }> = {
   '/':            { title: 'Dashboard',      sub: 'System overview & quick stats' },
@@ -13,17 +15,28 @@ const PAGE_TITLES: Record<string, { title: string; sub: string }> = {
   '/settings':    { title: 'Settings',       sub: 'API, WebSocket & display configuration' },
 };
 
-export function Header() {
-  const location  = useLocation();
+function HeaderShell({ hasAuth, displayUserId, displayUserRole, onLogin, onLogout, isKeycloak }: {
+  hasAuth: boolean;
+  displayUserId: string;
+  displayUserRole: string;
+  onLogin: () => void;
+  onLogout: () => void;
+  isKeycloak: boolean;
+}) {
+  const location = useLocation();
+  const page = PAGE_TITLES[location.pathname] ?? PAGE_TITLES['/'];
   const { authToken, userRole, userId, setAuth, clearAuth } = useQueryStore();
   const [showLogin, setShowLogin] = useState(false);
   const [loginForm, setLoginForm] = useState({ username: 'analyst_001', password: 'password' });
   const [loginError, setLoginError] = useState('');
   const [loggingIn, setLoggingIn] = useState(false);
 
-  const page = PAGE_TITLES[location.pathname] ?? PAGE_TITLES['/'];
+  const effectiveUserId = displayUserId || userId;
+  const effectiveUserRole = displayUserRole || userRole;
+  // In Keycloak mode, auth state comes only from AuthProvider — never merge queryStore's stale token
+  const effectiveHasAuth = isKeycloak ? hasAuth : (hasAuth || !!authToken);
 
-  const handleLogin = async () => {
+  const handleLegacyLogin = async () => {
     setLoggingIn(true);
     setLoginError('');
     try {
@@ -37,6 +50,14 @@ export function Header() {
     }
   };
 
+  const handleLogout = () => {
+    if (isKeycloak) {
+      onLogout();
+    } else {
+      clearAuth();
+    }
+  };
+
   return (
     <header className="header-gradient flex items-center justify-between px-6 py-3 flex-shrink-0">
       <div>
@@ -45,26 +66,26 @@ export function Header() {
       </div>
 
       <div className="flex items-center gap-3">
-        {authToken ? (
+        {effectiveHasAuth ? (
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 bg-bg-tertiary border border-bg-border rounded-lg px-3 py-1.5">
               <User size={13} className="text-slate-400" />
-              <span className="text-xs text-slate-300">{userId}</span>
-              <span className="badge-blue text-[10px]">{userRole}</span>
+              <span className="text-xs text-slate-300">{effectiveUserId}</span>
+              <span className="badge-blue text-[10px]">{effectiveUserRole}</span>
             </div>
-            <button onClick={clearAuth} className="btn-ghost text-xs px-2 py-1.5">
+            <button onClick={handleLogout} className="btn-ghost text-xs px-2 py-1.5">
               <LogOut size={13} /> Logout
             </button>
           </div>
         ) : (
-          <button onClick={() => setShowLogin(true)} className="btn-primary text-xs px-3 py-1.5">
+          <button onClick={() => isKeycloak ? onLogin() : setShowLogin(true)} className="btn-primary text-xs px-3 py-1.5">
             <LogIn size={13} /> Login
           </button>
         )}
       </div>
 
-      {/* Login modal */}
-      {showLogin && (
+      {/* Login modal — legacy mode only */}
+      {!isKeycloak && showLogin && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowLogin(false)}>
           <div className="glass-card-static p-6 w-80 animate-slide-up" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-2 mb-4">
@@ -72,7 +93,7 @@ export function Header() {
               <h3 className="text-base font-semibold text-slate-200">API Authentication</h3>
             </div>
             <p className="text-xs text-slate-500 mb-4">Login to get JWT for API requests</p>
-            <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); handleLogin(); }}>
+            <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); handleLegacyLogin(); }}>
               <div>
                 <label className="label">Username</label>
                 <input
@@ -110,4 +131,27 @@ export function Header() {
       )}
     </header>
   );
+}
+
+function HeaderKeycloak() {
+  const { phase, applicationUser, login, logout } = useAuth();
+  return (
+    <HeaderShell
+      hasAuth={phase === 'authenticated'}
+      displayUserId={applicationUser?.user_id ?? ''}
+      displayUserRole={applicationUser?.role ?? ''}
+      onLogin={login}
+      onLogout={logout}
+      isKeycloak={true}
+    />
+  );
+}
+
+function HeaderLegacy() {
+  return <HeaderShell hasAuth={false} displayUserId="" displayUserRole="" onLogin={() => {}} onLogout={() => {}} isKeycloak={false} />;
+}
+
+export function Header() {
+  const isKeycloak = env.AUTH_PROVIDER === 'keycloak';
+  return isKeycloak ? <HeaderKeycloak /> : <HeaderLegacy />;
 }

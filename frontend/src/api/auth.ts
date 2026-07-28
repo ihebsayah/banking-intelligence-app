@@ -11,7 +11,6 @@ interface BackendLoginResponse {
 
 export const authApi = {
   login: async (data: { email: string; password: string }): Promise<LoginResponse> => {
-    // Backend expects application/x-www-form-urlencoded with field "username"
     const params = new URLSearchParams();
     params.append('username', data.email);
     params.append('password', data.password);
@@ -22,14 +21,13 @@ export const authApi = {
 
     const { access_token, user_id, user_role } = res.data;
 
-    // Adapt backend response to the frontend User shape
     return {
       access_token,
       token_type: 'bearer',
       user: {
         user_id,
         email: data.email,
-        name: user_id,          // backend doesn't return name; use user_id as fallback
+        name: user_id,
         role: user_role as 'analyst' | 'manager' | 'compliance' | 'admin',
         bank_id: 'default',
         created_at: new Date().toISOString(),
@@ -43,7 +41,7 @@ export const authApi = {
   },
 
   me: async () => {
-    const res = await apiClient.get('/users/me');
+    const res = await apiClient.get('/auth/me');
     return res.data;
   },
 };
