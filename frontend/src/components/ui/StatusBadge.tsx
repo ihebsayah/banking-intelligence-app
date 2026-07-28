@@ -2,13 +2,13 @@ import { clsx } from 'clsx';
 
 type Variant = 'blue' | 'green' | 'red' | 'yellow' | 'purple' | 'gray';
 
-const variantClasses: Record<Variant, string> = {
-  blue:   'bg-blue-500/10 text-blue-400 border-blue-500/20',
-  green:  'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-  red:    'bg-red-500/10 text-red-400 border-red-500/20',
-  yellow: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
-  purple: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
-  gray:   'bg-slate-500/10 text-slate-400 border-slate-500/20',
+const variantStyles: Record<Variant, { bg: string; color: string; border: string }> = {
+  blue:   { bg: 'rgba(37,99,235,0.1)',   color: 'var(--accent-blue)',  border: 'rgba(37,99,235,0.2)' },
+  green:  { bg: 'rgba(22,163,74,0.1)',   color: 'var(--accent-green)', border: 'rgba(22,163,74,0.2)' },
+  red:    { bg: 'rgba(220,38,38,0.1)',   color: 'var(--accent-red)',   border: 'rgba(220,38,38,0.2)' },
+  yellow: { bg: 'rgba(217,119,6,0.1)',   color: 'var(--accent-amber)', border: 'rgba(217,119,6,0.2)' },
+  purple: { bg: 'rgba(124,58,237,0.1)',  color: 'var(--accent-purple)',border: 'rgba(124,58,237,0.2)' },
+  gray:   { bg: 'var(--bg-tertiary)',     color: 'var(--text-muted)',   border: 'var(--bg-border)' },
 };
 
 interface Props {
@@ -18,12 +18,10 @@ interface Props {
 }
 
 export function StatusBadge({ variant = 'gray', children, className }: Props) {
+  const s = variantStyles[variant];
   return (
-    <span className={clsx(
-      'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border',
-      variantClasses[variant],
-      className,
-    )}>
+    <span className={clsx('inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border', className)}
+      style={{ background: s.bg, color: s.color, borderColor: s.border }}>
       {children}
     </span>
   );

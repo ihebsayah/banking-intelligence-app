@@ -102,22 +102,31 @@ export function ReportsPage() {
     }
   };
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string): { className: string; style: React.CSSProperties } => {
     switch (status.toLowerCase()) {
       case 'approved': 
       case 'submitted':
-        return 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+        return {
+          className: '',
+          style: { background: 'rgba(16, 185, 129, 0.1)', color: 'var(--accent-green)', borderColor: 'rgba(16, 185, 129, 0.2)' }
+        };
       case 'draft':
-        return 'bg-amber-500/10 text-amber-400 border border-amber-500/20';
+        return {
+          className: '',
+          style: { background: 'rgba(245, 158, 11, 0.1)', color: 'var(--accent-amber)', borderColor: 'rgba(245, 158, 11, 0.2)' }
+        };
       default:
-        return 'bg-slate-500/10 text-slate-400 border border-slate-500/20';
+        return {
+          className: '',
+          style: { background: 'rgba(100, 116, 139, 0.1)', color: 'var(--text-muted)', borderColor: 'rgba(100, 116, 139, 0.2)' }
+        };
     }
   };
 
   const totalPages = Math.ceil(totalCount / pageSize) || 1;
 
   return (
-    <div className="min-h-screen bg-[#040711] flex flex-col">
+    <div className="min-h-screen flex flex-col" style={{ background: 'var(--bg-primary)' }}>
       <BankingHeader
         title="Institutional Financial Reporting"
         subtitle="Generate, schedule, and review automated regulatory reports"
@@ -135,7 +144,8 @@ export function ReportsPage() {
             <div className="flex justify-center">
               <button
                 onClick={() => fetchReports()}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[#0066CC] hover:bg-[#0052a3] text-white text-sm font-semibold shadow-lg shadow-[#0066CC]/20 hover:shadow-[#0066CC]/35 transition-all duration-200"
+                className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 hover:opacity-90"
+                style={{ background: 'var(--accent-blue)', color: 'var(--text-primary)' }}
               >
                 <RefreshCw size={16} className={clsx(loading && "animate-spin")} />
                 Retry Connection
@@ -145,10 +155,17 @@ export function ReportsPage() {
         ) : (
           <>
             {/* Top Toolbar & Registry Summary */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#070d19]/40 border border-[#0f2244] rounded-2xl p-5 backdrop-blur-md">
+            <div
+              className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border rounded-2xl p-5 backdrop-blur-md"
+              style={{ background: 'var(--bg-card)', borderColor: 'var(--bg-border)' }}
+            >
               <div>
-                <h3 className="text-sm font-bold text-white">Institutional Reports Database</h3>
-                <p className="text-[10px] text-slate-500 mt-0.5 font-mono">Governed audit aggregates for AML, KYC, and credit risk compliance audits</p>
+                <h3 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
+                  Institutional Reports Database
+                </h3>
+                <p className="text-[10px] mt-0.5 font-mono" style={{ color: 'var(--text-muted)' }}>
+                  Governed audit aggregates for AML, KYC, and credit risk compliance audits
+                </p>
               </div>
 
               <div className="flex flex-wrap items-center gap-3">
@@ -156,7 +173,8 @@ export function ReportsPage() {
                 <select
                   value={regFilter}
                   onChange={(e) => { setRegFilter(e.target.value); setPage(1); }}
-                  className="bg-[#03060c] border border-[#0f203d] rounded-lg px-2.5 py-1.5 text-xs text-slate-350 outline-none focus:border-[#0066CC]/50"
+                  className="border rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-[var(--accent-blue)]"
+                  style={{ background: 'var(--bg-tertiary)', borderColor: 'var(--bg-border)', color: 'var(--text-secondary)' }}
                 >
                   <option value="">All Regulations</option>
                   <option value="AML">AML</option>
@@ -168,7 +186,8 @@ export function ReportsPage() {
                 <select
                   value={statusFilter}
                   onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-                  className="bg-[#03060c] border border-[#0f203d] rounded-lg px-2.5 py-1.5 text-xs text-slate-350 outline-none focus:border-[#0066CC]/50"
+                  className="border rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-[var(--accent-blue)]"
+                  style={{ background: 'var(--bg-tertiary)', borderColor: 'var(--bg-border)', color: 'var(--text-secondary)' }}
                 >
                   <option value="">All Statuses</option>
                   <option value="draft">Draft</option>
@@ -178,7 +197,8 @@ export function ReportsPage() {
                 {/* Generate Action Button */}
                 <button
                   onClick={() => setShowGenerateModal(true)}
-                  className="flex items-center gap-1.5 px-4 py-1.5 bg-[#0066CC] hover:bg-[#0052a3] text-white text-xs font-semibold rounded-lg shadow-md transition-all shadow-[#0066CC]/15"
+                  className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold rounded-lg transition-all hover:opacity-90"
+                  style={{ background: 'var(--accent-blue)', color: 'var(--text-primary)' }}
                 >
                   <Plus size={14} />
                   Generate Report
@@ -187,16 +207,26 @@ export function ReportsPage() {
             </div>
 
             {/* Reports List Table */}
-            <div className="bg-[#070d19]/40 border border-[#0f2244] rounded-2xl p-6 backdrop-blur-md">
+            <div
+              className="border rounded-2xl p-6 backdrop-blur-md"
+              style={{ background: 'var(--bg-card)', borderColor: 'var(--bg-border)' }}
+            >
               {loading && reports.length === 0 ? (
                 <div className="space-y-2 py-4">
                   {Array.from({ length: 4 }).map((_, i) => (
-                    <div key={i} className="h-10 bg-[#03060c] border border-[#0f203d]/30 rounded-lg animate-pulse" />
+                    <div
+                      key={i}
+                      className="h-10 border rounded-lg animate-pulse"
+                      style={{ background: 'var(--bg-tertiary)', borderColor: 'var(--bg-border)' }}
+                    />
                   ))}
                 </div>
               ) : reports.length === 0 ? (
-                <div className="text-center py-16 border border-dashed border-[#0f203d] rounded-xl text-slate-500 text-xs flex flex-col items-center justify-center gap-2">
-                  <FileText size={28} className="text-slate-700 mb-1" />
+                <div
+                  className="text-center py-16 border border-dashed rounded-xl text-xs flex flex-col items-center justify-center gap-2"
+                  style={{ borderColor: 'var(--bg-border)', color: 'var(--text-muted)' }}
+                >
+                  <FileText size={28} className="mb-1" style={{ color: 'var(--text-subtle)' }} />
                   <span>No regulatory reports generated yet in this database.</span>
                 </div>
               ) : (
@@ -204,7 +234,7 @@ export function ReportsPage() {
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-xs border-collapse">
                       <thead>
-                        <tr className="border-b border-[#0f2244] text-slate-500">
+                        <tr className="border-b" style={{ borderColor: 'var(--bg-border)', color: 'var(--text-muted)' }}>
                           <th className="pb-3 font-semibold w-24">Report ID</th>
                           <th className="pb-3 font-semibold w-40">Report Type</th>
                           <th className="pb-3 font-semibold w-24">Regulation</th>
@@ -214,60 +244,79 @@ export function ReportsPage() {
                           <th className="pb-3 font-semibold text-right w-44">Submitted At</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-[#0f2244]/50">
-                        {reports.map((report) => (
-                          <tr key={report.report_id} className="hover:bg-[#0c1930]/25 transition-all">
-                            <td className="py-4 font-mono text-[10px] text-slate-400 font-semibold select-all">#{report.report_id.slice(0, 8)}...</td>
-                            <td className="py-4 font-semibold text-slate-200 uppercase tracking-wider">{report.report_type.replace('_', ' ')}</td>
-                            <td className="py-4">
-                              <span className="bg-[#0a1528] text-[#4d9fff] px-1.5 py-0.5 rounded border border-[#0f203d] font-semibold text-[9px] uppercase tracking-wider font-mono">
-                                {report.regulation}
-                              </span>
-                            </td>
-                            <td className="py-4 text-slate-400 font-mono text-[10px]">
-                              {report.report_period_start && report.report_period_end ? (
-                                <span className="flex items-center gap-1 text-slate-350">
-                                  <Calendar size={11} className="text-slate-650" />
-                                  {report.report_period_start} to {report.report_period_end}
+                      <tbody>
+                        {reports.map((report) => {
+                          const badge = getStatusBadge(report.status);
+                          return (
+                            <tr
+                              key={report.report_id}
+                              className="transition-all hover:bg-[rgba(255,255,255,0.03)]"
+                              style={{ borderBottom: '1px solid var(--bg-border)' }}
+                            >
+                              <td className="py-4 font-mono text-[10px] font-semibold select-all" style={{ color: 'var(--text-muted)' }}>
+                                #{report.report_id.slice(0, 8)}...
+                              </td>
+                              <td className="py-4 font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
+                                {report.report_type.replace('_', ' ')}
+                              </td>
+                              <td className="py-4">
+                                <span
+                                  className="px-1.5 py-0.5 rounded border font-semibold text-[9px] uppercase tracking-wider font-mono"
+                                  style={{ background: 'var(--bg-tertiary)', color: 'var(--accent-blue)', borderColor: 'var(--bg-border)' }}
+                                >
+                                  {report.regulation}
                                 </span>
-                              ) : 'Full Database Scope'}
-                            </td>
-                            <td className="py-4 text-center">
-                              <span className={clsx("px-2 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wider", getStatusBadge(report.status))}>
-                                {report.status}
-                              </span>
-                            </td>
-                            <td className="py-4 text-right font-mono text-[10px] text-slate-500">
-                              {formatDateTime(report.generated_at)}
-                            </td>
-                            <td className="py-4 text-right font-mono text-[10px] text-slate-500">
-                              {report.submitted_at ? formatDateTime(report.submitted_at) : (
-                                <span className="text-slate-700 italic">Pending Submission</span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
+                              </td>
+                              <td className="py-4 font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                                {report.report_period_start && report.report_period_end ? (
+                                  <span className="flex items-center gap-1" style={{ color: 'var(--text-secondary)' }}>
+                                    <Calendar size={11} style={{ color: 'var(--text-subtle)' }} />
+                                    {report.report_period_start} to {report.report_period_end}
+                                  </span>
+                                ) : 'Full Database Scope'}
+                              </td>
+                              <td className="py-4 text-center">
+                                <span
+                                  className={clsx("px-2 py-0.5 rounded border text-[9px] font-semibold uppercase tracking-wider", badge.className)}
+                                  style={badge.style}
+                                >
+                                  {report.status}
+                                </span>
+                              </td>
+                              <td className="py-4 text-right font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                                {formatDateTime(report.generated_at)}
+                              </td>
+                              <td className="py-4 text-right font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                                {report.submitted_at ? formatDateTime(report.submitted_at) : (
+                                  <span className="italic" style={{ color: 'var(--text-subtle)' }}>Pending Submission</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
 
                   {/* Pagination */}
-                  <div className="flex items-center justify-between border-t border-[#0f2244] mt-5 pt-4">
-                    <span className="text-[10px] text-slate-500">
-                      Showing page <span className="font-semibold text-slate-300">{page}</span> of <span className="font-semibold text-slate-300">{totalPages}</span> ({totalCount} items)
+                  <div className="flex items-center justify-between border-t mt-5 pt-4" style={{ borderColor: 'var(--bg-border)' }}>
+                    <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                      Showing page <span className="font-semibold" style={{ color: 'var(--text-secondary)' }}>{page}</span> of <span className="font-semibold" style={{ color: 'var(--text-secondary)' }}>{totalPages}</span> ({totalCount} items)
                     </span>
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => setPage((p) => Math.max(1, p - 1))}
                         disabled={page === 1}
-                        className="p-1.5 rounded-lg bg-[#0e1d35] border border-[#1e3459] text-slate-400 hover:text-white disabled:opacity-30 disabled:pointer-events-none transition-all"
+                        className="p-1.5 rounded-lg border disabled:opacity-30 disabled:pointer-events-none transition-all hover:text-[var(--text-primary)]"
+                        style={{ background: 'var(--bg-tertiary)', borderColor: 'var(--bg-border)', color: 'var(--text-muted)' }}
                       >
                         <ChevronLeft size={14} />
                       </button>
                       <button
                         onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                         disabled={page === totalPages}
-                        className="p-1.5 rounded-lg bg-[#0e1d35] border border-[#1e3459] text-slate-400 hover:text-white disabled:opacity-30 disabled:pointer-events-none transition-all"
+                        className="p-1.5 rounded-lg border disabled:opacity-30 disabled:pointer-events-none transition-all hover:text-[var(--text-primary)]"
+                        style={{ background: 'var(--bg-tertiary)', borderColor: 'var(--bg-border)', color: 'var(--text-muted)' }}
                       >
                         <ChevronRight size={14} />
                       </button>
@@ -280,30 +329,42 @@ export function ReportsPage() {
             {/* GENERATE REPORT MODAL WIZARD */}
             {showGenerateModal && (
               <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-                <div className="bg-[#08111e] border border-[#0f2244] rounded-2xl p-6 w-full max-w-md shadow-[0_20px_50px_rgba(0,0,0,0.7)] relative animate-fade-in">
+                <div
+                  className="border rounded-2xl p-6 w-full max-w-md shadow-[0_20px_50px_rgba(0,0,0,0.7)] relative animate-fade-in"
+                  style={{ background: 'var(--bg-card)', borderColor: 'var(--bg-border)' }}
+                >
                   <button
                     onClick={() => setShowGenerateModal(false)}
-                    className="absolute top-4 right-4 text-slate-500 hover:text-white transition-colors"
+                    className="absolute top-4 right-4 transition-colors hover:text-[var(--text-primary)]"
+                    style={{ color: 'var(--text-muted)' }}
                   >
                     <X size={18} />
                   </button>
 
-                  <h3 className="text-base font-bold text-white mb-1 flex items-center gap-2">
-                    <FileText size={18} className="text-[#0066CC]" />
+                  <h3 className="text-base font-bold mb-1 flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                    <FileText size={18} style={{ color: 'var(--accent-blue)' }} />
                     Generate Compliance Audit
                   </h3>
-                  <p className="text-[10px] text-slate-500 mb-6 font-mono">Compile database aggregates into legal regulatory reports</p>
+                  <p className="text-[10px] mb-6 font-mono" style={{ color: 'var(--text-muted)' }}>
+                    Compile database aggregates into legal regulatory reports
+                  </p>
 
                   <form onSubmit={handleGenerate} className="space-y-4 text-xs">
                     {/* Error and Success Feedback */}
                     {formError && (
-                      <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-400 rounded-lg flex items-start gap-2">
+                      <div
+                        className="p-3 border rounded-lg flex items-start gap-2"
+                        style={{ background: 'rgba(239, 68, 68, 0.1)', borderColor: 'rgba(239, 68, 68, 0.2)', color: 'var(--accent-red)' }}
+                      >
                         <AlertCircle size={14} className="mt-0.5 flex-shrink-0" />
                         <span>{formError}</span>
                       </div>
                     )}
                     {formSuccess && (
-                      <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-lg flex items-start gap-2">
+                      <div
+                        className="p-3 border rounded-lg flex items-start gap-2"
+                        style={{ background: 'rgba(16, 185, 129, 0.1)', borderColor: 'rgba(16, 185, 129, 0.2)', color: 'var(--accent-green)' }}
+                      >
                         <CheckCircle2 size={14} className="mt-0.5 flex-shrink-0" />
                         <span>{formSuccess}</span>
                       </div>
@@ -311,11 +372,12 @@ export function ReportsPage() {
 
                     {/* Report Type */}
                     <div className="space-y-1.5">
-                      <label className="text-slate-400 font-medium">Reporting Stream</label>
+                      <label className="font-medium" style={{ color: 'var(--text-muted)' }}>Reporting Stream</label>
                       <select
                         value={reportType}
                         onChange={(e) => setReportType(e.target.value)}
-                        className="w-full bg-[#03060c] border border-[#0f203d] rounded-lg px-3 py-2 text-white outline-none focus:border-[#0066CC]/50"
+                        className="w-full border rounded-lg px-3 py-2 outline-none focus:border-[var(--accent-blue)]"
+                        style={{ background: 'var(--bg-tertiary)', borderColor: 'var(--bg-border)', color: 'var(--text-primary)' }}
                       >
                         <option value="aml_summary">AML Transaction Summary</option>
                         <option value="kyc_status">KYC Segment Status</option>
@@ -326,11 +388,12 @@ export function ReportsPage() {
 
                     {/* Target Regulation */}
                     <div className="space-y-1.5">
-                      <label className="text-slate-400 font-medium">Compliance Governance Frame</label>
+                      <label className="font-medium" style={{ color: 'var(--text-muted)' }}>Compliance Governance Frame</label>
                       <select
                         value={regulation}
                         onChange={(e) => setRegulation(e.target.value)}
-                        className="w-full bg-[#03060c] border border-[#0f203d] rounded-lg px-3 py-2 text-white outline-none focus:border-[#0066CC]/50"
+                        className="w-full border rounded-lg px-3 py-2 outline-none focus:border-[var(--accent-blue)]"
+                        style={{ background: 'var(--bg-tertiary)', borderColor: 'var(--bg-border)', color: 'var(--text-primary)' }}
                       >
                         <option value="AML">AML (Anti-Money Laundering)</option>
                         <option value="KYC">KYC (Know Your Customer)</option>
@@ -343,21 +406,23 @@ export function ReportsPage() {
                     {/* Date Period selectors */}
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1.5">
-                        <label className="text-slate-400 font-medium">Period Start</label>
+                        <label className="font-medium" style={{ color: 'var(--text-muted)' }}>Period Start</label>
                         <input
                           type="date"
                           value={periodStart}
                           onChange={(e) => setPeriodStart(e.target.value)}
-                          className="w-full bg-[#03060c] border border-[#0f203d] rounded-lg px-3 py-2 text-white outline-none focus:border-[#0066CC]/50"
+                          className="w-full border rounded-lg px-3 py-2 outline-none focus:border-[var(--accent-blue)]"
+                          style={{ background: 'var(--bg-tertiary)', borderColor: 'var(--bg-border)', color: 'var(--text-primary)' }}
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <label className="text-slate-400 font-medium">Period End</label>
+                        <label className="font-medium" style={{ color: 'var(--text-muted)' }}>Period End</label>
                         <input
                           type="date"
                           value={periodEnd}
                           onChange={(e) => setPeriodEnd(e.target.value)}
-                          className="w-full bg-[#03060c] border border-[#0f203d] rounded-lg px-3 py-2 text-white outline-none focus:border-[#0066CC]/50"
+                          className="w-full border rounded-lg px-3 py-2 outline-none focus:border-[var(--accent-blue)]"
+                          style={{ background: 'var(--bg-tertiary)', borderColor: 'var(--bg-border)', color: 'var(--text-primary)' }}
                         />
                       </div>
                     </div>
@@ -367,14 +432,16 @@ export function ReportsPage() {
                       <button
                         type="button"
                         onClick={() => setShowGenerateModal(false)}
-                        className="px-4 py-2 bg-[#0d1d33] border border-[#1e3459] text-slate-300 rounded-lg font-semibold hover:text-white"
+                        className="px-4 py-2 border rounded-lg font-semibold hover:text-[var(--text-primary)]"
+                        style={{ background: 'var(--bg-tertiary)', borderColor: 'var(--bg-border)', color: 'var(--text-secondary)' }}
                       >
                         Cancel
                       </button>
                       <button
                         type="submit"
                         disabled={generating || !!formSuccess}
-                        className="flex items-center gap-1.5 px-5 py-2 bg-[#0066CC] hover:bg-[#0052a3] text-white font-semibold rounded-lg shadow-md disabled:opacity-50"
+                        className="flex items-center gap-1.5 px-5 py-2 font-semibold rounded-lg shadow-md disabled:opacity-50 hover:opacity-90"
+                        style={{ background: 'var(--accent-blue)', color: 'var(--text-primary)' }}
                       >
                         <RefreshCw size={13} className={clsx(generating && "animate-spin")} />
                         {generating ? 'Compiling Database...' : 'Run Aggregator'}

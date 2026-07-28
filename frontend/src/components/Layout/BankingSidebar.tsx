@@ -1,162 +1,173 @@
 // src/components/Layout/BankingSidebar.tsx
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { 
-  Building2, 
-  LayoutDashboard, 
-  GitBranch, 
-  Bot, 
-  Settings, 
-  LogOut, 
-  ChevronLeft, 
-  ChevronRight, 
-  Bell,
+import {
+  Building2,
+  LayoutDashboard,
+  GitBranch,
+  Bot,
   BarChart3,
   ShieldAlert,
   Scale,
   FileText,
   Settings2,
-  User,
-  Shield
+  Shield,
+  ChevronsLeft,
+  ChevronsRight,
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { useAuth } from '../../auth/AuthProvider';
 import { useUIStore } from '../../stores/uiStore';
 import { env } from '../../config/env';
+import { Avatar } from '../ui/Avatar';
 import { clsx } from 'clsx';
 
 const NAV_ITEMS = [
-  { to: '/dashboard',  icon: LayoutDashboard, label: 'Dashboard', roles: ['analyst', 'manager', 'compliance', 'admin'] },
-  { to: '/branches',   icon: GitBranch,        label: 'Branches', roles: ['analyst', 'manager', 'compliance', 'admin'] },
-  { to: '/assistant',  icon: Bot,              label: 'AI Assistant', roles: ['analyst', 'manager', 'compliance', 'admin'] },
-  { to: '/kpi',             icon: BarChart3,   label: 'KPI Analytics',   roles: ['analyst', 'manager', 'compliance', 'admin'] },
-  { to: '/kpi-governance',  icon: Shield,      label: 'KPI Governance',  roles: ['analyst', 'manager', 'compliance', 'admin'] },
-  { to: '/risk',       icon: ShieldAlert,      label: 'Risk Monitor', roles: ['analyst', 'manager', 'compliance', 'admin'] },
-  { to: '/compliance', icon: Scale,            label: 'Compliance', roles: ['compliance', 'manager', 'admin'] },
-  { to: '/reports',    icon: FileText,         label: 'Reports', roles: ['manager', 'admin'] },
-  { to: '/admin',      icon: Settings2,        label: 'Admin Portal', roles: ['admin'] },
-  { to: '/profile',    icon: User,             label: 'User Profile', roles: ['analyst', 'manager', 'compliance', 'admin'] },
-  { to: '/settings',   icon: Settings,         label: 'Settings', roles: ['analyst', 'manager', 'compliance', 'admin'] },
+  { to: '/dashboard',       icon: LayoutDashboard, label: 'Dashboard',      roles: ['analyst', 'manager', 'compliance', 'admin'] },
+  { to: '/branches',        icon: GitBranch,       label: 'Branches',       roles: ['analyst', 'manager', 'compliance', 'admin'] },
+  { to: '/assistant',       icon: Bot,             label: 'AI Assistant',   roles: ['analyst', 'manager', 'compliance', 'admin'] },
+  { to: '/kpi',             icon: BarChart3,       label: 'KPI Analytics',  roles: ['analyst', 'manager', 'compliance', 'admin'] },
+  { to: '/kpi-governance',  icon: Shield,          label: 'KPI Governance', roles: ['analyst', 'manager', 'compliance', 'admin'] },
+  { to: '/risk',            icon: ShieldAlert,     label: 'Risk Monitor',   roles: ['analyst', 'manager', 'compliance', 'admin'] },
+  { to: '/compliance',      icon: Scale,           label: 'Compliance',     roles: ['compliance', 'manager', 'admin'] },
+  { to: '/reports',         icon: FileText,        label: 'Reports',        roles: ['manager', 'admin'] },
+  { to: '/admin',           icon: Settings2,       label: 'Admin',          roles: ['admin'] },
+];
+
+const BOTTOM_ITEMS = [
+  { to: '/profile',  label: 'Profile' },
+  { to: '/settings', label: 'Settings' },
 ];
 
 interface SidebarUser {
-  user_id: string;
   name: string;
   role: string;
 }
 
 function SidebarShell({ user, onLogout }: { user: SidebarUser | null; onLogout: () => void }) {
-  const { sidebarCollapsed, toggleSidebar, notifications } = useUIStore();
-  const unread = notifications.filter((n) => !n.read).length;
+  const { sidebarCollapsed, toggleSidebar } = useUIStore();
   const userRole = user?.role ?? 'analyst';
-  const visibleNavItems = NAV_ITEMS.filter(item => item.roles.includes(userRole));
+  const visibleNavItems = NAV_ITEMS.filter((item) => item.roles.includes(userRole));
 
   return (
     <aside className={clsx(
-      'flex flex-col h-screen bg-[#06101e] border-r border-[#0f2040] transition-all duration-300 flex-shrink-0',
-      sidebarCollapsed ? 'w-[68px]' : 'w-[220px]'
-    )}>
-      <div className={clsx('flex items-center h-16 border-b border-[#0f2040] px-4 flex-shrink-0', sidebarCollapsed && 'justify-center px-0')}>
-        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#0066CC] to-[#003366] flex items-center justify-center flex-shrink-0 shadow-[0_0_16px_rgba(0,102,204,0.3)]">
-          <Building2 size={16} className="text-white" />
+      'flex flex-col h-screen border-r transition-all duration-200 flex-shrink-0',
+      sidebarCollapsed ? 'w-[56px]' : 'w-[220px]',
+    )} style={{ background: 'var(--bg-secondary)', borderColor: 'var(--bg-border)' }}>
+      {/* Logo */}
+      <div className={clsx('flex items-center h-12 border-b px-3 flex-shrink-0', sidebarCollapsed && 'justify-center px-0')}
+        style={{ borderColor: 'var(--bg-border)' }}>
+        <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+          style={{ background: 'rgba(37,99,235,0.1)' }}>
+          <Building2 size={15} style={{ color: 'var(--accent-blue)' }} />
         </div>
         {!sidebarCollapsed && (
-          <div className="ml-3 overflow-hidden">
-            <p className="text-sm font-bold text-white leading-tight whitespace-nowrap">Banking Intel</p>
-            <p className="text-[10px] text-slate-500 whitespace-nowrap">HQ Platform</p>
-          </div>
+          <span className="ml-2.5 text-sm font-semibold truncate" style={{ color: 'var(--text-primary)' }}>
+            Banking Intel
+          </span>
         )}
       </div>
 
-      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+      {/* Nav */}
+      <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
         {visibleNavItems.map(({ to, icon: Icon, label }) => (
-          <NavLink key={to} to={to} className={({ isActive }) => clsx(
-            'flex items-center gap-3 rounded-lg transition-all duration-200 text-sm font-medium group relative',
-            sidebarCollapsed ? 'justify-center p-2.5' : 'px-3 py-2.5',
-            isActive
-              ? 'bg-[#0066CC]/15 text-[#4d9fff] border border-[#0066CC]/20'
-              : 'text-slate-400 hover:bg-[#0a1a30] hover:text-slate-200'
-          )}>
-            <Icon size={17} className="flex-shrink-0" />
-            {!sidebarCollapsed && <span className="truncate">{label}</span>}
-            {sidebarCollapsed && (
-              <div className="absolute left-full ml-2 px-2 py-1 bg-[#0d1f3c] border border-[#1e3459] rounded text-xs text-white whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
-                {label}
-              </div>
+          <NavLink
+            key={to}
+            to={to}
+            className={({ isActive }) => clsx(
+              'flex items-center gap-2.5 rounded-lg transition-colors duration-150 text-sm font-medium group relative',
+              sidebarCollapsed ? 'justify-center p-2' : 'px-2.5 py-2',
+            )}
+            style={({ isActive }) => ({
+              background: isActive ? 'rgba(37,99,235,0.1)' : undefined,
+              color: isActive ? 'var(--accent-blue)' : 'var(--text-muted)',
+            })}
+          >
+            {({ isActive }) => (
+              <>
+                <Icon size={16} className="flex-shrink-0" />
+                {!sidebarCollapsed && <span className="truncate">{label}</span>}
+                {sidebarCollapsed && (
+                  <div className="absolute left-full ml-2 px-2 py-1 rounded text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 border"
+                    style={{ background: 'var(--bg-card)', borderColor: 'var(--bg-border)', color: 'var(--text-primary)' }}>
+                    {label}
+                  </div>
+                )}
+              </>
             )}
           </NavLink>
         ))}
       </nav>
 
-      <div className="border-t border-[#0f2040] p-3 space-y-2 flex-shrink-0">
-        <button className={clsx(
-          'flex items-center gap-3 w-full rounded-lg px-3 py-2 text-slate-400 hover:bg-[#0a1a30] hover:text-slate-200 transition-all duration-200 text-sm relative',
-          sidebarCollapsed && 'justify-center px-0'
-        )}>
-          <Bell size={16} className="flex-shrink-0" />
-          {!sidebarCollapsed && <span className="flex-1 text-left">Notifications</span>}
-          {unread > 0 && (
-            <span className="bg-[#0066CC] text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
-              {unread}
-            </span>
-          )}
-        </button>
+      {/* Bottom section */}
+      <div className="border-t p-2 space-y-0.5 flex-shrink-0" style={{ borderColor: 'var(--bg-border)' }}>
+        {/* Bottom nav items (Profile, Settings) */}
+        {BOTTOM_ITEMS.map(({ to, label }) => (
+          <NavLink
+            key={to}
+            to={to}
+            className={({ isActive }) => clsx(
+              'flex items-center gap-2.5 rounded-lg transition-colors duration-150 text-sm',
+              sidebarCollapsed ? 'justify-center p-2' : 'px-2.5 py-2',
+            )}
+            style={({ isActive }) => ({
+              background: isActive ? 'rgba(37,99,235,0.1)' : undefined,
+              color: isActive ? 'var(--accent-blue)' : 'var(--text-subtle)',
+            })}
+          >
+            {!sidebarCollapsed && <span className="truncate">{label}</span>}
+          </NavLink>
+        ))}
 
-        {!sidebarCollapsed && user && (
-          <div className="flex flex-col gap-1.5 px-3 py-2 rounded-lg bg-[#0a1628] border border-[#0f2040]">
-            <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#0066CC] to-[#003366] flex items-center justify-center flex-shrink-0 text-[11px] font-bold text-white">
-                {user.name?.charAt(0).toUpperCase() ?? 'A'}
-              </div>
-              <div className="flex-1 overflow-hidden">
-                <p className="text-xs font-medium text-slate-200 truncate">{user.name}</p>
-                <p className="text-[10px] text-slate-500 truncate capitalize">{user.role}</p>
-              </div>
-            </div>
-            <div className="flex items-center justify-between mt-1 pt-1 border-t border-[#0f2040]/50">
-              <span className={clsx(
-                'text-[9px] font-semibold px-1.5 py-0.5 rounded border capitalize',
-                user.role === 'admin' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
-                user.role === 'compliance' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
-                user.role === 'manager' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
-                'bg-blue-500/10 text-blue-400 border-blue-500/20'
-              )}>
-                {user.role}
-              </span>
-              <span className="text-[9px] text-slate-650 font-mono">ID: {user.user_id.slice(0, 8)}</span>
-            </div>
-          </div>
-        )}
-
+        {/* Dev monitor (admin only) */}
         {!sidebarCollapsed && user?.role === 'admin' && (
           <NavLink
             to="/dev"
-            className="flex items-center gap-3 rounded-lg px-3 py-2 text-slate-500 hover:bg-[#0066CC]/15 hover:text-[#4d9fff] transition-all duration-200 text-xs"
+            className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 transition-colors duration-150 text-xs"
+            style={{ color: 'var(--text-subtle)' }}
           >
-            <Settings size={14} className="flex-shrink-0" />
-            <span className="truncate">Developer Monitor</span>
+            <Settings2 size={13} className="flex-shrink-0" />
+            <span className="truncate">Dev Monitor</span>
           </NavLink>
         )}
 
+        {/* User info */}
+        {user && (
+          <div className={clsx('flex items-center gap-2 px-2.5 py-2 rounded-lg', sidebarCollapsed && 'justify-center px-0')}>
+            <Avatar name={user.name} size="sm" />
+            {!sidebarCollapsed && (
+              <div className="flex-1 overflow-hidden">
+                <p className="text-xs font-medium truncate" style={{ color: 'var(--text-primary)' }}>{user.name}</p>
+                <p className="text-[10px] truncate capitalize" style={{ color: 'var(--text-subtle)' }}>{user.role}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Sign out */}
         <button
           onClick={onLogout}
           className={clsx(
-            'flex items-center gap-3 w-full rounded-lg px-3 py-2 text-slate-500 hover:bg-red-500/10 hover:text-red-400 transition-all duration-200 text-sm',
-            sidebarCollapsed && 'justify-center px-0'
+            'flex items-center gap-2.5 w-full rounded-lg transition-colors duration-150 text-sm',
+            sidebarCollapsed ? 'justify-center p-2' : 'px-2.5 py-2',
           )}
+          style={{ color: 'var(--text-subtle)' }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--accent-red)'; e.currentTarget.style.background = 'rgba(220,38,38,0.08)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-subtle)'; e.currentTarget.style.background = 'transparent'; }}
         >
-          <LogOut size={16} className="flex-shrink-0" />
-          {!sidebarCollapsed && 'Logout'}
+          {!sidebarCollapsed && 'Sign Out'}
         </button>
 
+        {/* Collapse toggle */}
         <button
           onClick={toggleSidebar}
           className={clsx(
-            'flex items-center gap-3 w-full rounded-lg px-3 py-2 text-slate-600 hover:bg-[#0a1a30] hover:text-slate-400 transition-all duration-200 text-sm',
-            sidebarCollapsed && 'justify-center px-0'
+            'flex items-center gap-2.5 w-full rounded-lg transition-colors duration-150 text-xs',
+            sidebarCollapsed ? 'justify-center p-2' : 'px-2.5 py-2',
           )}
+          style={{ color: 'var(--text-subtle)' }}
         >
-          {sidebarCollapsed ? <ChevronRight size={14} /> : <><ChevronLeft size={14} /><span className="text-xs">Collapse</span></>}
+          {sidebarCollapsed ? <ChevronsRight size={14} /> : <><ChevronsLeft size={14} /><span>Collapse</span></>}
         </button>
       </div>
     </aside>

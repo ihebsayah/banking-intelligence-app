@@ -8,7 +8,7 @@ import { checkHealth } from '../api/queries';
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="glass-card p-5">
-      <h3 className="text-sm font-semibold text-slate-200 mb-4 pb-3 border-b border-bg-border">{title}</h3>
+      <h3 className="text-sm font-semibold mb-4 pb-3 border-b border-bg-border" style={{ color: 'var(--text-secondary)' }}>{title}</h3>
       <div className="space-y-4">{children}</div>
     </div>
   );
@@ -20,14 +20,18 @@ function Toggle({ label, sub, value, onChange }: {
   return (
     <div className="flex items-center justify-between">
       <div>
-        <p className="text-sm text-slate-300">{label}</p>
-        {sub && <p className="text-xs text-slate-500 mt-0.5">{sub}</p>}
+        <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>{label}</p>
+        {sub && <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{sub}</p>}
       </div>
       <button
         onClick={() => onChange(!value)}
-        className={`relative w-10 h-6 rounded-full transition-colors duration-200 ${value ? 'bg-blue-600' : 'bg-bg-border'}`}
+        className="relative w-10 h-6 rounded-full transition-colors duration-200"
+        style={{ background: value ? 'var(--accent-blue)' : 'var(--bg-border)' }}
       >
-        <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 ${value ? 'translate-x-4' : 'translate-x-0'}`} />
+        <span
+          className={`absolute top-1 left-1 w-4 h-4 rounded-full shadow transition-transform duration-200 ${value ? 'translate-x-4' : 'translate-x-0'}`}
+          style={{ background: 'var(--text-primary)' }}
+        />
       </button>
     </div>
   );

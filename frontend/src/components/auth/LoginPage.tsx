@@ -12,21 +12,27 @@ function LoginPageKeycloak() {
   const { error } = useAuthStore();
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-bg-primary px-6">
+    <div className="min-h-screen flex items-center justify-center px-6" style={{ background: 'var(--bg-primary)' }}>
       <div className="w-full max-w-sm">
         {/* Logo + title */}
         <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-blue-600/10 mb-4">
-            <Building2 size={24} className="text-blue-400" />
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl mb-5"
+            style={{ background: 'rgba(37,99,235,0.08)' }}>
+            <Building2 size={28} style={{ color: 'var(--accent-blue)' }} />
           </div>
-          <h1 className="text-xl font-semibold text-white">Banking Intelligence</h1>
-          <p className="text-sm text-slate-500 mt-1.5">Secure access to the Banking Intelligence Platform.</p>
+          <h1 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>
+            Banking Intelligence
+          </h1>
+          <p className="text-sm mt-2" style={{ color: 'var(--text-muted)' }}>
+            Secure access to the Banking Intelligence Platform
+          </p>
         </div>
 
-        {/* SSO button card */}
-        <div className="bg-bg-card border border-bg-border rounded-xl p-6">
+        {/* SSO card */}
+        <div className="rounded-xl p-6 border" style={{ background: 'var(--bg-card)', borderColor: 'var(--bg-border)' }}>
           {error && (
-            <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2.5 mb-4 text-sm text-red-400">
+            <div className="flex items-center gap-2 rounded-lg px-3 py-2.5 mb-4 text-sm"
+              style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.15)', color: 'var(--accent-red)' }}>
               <AlertCircle size={14} className="flex-shrink-0" />
               <span>{error}</span>
             </div>
@@ -34,15 +40,15 @@ function LoginPageKeycloak() {
 
           <button
             onClick={() => login()}
-            className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-medium py-2.5 rounded-lg transition-colors duration-150 text-sm"
+            className="w-full flex items-center justify-center gap-2 text-white font-medium py-2.5 rounded-lg transition-all duration-150 text-sm"
+            style={{ background: 'var(--accent-blue)' }}
           >
             <Building2 size={16} />
             Continue with SSO
           </button>
         </div>
 
-        {/* Footer */}
-        <p className="text-center text-xs text-slate-600 mt-6">
+        <p className="text-center text-xs mt-6" style={{ color: 'var(--text-subtle)' }}>
           Authentication is managed securely by your organisation.
         </p>
       </div>
@@ -81,19 +87,23 @@ function LoginPageLegacy() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-bg-primary px-6">
+    <div className="min-h-screen flex items-center justify-center px-6" style={{ background: 'var(--bg-primary)' }}>
       <div className="w-full max-w-sm">
         <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-blue-600/10 mb-4">
-            <Building2 size={24} className="text-blue-400" />
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl mb-5"
+            style={{ background: 'rgba(37,99,235,0.08)' }}>
+            <Building2 size={28} style={{ color: 'var(--accent-blue)' }} />
           </div>
-          <h1 className="text-xl font-semibold text-white">Banking Intelligence</h1>
-          <p className="text-sm text-slate-500 mt-1.5">Sign in to your account</p>
+          <h1 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>
+            Banking Intelligence
+          </h1>
+          <p className="text-sm mt-2" style={{ color: 'var(--text-muted)' }}>Sign in to your account</p>
         </div>
 
-        <div className="bg-bg-card border border-bg-border rounded-xl p-6">
+        <div className="rounded-xl p-6 border" style={{ background: 'var(--bg-card)', borderColor: 'var(--bg-border)' }}>
           {error && (
-            <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2.5 mb-4 text-sm text-red-400">
+            <div className="flex items-center gap-2 rounded-lg px-3 py-2.5 mb-4 text-sm"
+              style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.15)', color: 'var(--accent-red)' }}>
               <AlertCircle size={14} className="flex-shrink-0" />
               <span>{error}</span>
             </div>
@@ -101,48 +111,34 @@ function LoginPageLegacy() {
 
           <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
             <div>
-              <label htmlFor="email" className="block text-xs font-medium text-slate-400 mb-1.5">Email / Username</label>
+              <label htmlFor="email" className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-muted)' }}>
+                Email / Username
+              </label>
               <div className="relative">
-                <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                <input
-                  id="email"
-                  type="text"
-                  autoComplete="username"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="analyst_001"
-                  className="input pl-9"
-                />
+                <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-subtle)' }} />
+                <input id="email" type="text" autoComplete="username" value={email}
+                  onChange={(e) => setEmail(e.target.value)} placeholder="analyst_001" className="input pl-9" />
               </div>
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-xs font-medium text-slate-400 mb-1.5">Password</label>
+              <label htmlFor="password" className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-muted)' }}>
+                Password
+              </label>
               <div className="relative">
-                <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                <input
-                  id="password"
-                  type="password"
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="input pl-9"
-                />
+                <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-subtle)' }} />
+                <input id="password" type="password" autoComplete="current-password" value={password}
+                  onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" className="input pl-9" />
               </div>
             </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="btn-primary w-full"
-            >
+            <button type="submit" disabled={loading} className="btn-primary w-full">
               {loading ? <><Loader2 size={14} className="animate-spin" /> Signing in...</> : 'Sign In'}
             </button>
           </form>
         </div>
 
-        <p className="text-center text-xs text-slate-600 mt-6">
+        <p className="text-center text-xs mt-6" style={{ color: 'var(--text-subtle)' }}>
           Banking Intelligence Platform
         </p>
       </div>

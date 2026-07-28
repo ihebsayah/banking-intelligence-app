@@ -16,10 +16,10 @@ export function Avatar({ name, size = 'md', className }: Props) {
   const initial = name?.charAt(0)?.toUpperCase() ?? '?';
   return (
     <div className={clsx(
-      'rounded-full bg-blue-600/15 text-blue-400 flex items-center justify-center font-semibold flex-shrink-0',
+      'rounded-full flex items-center justify-center font-semibold flex-shrink-0',
       sizes[size],
       className,
-    )}>
+    )} style={{ background: 'rgba(37,99,235,0.1)', color: 'var(--accent-blue)' }}>
       {initial}
     </div>
   );

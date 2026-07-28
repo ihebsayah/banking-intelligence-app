@@ -2,54 +2,78 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-interface UIState {
-  theme: 'dark' | 'light';
-  sidebarCollapsed: boolean;
-  notifications: Notification[];
-  autoRefreshInterval: number; // minutes
-}
+type Theme = 'light' | 'dark' | 'system';
 
-interface Notification {
-  id: string;
-  type: 'info' | 'success' | 'warning' | 'error';
-  title: string;
-  message: string;
-  timestamp: string;
-  read: boolean;
+interface UIState {
+  theme: Theme;
+  resolvedTheme: 'light' | 'dark';
+  sidebarCollapsed: boolean;
+  commandPaletteOpen: boolean;
+  aiPanelOpen: boolean;
 }
 
 interface UIActions {
-  toggleTheme: () => void;
+  setTheme: (theme: Theme) => void;
   toggleSidebar: () => void;
-  addNotification: (n: Omit<Notification, 'id' | 'timestamp' | 'read'>) => void;
-  markNotificationRead: (id: string) => void;
-  clearNotifications: () => void;
-  setAutoRefreshInterval: (minutes: number) => void;
+  toggleCommandPalette: () => void;
+  setCommandPaletteOpen: (open: boolean) => void;
+  toggleAiPanel: () => void;
+  setAiPanelOpen: (open: boolean) => void;
+}
+
+function resolveTheme(theme: Theme): 'light' | 'dark' {
+  if (theme === 'system') {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  return theme;
+}
+
+function applyTheme(resolved: 'light' | 'dark') {
+  document.documentElement.classList.toggle('dark', resolved === 'dark');
 }
 
 export const useUIStore = create<UIState & UIActions>()(
   persist(
-    (set) => ({
-      theme: 'dark',
+    (set, get) => ({
+      theme: 'light',
+      resolvedTheme: 'light',
       sidebarCollapsed: false,
-      notifications: [],
-      autoRefreshInterval: 60,
-      toggleTheme: () => set((s) => ({ theme: s.theme === 'dark' ? 'light' : 'dark' })),
+      commandPaletteOpen: false,
+      aiPanelOpen: false,
+
+      setTheme: (theme) => {
+        const resolved = resolveTheme(theme);
+        applyTheme(resolved);
+        set({ theme, resolvedTheme: resolved });
+      },
+
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
-      addNotification: (n) => set((s) => ({
-        notifications: [{
-          ...n,
-          id: crypto.randomUUID(),
-          timestamp: new Date().toISOString(),
-          read: false,
-        }, ...s.notifications].slice(0, 50),
-      })),
-      markNotificationRead: (id) => set((s) => ({
-        notifications: s.notifications.map((n) => n.id === id ? { ...n, read: true } : n),
-      })),
-      clearNotifications: () => set({ notifications: [] }),
-      setAutoRefreshInterval: (autoRefreshInterval) => set({ autoRefreshInterval }),
+
+      toggleCommandPalette: () => set((s) => ({ commandPaletteOpen: !s.commandPaletteOpen })),
+      setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
+
+      toggleAiPanel: () => set((s) => ({ aiPanelOpen: !s.aiPanelOpen })),
+      setAiPanelOpen: (open) => set({ aiPanelOpen: open }),
     }),
-    { name: 'banking-ui-prefs', partialize: (s) => ({ theme: s.theme, sidebarCollapsed: s.sidebarCollapsed, autoRefreshInterval: s.autoRefreshInterval }) }
+    {
+      name: 'banking-ui-prefs',
+      partialize: (s) => ({ theme: s.theme, sidebarCollapsed: s.sidebarCollapsed }),
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          const resolved = resolveTheme(state.theme);
+          applyTheme(resolved);
+          state.resolvedTheme = resolved;
+
+          // Listen for system theme changes
+          if (state.theme === 'system') {
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+              const newResolved = resolveTheme('system');
+              applyTheme(newResolved);
+              useUIStore.setState({ resolvedTheme: newResolved });
+            });
+          }
+        }
+      },
+    }
   )
 );

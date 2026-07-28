@@ -12,12 +12,13 @@ export function EmptyState({ icon, title, description, action, className }: Prop
   return (
     <div className={clsx('flex flex-col items-center justify-center py-16 px-6 gap-3', className)}>
       {icon && (
-        <div className="w-10 h-10 rounded-xl bg-slate-500/10 flex items-center justify-center text-slate-500">
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center"
+          style={{ background: 'var(--bg-tertiary)', color: 'var(--text-subtle)' }}>
           {icon}
         </div>
       )}
-      <h3 className="text-sm font-medium text-slate-300">{title}</h3>
-      {description && <p className="text-sm text-slate-500 max-w-sm text-center">{description}</p>}
+      <h3 className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>{title}</h3>
+      {description && <p className="text-sm max-w-sm text-center" style={{ color: 'var(--text-muted)' }}>{description}</p>}
       {action && <div className="mt-2">{action}</div>}
     </div>
   );

@@ -4,6 +4,9 @@ import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { Sidebar } from './components/Layout/Sidebar';
 import { Header } from './components/Layout/Header';
 import { BankingSidebar } from './components/Layout/BankingSidebar';
+import { TopBar } from './components/Layout/TopBar';
+import { CommandPalette } from './components/CommandPalette';
+import { AiAssistantPanel } from './components/AiAssistantPanel';
 import { Dashboard } from './pages/Dashboard';
 import { QueryTester } from './pages/QueryTester';
 import { AgentMonitorPage } from './pages/AgentMonitorPage';
@@ -26,11 +29,10 @@ import { UnauthorizedPage } from './pages/UnauthorizedPage';
 import { useWebSocket } from './hooks/useWebSocket';
 
 function AppShell() {
-  // Initialize WebSocket once at app level
   useWebSocket();
-  const location = useLocation();
-  const path = location.pathname;
+  const path = useLocation().pathname;
 
+  // Standalone pages — no shell
   if (path === '/login') {
     return (
       <Routes>
@@ -47,12 +49,11 @@ function AppShell() {
     );
   }
 
+  // Dev layout — admin-only, uses legacy Sidebar + Header
   const isDevRoute = path === '/dev' || path.startsWith('/dev/');
-
   if (isDevRoute) {
-    // Developer Layout - Gated to admin users only
     return (
-      <div className="flex h-screen overflow-hidden bg-bg-primary">
+      <div className="flex h-screen overflow-hidden" style={{ background: 'var(--bg-primary)' }}>
         <Sidebar />
         <div className="flex-1 flex flex-col overflow-hidden">
           <Header />
@@ -71,28 +72,31 @@ function AppShell() {
     );
   }
 
-  // Business Banking Portal Layout
+  // Business layout — sidebar + topbar + content + command palette + AI panel
   return (
-    <div className="flex h-screen overflow-hidden bg-[#040711]">
+    <div className="flex h-screen overflow-hidden" style={{ background: 'var(--bg-primary)' }}>
       <BankingSidebar />
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+        <TopBar />
         <main className="flex-1 overflow-y-auto">
           <Routes>
-            <Route path="/" element={<ProtectedRoute><BankingDashboard /></ProtectedRoute>} />
-            <Route path="/dashboard" element={<ProtectedRoute><BankingDashboard /></ProtectedRoute>} />
-            <Route path="/branches"  element={<ProtectedRoute><Branches /></ProtectedRoute>} />
-            <Route path="/assistant" element={<ProtectedRoute><Assistant /></ProtectedRoute>} />
-            <Route path="/kpi"       element={<ProtectedRoute><KpiPage /></ProtectedRoute>} />
-            <Route path="/kpi-governance" element={<ProtectedRoute requiredRole={['analyst', 'manager', 'compliance', 'admin']}><KpiGovernancePage /></ProtectedRoute>} />
-            <Route path="/risk"       element={<ProtectedRoute requiredRole={['analyst', 'manager', 'compliance', 'admin']}><RiskPage /></ProtectedRoute>} />
-            <Route path="/compliance" element={<ProtectedRoute requiredRole={['compliance', 'manager', 'admin']}><CompliancePage /></ProtectedRoute>} />
-            <Route path="/reports"    element={<ProtectedRoute requiredRole={['manager', 'admin']}><ReportsPage /></ProtectedRoute>} />
-            <Route path="/admin"      element={<ProtectedRoute requiredRole="admin"><AdminPage /></ProtectedRoute>} />
-            <Route path="/profile"    element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
-            <Route path="/settings"  element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+            <Route path="/"               element={<ProtectedRoute><BankingDashboard /></ProtectedRoute>} />
+            <Route path="/dashboard"       element={<ProtectedRoute><BankingDashboard /></ProtectedRoute>} />
+            <Route path="/branches"        element={<ProtectedRoute><Branches /></ProtectedRoute>} />
+            <Route path="/assistant"       element={<ProtectedRoute><Assistant /></ProtectedRoute>} />
+            <Route path="/kpi"             element={<ProtectedRoute><KpiPage /></ProtectedRoute>} />
+            <Route path="/kpi-governance"  element={<ProtectedRoute requiredRole={['analyst', 'manager', 'compliance', 'admin']}><KpiGovernancePage /></ProtectedRoute>} />
+            <Route path="/risk"            element={<ProtectedRoute requiredRole={['analyst', 'manager', 'compliance', 'admin']}><RiskPage /></ProtectedRoute>} />
+            <Route path="/compliance"      element={<ProtectedRoute requiredRole={['compliance', 'manager', 'admin']}><CompliancePage /></ProtectedRoute>} />
+            <Route path="/reports"         element={<ProtectedRoute requiredRole={['manager', 'admin']}><ReportsPage /></ProtectedRoute>} />
+            <Route path="/admin"           element={<ProtectedRoute requiredRole="admin"><AdminPage /></ProtectedRoute>} />
+            <Route path="/profile"         element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+            <Route path="/settings"        element={<ProtectedRoute><Settings /></ProtectedRoute>} />
           </Routes>
         </main>
       </div>
+      <CommandPalette />
+      <AiAssistantPanel />
     </div>
   );
 }

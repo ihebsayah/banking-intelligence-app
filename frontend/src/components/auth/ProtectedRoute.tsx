@@ -1,10 +1,10 @@
 // src/components/auth/ProtectedRoute.tsx
 import React from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+import { Navigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 import { useAuth } from '../../auth/AuthProvider';
 import { env } from '../../config/env';
-import { Building2, LogOut, Mail, RefreshCw, ShieldAlert } from 'lucide-react';
+import { Building2, LogOut, Mail, RefreshCw, ShieldAlert, ShieldX, ArrowLeft } from 'lucide-react';
 
 interface Props {
   children: React.ReactNode;
@@ -23,7 +23,7 @@ export function ProtectedRoute({ children, requiredRole }: Props) {
 
 function AuthScreen({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-bg-primary flex items-center justify-center px-6">
+    <div className="min-h-screen flex items-center justify-center px-6" style={{ background: 'var(--bg-primary)' }}>
       <div className="w-full max-w-sm text-center">{children}</div>
     </div>
   );
@@ -31,8 +31,9 @@ function AuthScreen({ children }: { children: React.ReactNode }) {
 
 function AuthLogo() {
   return (
-    <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-blue-600/10 mb-4">
-      <Building2 size={24} className="text-blue-400" />
+    <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl mb-5"
+      style={{ background: 'rgba(37,99,235,0.08)' }}>
+      <Building2 size={28} style={{ color: 'var(--accent-blue)' }} />
     </div>
   );
 }
@@ -46,14 +47,15 @@ function ProtectedRouteKeycloak({ children, requiredRole }: { children: React.Re
     return (
       <AuthScreen>
         <AuthLogo />
-        <h1 className="text-lg font-semibold text-white mb-1">Banking Intelligence</h1>
-        <p className="text-sm text-slate-500 mb-6">
+        <h1 className="text-lg font-bold mb-2" style={{ color: 'var(--text-primary)' }}>Banking Intelligence</h1>
+        <p className="text-sm mb-6" style={{ color: 'var(--text-muted)' }}>
           {phase === 'bootstrapping' ? 'Connecting securely...' : 'Loading your workspace...'}
         </p>
-        <div className="flex justify-center gap-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
-          <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse [animation-delay:0.2s]" />
-          <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse [animation-delay:0.4s]" />
+        <div className="flex justify-center gap-1.5">
+          {[0, 1, 2].map((i) => (
+            <span key={i} className="w-2 h-2 rounded-full animate-pulse"
+              style={{ background: 'var(--accent-blue)', animationDelay: `${i * 0.2}s` }} />
+          ))}
         </div>
       </AuthScreen>
     );
@@ -67,11 +69,9 @@ function ProtectedRouteKeycloak({ children, requiredRole }: { children: React.Re
     return (
       <AuthScreen>
         <AuthLogo />
-        <h1 className="text-lg font-semibold text-white mb-2">Session Expired</h1>
-        <p className="text-sm text-slate-500 mb-6">Your secure session has expired.</p>
-        <button onClick={login} className="btn-primary w-full">
-          Sign in again
-        </button>
+        <h1 className="text-lg font-bold mb-2" style={{ color: 'var(--text-primary)' }}>Session Expired</h1>
+        <p className="text-sm mb-6" style={{ color: 'var(--text-muted)' }}>Your secure session has expired.</p>
+        <button onClick={login} className="btn-primary w-full">Sign in again</button>
       </AuthScreen>
     );
   }
@@ -80,20 +80,13 @@ function ProtectedRouteKeycloak({ children, requiredRole }: { children: React.Re
     return (
       <AuthScreen>
         <AuthLogo />
-        <h1 className="text-lg font-semibold text-white mb-2">Account Not Linked</h1>
-        <p className="text-sm text-slate-500 mb-6 leading-relaxed">
-          Your identity has been verified successfully. However your organisation has not linked your account to Banking Intelligence.
-          Please contact your administrator.
+        <h1 className="text-lg font-bold mb-2" style={{ color: 'var(--text-primary)' }}>Account Not Linked</h1>
+        <p className="text-sm mb-6 leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+          Your identity has been verified, but no Banking Intelligence account is linked to it. Contact your administrator.
         </p>
         <div className="flex flex-col gap-2">
-          <button onClick={logout} className="btn-secondary w-full">
-            <LogOut size={14} />
-            Sign Out
-          </button>
-          <a href="mailto:admin@banking-intelligence.com" className="btn-ghost w-full text-sm">
-            <Mail size={14} />
-            Contact Administrator
-          </a>
+          <button onClick={logout} className="btn-secondary w-full"><LogOut size={14} />Sign Out</button>
+          <a href="mailto:admin@banking-intelligence.com" className="btn-ghost w-full text-sm"><Mail size={14} />Contact Administrator</a>
         </div>
       </AuthScreen>
     );
@@ -102,15 +95,13 @@ function ProtectedRouteKeycloak({ children, requiredRole }: { children: React.Re
   if (phase === 'forbidden') {
     return (
       <AuthScreen>
-        <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-red-500/10 mb-4">
-          <ShieldAlert size={24} className="text-red-400" />
+        <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl mb-5"
+          style={{ background: 'rgba(220,38,38,0.08)' }}>
+          <ShieldAlert size={28} style={{ color: 'var(--accent-red)' }} />
         </div>
-        <h1 className="text-lg font-semibold text-white mb-2">Access Suspended</h1>
-        <p className="text-sm text-slate-500 mb-6">Your account is currently inactive. Contact your administrator.</p>
-        <button onClick={logout} className="btn-secondary w-full">
-          <LogOut size={14} />
-          Sign Out
-        </button>
+        <h1 className="text-lg font-bold mb-2" style={{ color: 'var(--text-primary)' }}>Access Suspended</h1>
+        <p className="text-sm mb-6" style={{ color: 'var(--text-muted)' }}>Your account is currently inactive. Contact your administrator.</p>
+        <button onClick={logout} className="btn-secondary w-full"><LogOut size={14} />Sign Out</button>
       </AuthScreen>
     );
   }
@@ -119,11 +110,10 @@ function ProtectedRouteKeycloak({ children, requiredRole }: { children: React.Re
     return (
       <AuthScreen>
         <AuthLogo />
-        <h1 className="text-lg font-semibold text-white mb-2">Unable to reach the authentication service</h1>
-        <p className="text-sm text-slate-500 mb-6">The authentication service is temporarily unavailable.</p>
+        <h1 className="text-lg font-bold mb-2" style={{ color: 'var(--text-primary)' }}>Service Unavailable</h1>
+        <p className="text-sm mb-6" style={{ color: 'var(--text-muted)' }}>The authentication service is temporarily unavailable.</p>
         <button onClick={() => window.location.reload()} className="btn-primary w-full">
-          <RefreshCw size={14} />
-          Retry
+          <RefreshCw size={14} />Retry
         </button>
       </AuthScreen>
     );
