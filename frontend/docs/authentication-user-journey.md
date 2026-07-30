@@ -1,69 +1,73 @@
 # Authentication User Journey
 
-## Flow Overview
+## Production Mode (`VITE_AUTH_PROVIDER=keycloak`)
 
 ```
-Landing Page → Keycloak SSO → Auth Callback → /auth/me → Dashboard
-     ↑                                                          |
-     └──────────── Session Expired ←────────────────────────────┘
+App boot → Keycloak init (login-required)
+    ↓
+[no session] → auto-redirect to Keycloak login
+    ↓
+[login success] → redirect back to app → /auth/me
+    ↓
+/user found + active → dashboard
+/user not found    → "Account Not Linked" (contact admin)
+/user inactive     → "Access Suspended" (contact admin)
+/api error         → "Service Unavailable" (retry)
+    ↓
+On session expiry → auto-redirect to Keycloak login
 ```
 
-## States
+**No intermediate page. No login UI. No "Continue with SSO" button.**
 
-### Bootstrapping
-- **Visual**: Pulsing dots animation
-- **Action**: None — system loading auth state
-- **Duration**: Typically <1s
+Keycloak owns all authentication UI. The app never shows a login form, email field, password field, or SSO button in production mode.
 
-### Unauthenticated
-- **Visual**: Redirect to Keycloak login
-- **Action**: Automatic — no user input needed
-- **Keycloak URL**: Configured via `VITE_KEYCLOAK_URL`
+### States
 
-### Authenticated
-- **Visual**: Redirect to `/banking` (or stored return URL)
-- **Action**: Full sidebar + topbar visible, all features accessible per role
+| Phase | Visual | Duration |
+|-------|--------|----------|
+| bootstrapping | Pulsing dots, "Connecting securely..." | <1s (inline redirect if no session) |
+| loading-user | Pulsing dots, "Loading your workspace..." | ~200ms |
+| authenticated | Full app | Until expiry |
+| unlinked | "Account Not Linked" card, contact admin button | Blocking |
+| forbidden | "Access Suspended" card, sign out button | Blocking |
+| error | "Service Unavailable" card, retry button | Blocking |
 
-### Session Expired
-- **Visual**: "Session Expired" card with re-login button
-- **Action**: Click "Re-authenticate" → Keycloak redirect
-- **Auto-redirect**: 5s countdown before automatic redirect
+## Demo Mode (`VITE_AUTH_PROVIDER=legacy`)
 
-### Unlinked User
-- **Visual**: "Account Not Linked" card
-- **Action**: Contact admin to link Keycloak identity to internal user record
-- **Backend**: `/auth/me` returns 404 for unknown Keycloak sub
-
-### Forbidden
-- **Visual**: "Access Suspended" card
-- **Action**: Contact administrator
-- **Backend**: User record has `is_active: false`
-
-### Error
-- **Visual**: "Connection Error" card with retry button
-- **Action**: Click "Try Again" to retry `/auth/me` fetch
-
-## Dual Auth Mode
-
-### Keycloak (Production)
-```env
-VITE_AUTH_PROVIDER=keycloak
 ```
-- SSO-only login page (no form inputs)
-- "Continue with SSO" button triggers Keycloak redirect
-- Full token refresh cycle handled by `AuthProvider`
-
-### Legacy (Demo)
-```env
-VITE_AUTH_PROVIDER=legacy
+App boot → set unauthenticated → redirect to /login
+    ↓
+LoginPage renders with email/password form
+    ↓
+Submit → /auth/login → token → store in localStorage
+    ↓
+Redirect to /dashboard
 ```
-- Username/password form (admin/admin123, analyst/analyst123)
-- No external dependencies
-- Mock JWT tokens for development
+
+Credentials: `admin/admin123`, `analyst/analyst123`
 
 ## Token Management
 
-- **Storage**: localStorage (`auth_token`)
-- **Refresh**: Automatic before expiry via `AuthProvider`
-- **Headers**: `Authorization: Bearer <token>` on all API calls
-- **Logout**: Clears token, redirects to `/`
+### Keycloak Mode
+- **Storage**: None — `keycloak-js` manages tokens in memory/session
+- **Refresh**: Automatic via `kc.updateToken(30)` — 60s before expiry
+- **Headers**: `Authorization: Bearer <token>` on all API calls via axios interceptor
+- **Logout**: `kc.logout()` redirects to Keycloak, clears app state
+- **The application NEVER persists the access token itself**
+
+### Legacy Mode
+- **Storage**: `localStorage ('auth_token')`
+- **Refresh**: Not supported (short-lived mock tokens)
+- **Logout**: Clear localStorage, redirect to `/login`
+
+## Auth Architecture
+
+```
+Keycloak owns: authentication, token issuance, token refresh, session management
+Application owns: authorization (role-based), user profile (/auth/me), RBAC enforcement
+```
+
+The application:
+- Calls `/auth/me` to resolve Keycloak identity → internal user profile
+- Checks `user.role` for sidebar visibility and route access
+- Never stores or manages tokens in Keycloak mode

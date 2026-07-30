@@ -1,5 +1,5 @@
 // src/components/auth/ProtectedRoute.tsx
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 import { useAuth } from '../../auth/AuthProvider';
@@ -41,7 +41,7 @@ function AuthLogo() {
 // ── Keycloak protected route ────────────────────────────────────────────
 
 function ProtectedRouteKeycloak({ children, requiredRole }: { children: React.ReactNode; requiredRole?: string | string[] }) {
-  const { phase, applicationUser, logout, login } = useAuth();
+  const { phase, applicationUser, error, logout, login } = useAuth();
 
   if (phase === 'bootstrapping' || phase === 'loading-user') {
     return (
@@ -61,8 +61,22 @@ function ProtectedRouteKeycloak({ children, requiredRole }: { children: React.Re
     );
   }
 
+  // Fire login() once when phase requires redirect — not on every render.
+  // expired uses force=true (prompt:'login') so Keycloak shows credentials
+  // instead of bouncing silently back via an alive SSO session → loop.
+  useEffect(() => {
+    if (phase === 'unauthenticated') login();
+    if (phase === 'expired') login(true);
+  }, [phase, login]);
+
   if (phase === 'unauthenticated') {
-    return <Navigate to="/login" replace />;
+    return (
+      <AuthScreen>
+        <AuthLogo />
+        <h1 className="text-lg font-bold mb-2" style={{ color: 'var(--text-primary)' }}>Banking Intelligence</h1>
+        <p className="text-sm mb-6" style={{ color: 'var(--text-muted)' }}>Redirecting to secure login...</p>
+      </AuthScreen>
+    );
   }
 
   if (phase === 'expired') {
@@ -70,8 +84,7 @@ function ProtectedRouteKeycloak({ children, requiredRole }: { children: React.Re
       <AuthScreen>
         <AuthLogo />
         <h1 className="text-lg font-bold mb-2" style={{ color: 'var(--text-primary)' }}>Session Expired</h1>
-        <p className="text-sm mb-6" style={{ color: 'var(--text-muted)' }}>Your secure session has expired.</p>
-        <button onClick={login} className="btn-primary w-full">Sign in again</button>
+        <p className="text-sm mb-6" style={{ color: 'var(--text-muted)' }}>Your session has expired. Redirecting to login...</p>
       </AuthScreen>
     );
   }
@@ -111,7 +124,7 @@ function ProtectedRouteKeycloak({ children, requiredRole }: { children: React.Re
       <AuthScreen>
         <AuthLogo />
         <h1 className="text-lg font-bold mb-2" style={{ color: 'var(--text-primary)' }}>Service Unavailable</h1>
-        <p className="text-sm mb-6" style={{ color: 'var(--text-muted)' }}>The authentication service is temporarily unavailable.</p>
+        <p className="text-sm mb-6" style={{ color: 'var(--text-muted)' }}>{error}</p>
         <button onClick={() => window.location.reload()} className="btn-primary w-full">
           <RefreshCw size={14} />Retry
         </button>

@@ -246,7 +246,7 @@ async def banking_error_handler(request: Request, exc: BankingBaseError):
 
     logger.warning(
         "Banking error",
-        extra={"error_code": exc.error_code, "message": exc.message, "path": request.url.path},
+        extra={"error_code": exc.error_code, "msg": exc.message, "path": request.url.path},
     )
     return JSONResponse(status_code=http_status, content=exc.to_dict())
 

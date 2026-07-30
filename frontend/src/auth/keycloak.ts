@@ -15,15 +15,17 @@ export function getKeycloak(): Keycloak {
   return keycloakInstance;
 }
 
+let initPromise: Promise<boolean> | null = null;
+
 export async function initKeycloak(): Promise<boolean> {
-  const kc = getKeycloak();
-  const authenticated = await kc.init({
-    onLoad: 'check-sso',
+  if (initPromise) return initPromise;   // idempotent: Strict Mode calls this twice
+  initPromise = getKeycloak().init({
+    onLoad: 'login-required',
     pkceMethod: 'S256',
     checkLoginIframe: false,
     silentCheckSsoRedirectUri: window.location.origin + '/silent-check-sso.html',
   });
-  return authenticated;
+  return initPromise;
 }
 
 export function getKeycloakToken(): string | undefined {

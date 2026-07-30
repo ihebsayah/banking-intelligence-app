@@ -50,11 +50,9 @@ apiClient.interceptors.response.use(
       return Promise.reject(err);
     }
 
-    // Avoid infinite retry loops
+    // Avoid infinite retry loops (already attempted refresh once)
     const originalRequest = err.config;
     if (originalRequest._retry) {
-      localStorage.removeItem('auth_token');
-      window.location.href = '/login';
       return Promise.reject(err);
     }
     originalRequest._retry = true;
@@ -83,9 +81,7 @@ apiClient.interceptors.response.use(
       return apiClient(originalRequest);
     }
 
-    // Refresh failed — clear and redirect
-    localStorage.removeItem('auth_token');
-    window.location.href = '/login';
+    // Refresh failed — let AuthProvider handle the expired state via onTokenExpired
     return Promise.reject(err);
   },
 );

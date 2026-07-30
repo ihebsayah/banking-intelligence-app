@@ -3,24 +3,29 @@
 ## Design Principles
 
 ### 1. Executive Workspace
-The dashboard is a workspace, not a showcase. Every element must answer: "Does this help the user make a decision or take action?"
+The dashboard is a workspace, not a showcase. Every section must answer: "What decision does this help the user make?"
 
 ### 2. Progressive Disclosure
-- **Level 1**: 4 executive summary cards (always visible)
-- **Level 2**: KPI cards (role-dependent)
-- **Level 3**: Charts (2-column grid)
-- **Level 4**: Recent activity table
+```
+Morning Brief       → "What happened overnight?"
+Critical Alerts     → "What needs my attention NOW?"
+AI Executive Summary → "What does the data say?"
+KPIs                → "How are we tracking?"
+Charts              → "What are the trends?"
+Operational Tables  → "Where are the details?"
+Recent Activity     → "What changed recently?"
+```
 
-Users scan top-to-bottom. Most important info is at the top.
+Users scan top-to-bottom. Most urgent/time-sensitive info is at the top.
 
 ### 3. Data Density Over White Space
 Bankers prefer information density. Cards are compact (88px height for summary cards). Charts use full width. No decorative whitespace.
 
 ### 4. Real-Time Refresh
-- Auto-refresh capability via manual button
+- Manual refresh button with spinner
 - Last refreshed timestamp visible
 - Loading states for each section independently
-- Graceful degradation when API is unavailable
+- Graceful degradation when API is unavailable (service unavailable card with endpoint details)
 
 ## Layout Structure
 
@@ -28,43 +33,50 @@ Bankers prefer information density. Cards are compact (88px height for summary c
 ┌─────────────────────────────────────────────┐
 │ BankingHeader (title, refresh, timestamp)   │
 ├─────────────────────────────────────────────┤
-│ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐       │
-│ │Total │ │Active│ │ 30D  │ │High  │       │
-│ │Port. │ │Acc.  │ │Trans.│ │Risk  │       │
-│ └──────┘ └──────┘ └──────┘ └──────┘       │
+│ Morning Brief (2-3 highlight metrics)       │
+├─────────────────────────────────────────────┤
+│ Critical Alerts (0-3 urgent items)          │
+├─────────────────────────────────────────────┤
+│ AI Executive Summary (AI workspace)         │
 ├─────────────────────────────────────────────┤
 │ Financial Intelligence Indexes (KPI Cards)  │
 │ ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐       │
-│ │  KPI │ │  KPI │ │  KPI │ │  KPI │       │
 │ └──────┘ └──────┘ └──────┘ └──────┘       │
 ├─────────────────────────────────────────────┤
+│ Charts (2-column grid)                      │
 │ ┌─────────────────┐ ┌─────────────────┐    │
-│ │ Revenue Trend   │ │ Growth Rate     │    │
-│ │ (Line Chart)    │ │ (Area Chart)    │    │
 │ └─────────────────┘ └─────────────────┘    │
 │ ┌─────────────────┐ ┌─────────────────┐    │
-│ │ Concentration   │ │ Risk Dist.      │    │
-│ │ (Bar Chart)     │ │ (Pie Chart)     │    │
 │ └─────────────────┘ └─────────────────┘    │
 ├─────────────────────────────────────────────┤
-│ Recent Activity (Table)                     │
-│ TX ID | Customer | Desc | Type | Amount    │
-│ ...     ...        ...    ...    ...        │
+│ Operational Tables                          │
+├─────────────────────────────────────────────┤
+│ Recent Activity (compact table)             │
 └─────────────────────────────────────────────┘
 ```
 
-## Color Coding
+## Sections
 
-### Values
-- **Positive values**: `var(--accent-green)` (revenue, deposits, growth)
-- **Negative values**: `var(--accent-red)` (withdrawals, risk, losses)
-- **Neutral values**: `var(--text-primary)` (counts, IDs)
+### Morning Brief
+3 compact cards showing: total portfolios, active accounts, 30D transactions. These are the first thing a banker checks each day.
 
-### Status Indicators
-- **Success/Active**: Green badge
-- **Warning/Pending**: Amber badge
-- **Error/Suspended**: Red badge
-- **Info/Neutral**: Blue badge
+### Critical Alerts
+0-3 dismissable alert cards for: risk threshold breaches, compliance violations, system errors. Red/amber only. If no alerts, this section is hidden.
+
+### AI Executive Summary
+Inline AI assistant card showing: "Your AI Brief" — 2-3 sentence natural language summary of the day's key metrics and changes. Click "Ask AI" to open the full AI workspace panel.
+
+### KPIs
+Role-dependent financial intelligence indexes. Shown as compact cards with trend indicators.
+
+### Charts
+4 charts in 2-column grid. Revenue Trend (line), Growth Rate (area), Concentration (bar), Risk Distribution (pie).
+
+### Operational Tables
+Branch-level and portfolio-level tables with sortable columns.
+
+### Recent Activity
+Compact transaction log. TX ID | Customer | Description | Type | Amount | Status | Timestamp.
 
 ## Empty States
 

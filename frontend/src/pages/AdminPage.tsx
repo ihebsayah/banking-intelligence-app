@@ -19,6 +19,7 @@ import type {
 import { formatDateTime } from '../utils/formatters';
 import { clsx } from 'clsx';
 import { useAuthStore } from '../stores/authStore';
+import { env } from '../config/env';
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 
@@ -707,7 +708,7 @@ export function AdminPage() {
       </div>
 
       {/* Modals */}
-      {modal === 'create' && (
+      {modal === 'create' && env.AUTH_PROVIDER !== 'keycloak' && (
         <CreateUserModal roles={roles} onClose={() => setModal(null)} onSuccess={onSuccess} onError={onError} />
       )}
       {modal === 'edit' && selectedUser && (
@@ -775,7 +776,17 @@ export function AdminPage() {
             ))}
           </div>
 
-          {activeTab === 'users' && (
+          {activeTab === 'users' && env.AUTH_PROVIDER === 'keycloak' && (
+            <a
+              href={`${env.KEYCLOAK_URL}/admin/master/console/`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`${btnPrimary} mb-1 inline-flex items-center gap-2`}
+            >
+              <Plus size={14} />Manage Users in Keycloak
+            </a>
+          )}
+          {activeTab === 'users' && env.AUTH_PROVIDER !== 'keycloak' && (
             <button
               onClick={() => { openModal('create'); if (roles.length === 0) adminApi.getRoles().then(setRoles); }}
               className={`${btnPrimary} mb-1`}

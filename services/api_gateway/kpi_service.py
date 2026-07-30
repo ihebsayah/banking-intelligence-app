@@ -87,7 +87,72 @@ class KPIService:
             "refresh_frequency": "real-time",
             "status": "active",
             "source_tables": ["risk_flags"]
-        }
+        },
+        "customer_growth_rate": {
+            "name": "Customer Growth Rate",
+            "description": "Month-over-month growth rate of total customer base",
+            "metric_type": "percentage",
+            "category": "customer",
+            "data_freshness": "real-time",
+            "formula": "100.0 * (new_customers_30d - new_customers_60d) / new_customers_60d",
+            "owner_name": "Sophia Chen",
+            "owner_email": "sophia.chen@bankintel.hq",
+            "refresh_frequency": "real-time",
+            "status": "active",
+            "source_tables": ["customers"]
+        },
+        "customer_retention_rate": {
+            "name": "Customer Retention Rate",
+            "description": "Percentage of customers with active accounts",
+            "metric_type": "percentage",
+            "category": "customer",
+            "data_freshness": "real-time",
+            "formula": "100.0 * active_customers / total_customers",
+            "owner_name": "Sophia Chen",
+            "owner_email": "sophia.chen@bankintel.hq",
+            "refresh_frequency": "real-time",
+            "status": "active",
+            "source_tables": ["customers", "accounts"]
+        },
+        "compliance_score": {
+            "name": "Compliance Score",
+            "description": "Overall compliance health score based on open violations",
+            "metric_type": "percentage",
+            "category": "compliance",
+            "data_freshness": "real-time",
+            "formula": "MAX(0, 100.0 - open_violations * 10.0)",
+            "owner_name": "David Kross",
+            "owner_email": "david.kross@bankintel.hq",
+            "refresh_frequency": "real-time",
+            "status": "active",
+            "source_tables": ["compliance_violations"]
+        },
+        "transaction_volume": {
+            "name": "Transaction Volume",
+            "description": "Count of transactions in the past 30 days",
+            "metric_type": "count",
+            "category": "operations",
+            "data_freshness": "real-time",
+            "formula": "COUNT(*) FROM transactions WHERE transaction_date >= NOW() - INTERVAL '30 days'",
+            "owner_name": "Sarah Jenkins",
+            "owner_email": "sarah.jenkins@bankintel.hq",
+            "refresh_frequency": "real-time",
+            "status": "active",
+            "source_tables": ["transactions"]
+        },
+        "avg_transaction_amount": {
+            "name": "Average Transaction Amount",
+            "description": "Mean absolute transaction value over the past 30 days",
+            "metric_type": "currency",
+            "category": "operations",
+            "data_freshness": "real-time",
+            "formula": "AVG(ABS(amount)) FROM transactions WHERE transaction_date >= NOW() - INTERVAL '30 days'",
+            "owner_name": "Sarah Jenkins",
+            "owner_email": "sarah.jenkins@bankintel.hq",
+            "refresh_frequency": "real-time",
+            "status": "active",
+            "source_tables": ["transactions"]
+        },
     }
 
     @staticmethod

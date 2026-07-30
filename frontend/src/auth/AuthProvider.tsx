@@ -18,7 +18,7 @@ export type AuthPhase =
 interface AuthContextValue {
   phase: AuthPhase;
   applicationUser: User | null;
-  login: () => void;
+  login: (force?: boolean) => void;
   logout: () => void;
   getAccessToken: () => Promise<string | undefined>;
   hasRole: (role: string) => boolean;
@@ -73,6 +73,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // ── Fetch /auth/me and resolve application user ─────────────────────────
   const resolveApplicationUser = useCallback(async (): Promise<boolean> => {
     try {
+      const kc = getKeycloak();
+      console.info('[Auth] tokenParsed.sub:', kc.tokenParsed?.sub, '| idTokenParsed.sub:', kc.idTokenParsed?.sub, '| kc.subject:', kc.subject);
+      console.info('[Auth] idTokenParsed:', JSON.stringify(kc.idTokenParsed));
+
       setPhase('loading-user');
       const me = await fetchApplicationUser();
 
@@ -101,51 +105,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return true;
     } catch (err: unknown) {
       const status = (err as { response?: { status?: number } })?.response?.status;
-      const data = (err as { response?: { data?: { error?: string; message?: string } } })?.response?.data;
+      const rawData = (err as { response?: { data?: any } })?.response?.data;
+      const data = rawData?.detail || rawData;
 
       if (status === 401) {
         if (data?.error === 'USER_NOT_FOUND') {
           setPhase('unlinked');
           setError('Your identity was authenticated successfully, but no Banking Intelligence account is linked to it. Contact an administrator.');
-        } else if (data?.error === 'TOKEN_EXPIRED') {
-          // Try refresh once
-          const refreshed = await refreshKeycloakToken();
-          if (refreshed) {
-            try {
-              const me = await fetchApplicationUser();
-              const user: User = {
-                user_id: me.user_id,
-                email: me.email,
-                name: me.name,
-                role: me.role as User['role'],
-                bank_id: me.bank_id,
-                created_at: me.created_at,
-                last_login: me.last_login,
-              };
-              setApplicationUser(user);
-              setPhase('authenticated');
-              setError(null);
-              return true;
-            } catch {
-              setPhase('expired');
-              setError('Your session has expired. Please sign in again.');
-              return false;
-            }
-          }
-          setPhase('expired');
-          setError('Your session has expired. Please sign in again.');
-          return false;
         } else {
-          setPhase('expired');
-          setError('Authentication failed. Please sign in again.');
-          return false;
+          setPhase('error');
+          setError('Unable to load your user profile. Please try again later.');
         }
       } else if (status === 403) {
         setPhase('forbidden');
         setError('You do not have permission to access this application.');
       } else {
+        const errMsg = (err as { message?: string })?.message || '';
+        const detailMsg = data?.message || data?.error || '';
+        setError(`Unable to load your user profile. (${errMsg || detailMsg || 'check console for details'})`);
+        console.error('[Auth] resolveApplicationUser failed:', err);
         setPhase('error');
-        setError('Unable to load your profile. Please try again later.');
       }
       return false;
     }
@@ -207,6 +186,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (cancelled) return;
 
         if (!authenticated) {
+          // onLoad:'login-required' should have redirected — this is a safety net
           setPhase('unauthenticated');
           return;
         }
@@ -241,9 +221,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [isKeycloak, resolveApplicationUser]);
 
   // ── Login / Logout ──────────────────────────────────────────────────────
-  const login = useCallback(() => {
+  const login = useCallback((force = false) => {
     const kc = getKeycloak();
-    kc.login({ redirectUri: window.location.origin });
+    kc.login({ redirectUri: window.location.origin, ...(force && { prompt: 'login' }) });
   }, []);
 
   const logout = useCallback(() => {
@@ -251,12 +231,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     store.getState().logout();
     setApplicationUser(null);
     setPermissions([]);
-    setPhase('unauthenticated');
     setError(null);
 
     if (isKeycloak) {
       const kc = getKeycloak();
       kc.logout({ redirectUri: window.location.origin });
+    } else {
+      setPhase('unauthenticated');
     }
   }, [isKeycloak, store]);
 

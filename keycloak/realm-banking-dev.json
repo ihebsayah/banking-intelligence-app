@@ -78,10 +78,10 @@
         "http://localhost:3000"
       ],
       "defaultClientScopes": [
-        "openid",
         "profile",
         "email",
-        "roles"
+        "roles",
+        "basic"
       ],
       "protocolMappers": [
         {
@@ -96,6 +96,17 @@
             "claim.name": "realm_roles",
             "jsonType.label": "String",
             "usermodel.realmRoleMapping.roleAttribute": "attribute"
+          }
+        },
+        {
+          "name": "audience-mapper",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "banking-portal-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "userinfo.token.claim": "false"
           }
         }
       ]

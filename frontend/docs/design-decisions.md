@@ -43,15 +43,17 @@
 - Non-blocking — user can still see and interact with main content
 - Follows GitHub Copilot, Cursor patterns
 
-## 5. SSO-Only Login
+## 5. Auto-Redirect Authentication
 
-**Decision**: Keycloak mode shows only "Continue with SSO" — no username/password form.
+**Decision**: Production mode redirects to Keycloak automatically with no intermediate page. No "Continue with SSO" button, no login form, no email/password.
 
 **Rationale**:
-- Production uses Keycloak exclusively
-- Reduces attack surface (no password form to phish)
-- Simpler UX for enterprise users
-- Legacy mode preserved for development only
+- Keycloak is the SSO provider — it handles all auth UI
+- No intermediate page means faster auth flow (one redirect, not two)
+- Reduced attack surface (nothing to phish in-app)
+- Demo/legacy mode preserves a form UI for development
+
+**Tradeoff**: Users see a brief loading state before redirect to Keycloak. Accepted because it avoids maintaining a redundant login page.
 
 ## 6. No Glow Effects
 
@@ -72,3 +74,13 @@
 - Bankers are power users — they want speed, not delight
 - Reduces motion sickness concerns
 - Measurable: all `transition` utilities use `duration-150` or `duration-200`
+
+## 8. Keycloak Owns Authentication
+
+**Decision**: `keycloak-js` manages all token lifecycle. The application never persists the access token.
+
+**Rationale**:
+- Prevents token theft via XSS/localStorage exfiltration
+- Keycloak handles session management, token refresh, and secure storage
+- Application only fetches `/auth/me` to resolve the internal user profile
+- Clear separation: Keycloak owns auth, application owns authorization

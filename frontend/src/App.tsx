@@ -32,7 +32,8 @@ function AppShell() {
   useWebSocket();
   const path = useLocation().pathname;
 
-  // Standalone pages — no shell
+  // /login is unreachable in Keycloak mode (login-required handles redirect at init)
+  // and shows LoginPage in legacy mode
   if (path === '/login') {
     return (
       <Routes>

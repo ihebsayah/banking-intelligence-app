@@ -148,33 +148,52 @@ def validate_keycloak_token(token: str) -> Tuple[str, dict]:
 
     # 5. Decode and validate
     clock_skew = settings.KEYCLOAK_CLOCK_SKEW_SECONDS
+    allowed_issuers = [
+        f"{settings.KEYCLOAK_PUBLIC_URL.rstrip('/')}/realms/{settings.KEYCLOAK_REALM}",
+        f"{settings.KEYCLOAK_INTERNAL_URL.rstrip('/')}/realms/{settings.KEYCLOAK_REALM}",
+    ]
     try:
         claims = jwt.decode(
             token,
             signing_key.key,
             algorithms=["RS256"],
             audience=settings.KEYCLOAK_EXPECTED_AUDIENCE,
-            issuer=f"{settings.KEYCLOAK_INTERNAL_URL.rstrip('/')}/realms/{settings.KEYCLOAK_REALM}",
             options={
                 "verify_exp": True,
                 "verify_nbf": True,
-                "verify_iss": True,
+                "verify_iss": False,
                 "verify_aud": True,
                 "require": ["exp", "sub", "iss", "aud"],
             },
             leeway=clock_skew,
         )
-    except jwt.ExpiredSignatureError:
+
+        # PyJWT < 2.9 does not accept a list for issuer. Check manually.
+        token_iss = claims.get("iss")
+        if token_iss not in allowed_issuers:
+            raise jwt.InvalidIssuerError(
+                f"Invalid issuer. Token: {token_iss}, expected one of: {allowed_issuers}"
+            )
+    except jwt.ExpiredSignatureError as exc:
+        logger.error(f"Keycloak token validation failed (ExpiredSignatureError): {exc}")
         raise TokenExpiredError()
-    except jwt.InvalidAudienceError:
+    except jwt.InvalidAudienceError as exc:
+        logger.error(f"Keycloak token validation failed (InvalidAudienceError): {exc}. Expected audience: {settings.KEYCLOAK_EXPECTED_AUDIENCE}, token audience: {jwt.get_unverified_header(token).get('aud') or 'N/A'}")
         raise KeycloakTokenValidationError("Token audience does not match expected audience")
-    except jwt.InvalidIssuerError:
+    except jwt.InvalidIssuerError as exc:
+        logger.error(f"Keycloak token validation failed (InvalidIssuerError): {exc}. Expected issuer: {settings.KEYCLOAK_PUBLIC_URL.rstrip('/')}/realms/{settings.KEYCLOAK_REALM}")
         raise KeycloakTokenValidationError("Token issuer does not match expected issuer")
     except jwt.InvalidTokenError as exc:
+        try:
+            unverified_claims = jwt.decode(token, options={"verify_signature": False})
+        except Exception as e:
+            unverified_claims = f"Failed to decode: {e}"
+        logger.error(f"Keycloak token validation failed (InvalidTokenError): {exc}. Unverified claims: {unverified_claims}")
         raise KeycloakTokenValidationError(f"Invalid token: {exc}")
 
     subject = claims.get("sub")
     if not subject:
+        logger.error("Keycloak token validation failed: Missing sub claim")
         raise KeycloakTokenValidationError("Token missing subject claim")
 
     return subject, claims
