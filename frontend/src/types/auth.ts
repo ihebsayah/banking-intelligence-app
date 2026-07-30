@@ -8,6 +8,8 @@ export interface User {
   branch_id?: string;
   created_at: string;
   last_login: string;
+  permissions: string[];
+  legacy_role?: string;
 }
 
 export interface LoginRequest {

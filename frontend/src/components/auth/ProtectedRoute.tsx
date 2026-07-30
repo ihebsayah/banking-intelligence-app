@@ -9,14 +9,15 @@ import { Building2, LogOut, Mail, RefreshCw, ShieldAlert, ShieldX, ArrowLeft } f
 interface Props {
   children: React.ReactNode;
   requiredRole?: string | string[];
+  requiredPermission?: string;
 }
 
-export function ProtectedRoute({ children, requiredRole }: Props) {
+export function ProtectedRoute({ children, requiredRole, requiredPermission }: Props) {
   const isKeycloak = env.AUTH_PROVIDER === 'keycloak';
   if (isKeycloak) {
-    return <ProtectedRouteKeycloak requiredRole={requiredRole}>{children}</ProtectedRouteKeycloak>;
+    return <ProtectedRouteKeycloak requiredRole={requiredRole} requiredPermission={requiredPermission}>{children}</ProtectedRouteKeycloak>;
   }
-  return <ProtectedRouteLegacy requiredRole={requiredRole}>{children}</ProtectedRouteLegacy>;
+  return <ProtectedRouteLegacy requiredRole={requiredRole} requiredPermission={requiredPermission}>{children}</ProtectedRouteLegacy>;
 }
 
 // ── Shared full-screen wrappers ─────────────────────────────────────────
@@ -40,8 +41,8 @@ function AuthLogo() {
 
 // ── Keycloak protected route ────────────────────────────────────────────
 
-function ProtectedRouteKeycloak({ children, requiredRole }: { children: React.ReactNode; requiredRole?: string | string[] }) {
-  const { phase, applicationUser, error, logout, login } = useAuth();
+function ProtectedRouteKeycloak({ children, requiredRole, requiredPermission }: { children: React.ReactNode; requiredRole?: string | string[]; requiredPermission?: string }) {
+  const { phase, applicationUser, error, logout, login, hasPermission } = useAuth();
 
   if (phase === 'bootstrapping' || phase === 'loading-user') {
     return (
@@ -132,6 +133,10 @@ function ProtectedRouteKeycloak({ children, requiredRole }: { children: React.Re
     );
   }
 
+  if (requiredPermission && !hasPermission(requiredPermission)) {
+    return <Navigate to="/unauthorized" state={{ requiredPermission, from: window.location.pathname }} replace />;
+  }
+
   if (requiredRole && applicationUser) {
     const roles = Array.isArray(requiredRole) ? requiredRole : [requiredRole];
     if (!roles.includes(applicationUser.role)) {
@@ -144,11 +149,15 @@ function ProtectedRouteKeycloak({ children, requiredRole }: { children: React.Re
 
 // ── Legacy protected route ──────────────────────────────────────────────
 
-function ProtectedRouteLegacy({ children, requiredRole }: { children: React.ReactNode; requiredRole?: string | string[] }) {
+function ProtectedRouteLegacy({ children, requiredRole, requiredPermission }: { children: React.ReactNode; requiredRole?: string | string[]; requiredPermission?: string }) {
   const { isAuthenticated, user } = useAuthStore();
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (requiredPermission && !user?.permissions?.includes(requiredPermission)) {
+    return <Navigate to="/unauthorized" state={{ requiredPermission, from: window.location.pathname }} replace />;
   }
 
   if (requiredRole) {

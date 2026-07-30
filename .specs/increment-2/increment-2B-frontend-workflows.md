@@ -20,6 +20,7 @@ All routes are permission-gated using `PermissionGate`. Backend is the enforcer;
 | `/workbench/information-requests` | IRInbox | `info_request:read_assigned` OR `info_request:read` |
 | `/workbench/approvals` | ApprovalQueue | `approval:read` |
 | `/workbench/admin/outbox` | OutboxMonitor | `admin:outbox_monitor` |
+| `/workbench/admin/orphans` | OrphanMonitor | `admin:outbox_monitor` |
 | `/notifications` | NotificationsPanel | `notification:read` |
 
 ---
@@ -49,6 +50,7 @@ Sections:
 | Create Investigation | status=acknowledged, no active investigation | `alert:investigate` | Opens InvestigationCreateModal |
 | Dismiss | status IN (acknowledged, under_investigation), user=assignee | `alert:dismiss` | Opens DismissModal |
 | Escalate | status=under_investigation, investigation exists | `alert:transition` | Opens EscalateModal |
+| Assign | admin only, any status except resolved/dismissed | `alert:assign` | Opens AssignModal |
 
 **InvestigationCreateModal:**
 - Fields: title (required), description (optional)
@@ -68,6 +70,15 @@ Sections:
 - Fields: title (required), description (optional), priority (select)
 - Submit → POST /alerts/:id/escalate
 - On 201: show success toast; navigate to created case
+
+**AssignModal:**
+- Visible to admin users with `alert:assign` permission
+- User selector (filtered to active users with appropriate scope)
+- Reason field (required)
+- expected_version displayed
+- Submit → PATCH /alerts/:id/assign
+- On 409: conflict UI as described below
+- Note: admin can reassign from any status except terminal (resolved/dismissed — those need reopen flow first)
 
 **Conflict UI (409):**
 - Toast: "Someone else updated this record. Refreshing..."
@@ -106,7 +117,7 @@ Tabs: Overview | Findings | Comments | Timeline
 
 **Comments tab:**
 - Comment list (paginated)
-- Internal comments shown with grey badge (compliance/admin only)
+- Internal comments shown with grey badge (compliance only). Admin sees comment metadata (author, timestamp) and public content only. Internal comment TEXT is hidden from admin.
 - New comment form: textarea + is_internal toggle (hidden for analyst)
 - Submit → POST /investigations/:id/comments
 
@@ -145,7 +156,7 @@ Analyst view — shows IRs assigned to self.
 
 ### 2.1 Case Queue (`/workbench/cases`)
 
-- Filter: status, risk_level, priority
+- Filter: status, risk_level (critical, high, medium, low), priority
 - Columns: title, status, risk_level, priority, assigned_to (self), target_date, updated_at
 - Overdue: target_date < today + status NOT IN (resolved, closed) → row highlight
 - Unassigned cases: shown in separate sub-section "Unassigned" (Phase 2E full queue; in 2B admin assigns)
@@ -156,7 +167,7 @@ Analyst view — shows IRs assigned to self.
 Tabs: Overview | Investigation | Information Requests | Decisions | Comments | Timeline
 
 **Overview tab:**
-- Status badge, risk_level, priority, regulatory_frameworks, target_date
+- Status badge, risk_level (critical → dark red badge, high → red, medium → amber, low → gray), priority, regulatory_frameworks, target_date
 - Assigned analyst (from investigation link)
 - Resolution text (editable when status=resolved, before close)
 - Action bar:
@@ -188,8 +199,9 @@ Tabs: Overview | Investigation | Information Requests | Decisions | Comments | T
 - Findings text (read-only)
 - References list (read-only)
 - Conclusion (read-only)
-- Button: Return Investigation (if investigation.status=submitted) → PATCH /investigations/:id/transition (target=returned)
-- Button: Approve Investigation (if investigation.status=submitted) → PATCH /investigations/:id/transition (target=completed)
+- Button: Return Investigation (if investigation.status=submitted, permission: `investigation:review`) → PATCH /investigations/:id/transition (target=returned)
+- Button: Approve Investigation (if investigation.status=submitted, permission: `investigation:review`) → PATCH /investigations/:id/transition (target=completed)
+- These buttons render only for compliance users (analyst does not have `investigation:review`)
 
 **Information Requests tab:**
 - List of all IRs for this case
@@ -207,6 +219,7 @@ Tabs: Overview | Investigation | Information Requests | Decisions | Comments | T
 **Comments tab:**
 - Same as investigation comments but entity_type=compliance_case
 - Internal comment toggle available to compliance users
+- Admin sees comment metadata (author, timestamp) and public content only. Internal comment TEXT is hidden from admin.
 
 ### 2.3 Decision Form (`/workbench/cases/:id/decisions`)
 
@@ -216,7 +229,7 @@ Tabs: Overview | Investigation | Information Requests | Decisions | Comments | T
   - Enhanced Due Diligence Recommended
   - Report to Authority Recommended ← requires approval badge shown
   - Account Action Recommended
-  - Close Case (no_action path)
+  - Closure Recommended
 - Rationale textarea (required)
 - If "Report to Authority": show four-eyes approval flow inline
   - "Create Approval Request" button → POST /approval-requests
@@ -267,14 +280,25 @@ Embedded in Close Case modal:
 
 ### 3.2 Assignment Recovery
 
-Handled via existing Admin user management page (extend in 2B):
-- "Reassign" button on any analyst/compliance user listing
-- Opens ReassignModal:
-  - From user (pre-filled)
-  - Entity type (alerts / investigations / cases)
-  - Target user
-  - Confirm → PATCH /alerts/:id/assign or /cases/:id/assign
+Dedicated reassign surface for admin users:
+- Available via "Assign" button on Alert/Case/Investigation detail pages (permission: `alert:assign`, `case:assign`, `investigation:assign`)
+- Opens AssignModal with:
+  - Current assignee displayed
+  - User selector (filtered to active users with appropriate scope)
+  - Reason field (required)
+  - expected_version displayed
+  - Entity type selector (alerts / investigations / cases)
+- Submit → dedicated assign endpoint (e.g., PATCH /alerts/:id/assign)
+- On 409: conflict UI as described in 4.1
 - Used when: user suspended, user deleted, user on leave
+- Admin can filter by entity type and see current assignments before reassigning
+
+### 3.3 Orphan Assignment Monitor
+- `/workbench/admin/orphans` — shows alerts, investigations, cases assigned to suspended/inactive/out-of-scope users
+- Three sub-sections (Alerts, Investigations, Cases) each listing affected entities
+- Each row: entity type, title/id, status, assigned user (id + status), "Recover Assignment" button
+- "Recover Assignment" opens AssignModal with pre-filled current assignee
+- Permission gate: `admin:orphan_monitor` (or `admin:outbox_monitor` if that's broader)
 
 ---
 

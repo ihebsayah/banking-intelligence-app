@@ -1783,6 +1783,20 @@ async def generate_report(
 # ─── PROFILE & AUTH/ME ────────────────────────────────────────────────────────
 # ═══════════════════════════════════════════════════════════════════════════════
 
+async def _fetch_user_permissions(user_id: str, db) -> list:
+    """Load permission codes for a user via role_permissions."""
+    try:
+        rows = await db.fetch_all("""
+            SELECT DISTINCT rp.permission_code
+            FROM role_permissions rp
+            JOIN users u ON u.role = rp.role_name
+            WHERE u.user_id = $1
+        """, [user_id])
+        return [r["permission_code"] for r in rows]
+    except Exception:
+        return []
+
+
 async def _fetch_user_profile(user_id: str, db) -> dict:
     """Shared helper to fetch user profile from DB or return JWT-derived fallback."""
     if db:
@@ -1792,6 +1806,7 @@ async def _fetch_user_profile(user_id: str, db) -> dict:
                 FROM users WHERE user_id = $1
             """, [user_id])
             if row:
+                permissions = await _fetch_user_permissions(user_id, db)
                 return {
                     "user_id": row["user_id"],
                     "email": row.get("email", f"{user_id}@bankintel.hq"),
@@ -1802,6 +1817,8 @@ async def _fetch_user_profile(user_id: str, db) -> dict:
                     "last_login": str(row.get("last_login", "")),
                     "status": row.get("status", "active"),
                     "must_change_password": bool(row.get("must_change_password", False)),
+                    "permissions": permissions,
+                    "legacy_role": row.get("legacy_role"),
                 }
         except Exception as exc:
             logger.warning("Failed to fetch user profile from DB", extra={"error": str(exc)})
@@ -1817,6 +1834,8 @@ async def _fetch_user_profile(user_id: str, db) -> dict:
         "last_login": _now_iso(),
         "status": "active",
         "must_change_password": False,
+        "permissions": [],
+        "legacy_role": None,
     }
 
 

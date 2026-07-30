@@ -115,10 +115,10 @@ Ordered task list. Each task: definition of done. No task starts until its depen
 - Reconciliation task runs every 15min
 - Unit tests: mock audit agent HTTP; verify state transitions pending→delivered, pending→failed, failed→poison
 
-### 2B.3 — Alert Endpoints (6)
+### 2B.3 — Alert Endpoints (7)
 **Depends on:** 2A.8, 2B.1, 2B.2
 **DoD:**
-- All 6 alert endpoints implemented per API contracts
+- All 7 alert endpoints implemented per API contracts
 - `authorise()` called before each mutation
 - Each mutation: atomic transaction with activity_timeline + notifications + audit_outbox
 - State machine transitions match increment-2B-state-machines.md exactly
@@ -187,6 +187,14 @@ Ordered task list. Each task: definition of done. No task starts until its depen
 - admin:outbox_monitor permission gating
 - AU03, AU04 scenarios pass
 
+### 2B.10b — Admin Orphan-Assignment Endpoint
+**Depends on:** 2B.1
+**DoD:**
+- GET /admin/orphan-assignments returns alerts, investigations, cases assigned to suspended/inactive/out-of-scope users
+- `admin:orphan_monitor` permission gating
+- O001, O002 scenarios pass
+- Response shape: `{ alerts: [...], investigations: [...], cases: [...] }`
+
 ### 2B.11 — Frontend: Alert Queue + Detail
 **Depends on:** 2A.10, 2B.3
 **DoD:**
@@ -244,13 +252,13 @@ Ordered task list. Each task: definition of done. No task starts until its depen
 ### 2B.17 — Integration Test Suite
 **Depends on:** all 2B.1–2B.16
 **DoD:**
-- Full workflow test: T01 → T35 (valid transitions) pass sequentially against real DB
+- Full workflow test: T00 → T35 (valid transitions) pass sequentially against real DB
 - XA01–XA10 (access control) pass
-- V01–V08 (versioning) pass
+- V01–V11 (versioning) pass
 - AU01–AU08 (outbox) pass with mock audit agent
-- F01–F17 (forbidden) pass
+- F01–F18 (forbidden) pass
 - IRS01 full cycle passes
-- DP01–DP05 decision paths pass
+- DP01–DP04 decision paths pass
 
 ### 2B.18 — Staging Deployment + Smoke Test
 **Depends on:** 2B.17
@@ -268,7 +276,7 @@ Ordered task list. Each task: definition of done. No task starts until its depen
 | Task Group | Tasks | Est. Days |
 |------------|-------|-----------|
 | 2A Foundation | 2A.1–2A.10 | 5–6 |
-| 2B Backend | 2B.1–2B.10 | 8–10 |
+| 2B Backend | 2B.1–2B.10b | 9–11 |
 | 2B Frontend | 2B.11–2B.16 | 6–8 |
 | 2B Testing + Staging | 2B.17–2B.18 | 3–4 |
 | **Total** | | **22–28 days** |

@@ -71,6 +71,7 @@ CREATE TABLE audit_outbox (
     status              audit_outbox_status NOT NULL DEFAULT 'pending',
     attempt_count       SMALLINT     NOT NULL DEFAULT 0,
     last_attempt_at     TIMESTAMPTZ,
+    next_attempt_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     last_error          TEXT,
     locked_by           VARCHAR(100),
     locked_at           TIMESTAMPTZ,
@@ -80,7 +81,7 @@ CREATE TABLE audit_outbox (
 );
 
 CREATE INDEX idx_audit_outbox_pending
-    ON audit_outbox(status, created_at)
+    ON audit_outbox(status, next_attempt_at)
     WHERE status IN ('pending','failed');
 
 CREATE UNIQUE INDEX idx_audit_outbox_idem
@@ -192,6 +193,11 @@ MAX_ATTEMPTS = 5
 RETRY_BACKOFF_SECONDS = [10, 30, 120, 600, 1800]  # per attempt index
 LOCK_TIMEOUT_SECONDS = 300  # 5 min; reconciliation resets stuck deliveries
 
+def _compute_next_attempt_at(attempt_count: int) -> datetime:
+    """Compute next_attempt_at based on attempt index into RETRY_BACKOFF_SECONDS."""
+    idx = min(attempt_count, len(RETRY_BACKOFF_SECONDS) - 1)
+    return datetime.utcnow() + timedelta(seconds=RETRY_BACKOFF_SECONDS[idx])
+
 async def outbox_worker(db: DatabaseConnector, audit_http: httpx.AsyncClient):
     while True:
         await asyncio.sleep(5)
@@ -201,27 +207,31 @@ async def outbox_worker(db: DatabaseConnector, audit_http: httpx.AsyncClient):
             logger.error("Outbox worker error", extra={"error": str(e)})
 
 async def deliver_pending(db, audit_http):
-    rows = await db.fetch("""
-        SELECT outbox_id, payload, idempotency_key, attempt_count
-        FROM audit_outbox
-        WHERE status IN ('pending', 'failed')
-          AND (
-              status = 'pending'
-              OR last_attempt_at < NOW() - (INTERVAL '1 second' * $1)
-          )
-        ORDER BY created_at
-        LIMIT 10
-        FOR UPDATE SKIP LOCKED
-    """, [RETRY_BACKOFF_SECONDS[min(0, row['attempt_count'])]])
+    # --- Transaction 1: Claim rows (short, no HTTP) ---
+    async with db.transaction():
+        rows = await db.fetch("""
+            SELECT outbox_id, payload, idempotency_key, attempt_count
+            FROM audit_outbox
+            WHERE status IN ('pending', 'failed')
+              AND next_attempt_at <= NOW()
+            ORDER BY next_attempt_at
+            LIMIT 10
+            FOR UPDATE SKIP LOCKED
+        """)
+        if not rows:
+            return
 
-    for row in rows:
         worker_id = os.environ.get('HOSTNAME', 'worker_default')
-        await db.execute("""
-            UPDATE audit_outbox
-            SET status='delivering', locked_by=$1, locked_at=NOW()
-            WHERE outbox_id=$2
-        """, [worker_id, row['outbox_id']])
+        for row in rows:
+            await db.execute("""
+                UPDATE audit_outbox
+                SET status='delivering', locked_by=$1, locked_at=NOW()
+                WHERE outbox_id=$2
+            """, [worker_id, row['outbox_id']])
+    # --- Transaction 1 commits here; locks released ---
 
+    # --- HTTP delivery outside any lock transaction ---
+    for row in rows:
         try:
             resp = await audit_http.post(
                 "/log_access",
@@ -230,23 +240,30 @@ async def deliver_pending(db, audit_http):
                 timeout=10.0,
             )
             resp.raise_for_status()
+        except Exception as e:
+            attempt = row['attempt_count'] + 1
+            new_status = 'poison' if attempt >= MAX_ATTEMPTS else 'failed'
+            # --- Transaction 2: Record failure (short, no HTTP) ---
+            async with db.transaction():
+                await db.execute("""
+                    UPDATE audit_outbox
+                    SET status=$1, attempt_count=$2, last_attempt_at=NOW(),
+                        next_attempt_at=$3, last_error=$4,
+                        locked_by=NULL, locked_at=NULL,
+                        poison_reason=CASE WHEN $1='poison' THEN $4 ELSE poison_reason END
+                    WHERE outbox_id=$5
+                """, [new_status, attempt, _compute_next_attempt_at(attempt), str(e), row['outbox_id']])
+            if new_status == 'poison':
+                await notify_admin_poison_event(db, row['outbox_id'])
+            continue
+
+        # --- Transaction 2: Record success (short, no HTTP) ---
+        async with db.transaction():
             await db.execute("""
                 UPDATE audit_outbox
                 SET status='delivered', delivered_at=NOW(), locked_by=NULL, locked_at=NULL
                 WHERE outbox_id=$1
             """, [row['outbox_id']])
-        except Exception as e:
-            attempt = row['attempt_count'] + 1
-            new_status = 'poison' if attempt >= MAX_ATTEMPTS else 'failed'
-            await db.execute("""
-                UPDATE audit_outbox
-                SET status=$1, attempt_count=$2, last_attempt_at=NOW(),
-                    last_error=$3, locked_by=NULL, locked_at=NULL,
-                    poison_reason=CASE WHEN $1='poison' THEN $3 ELSE poison_reason END
-                WHERE outbox_id=$4
-            """, [new_status, attempt, str(e), row['outbox_id']])
-            if new_status == 'poison':
-                await notify_admin_poison_event(db, row['outbox_id'])
 ```
 
 ---

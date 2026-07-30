@@ -75,8 +75,8 @@ Note: `draft`, `assigned`, `escalated`, `archived`, `reopened` from previous arc
 | I2 | active | awaiting_information | request_info | Assignee | `investigation:transition` | `assigned_to == user.id` | reason (as IR or comment) | No | Insert information_request if case exists | `ir_created` → IR assignee | `awaiting_information` | `investigation.awaiting_info` | No-op if already awaiting | 409 |
 | I3 | awaiting_information | active | info_received | Assignee | `investigation:transition` | `assigned_to == user.id` | IR responded | No | none | none | `resumed` | `investigation.resumed` | No-op | 409 |
 | I4 | active | submitted | submit | Assignee | `investigation:transition` | `assigned_to == user.id` | `findings_text` non-empty OR `findings_refs` non-empty | No | Set submitted_at | `investigation_submitted` → compliance if case linked | `submitted` | `investigation.submitted` | No-op | 409 |
-| I5 | submitted | completed | approve | Compliance | `investigation:read` (linked case) | linked case assigned_to == user.id | none | No | Set completed_at | `investigation_completed` → analyst | `completed` | `investigation.completed` | No-op | 409 |
-| I6 | submitted | returned | return | Compliance | `investigation:read` (linked case) | linked case assigned_to == user.id | `return_reason` | No | Set return_reason | `investigation_returned` → analyst | `returned` | `investigation.returned` | No-op | 409 |
+| I5 | submitted | completed | approve | Compliance | `investigation:review` | linked case assigned_to == user.id | none | No | Set completed_at | `investigation_completed` → analyst | `completed` | `investigation.completed` | No-op | 409 |
+| I6 | submitted | returned | return | Compliance | `investigation:review` | linked case assigned_to == user.id | `return_reason` | No | Set return_reason | `investigation_returned` → analyst | `returned` | `investigation.returned` | No-op | 409 |
 | I7 | returned | active | revise | Assignee | `investigation:transition` | `assigned_to == user.id` | none | No | Clear submitted_at | none | `revision_started` | `investigation.revision_started` | No-op | 409 |
 | I8 | active | completed | complete | Assignee | `investigation:transition` | `assigned_to == user.id` | `findings_text` or `findings_refs` + `conclusion` | No | Set completed_at | none | `completed` | `investigation.completed` | No-op | 409 |
 | I9 | any non-terminal | cancelled | cancel | Admin | `investigation:assign` | none | `cancel_reason` as comment | No | Insert comment with reason | `investigation_cancelled` → assignee | `cancelled` | `investigation.cancelled` | No-op if already cancelled | 409 |
@@ -94,13 +94,12 @@ Note: `draft`, `assigned`, `escalated`, `archived`, `reopened` from previous arc
 
 ```
 open → assigned → under_review → awaiting_information → under_review (loop)
-under_review → decision_pending → resolved (no_action / case_closed / warning)
+under_review → decision_pending → resolved (no_action / closure_recommended / warning)
 decision_pending → awaiting_compliance_action → resolved (edd / report_to_authority / account_action)
 resolved → closed (needs approval if critical/high)
 open → cancelled (admin)
 assigned → cancelled (admin)
 closed → open (admin reopen; needs approval)
-reopened: NOT a stable state — used only as transient event label in timeline
 ```
 
 **States:** `open`, `assigned`, `under_review`, `awaiting_information`, `decision_pending`, `awaiting_compliance_action`, `resolved`, `closed`, `cancelled`
@@ -113,22 +112,24 @@ Note: `escalated`, `reopened`, `remediation_required`, `remediation_in_progress`
 |---|------|----|--------|-------|------|-----|-----------------|----------|--------------|--------------|----------|-------|-------------|----------|
 | C1 | open | assigned | assign | Admin | `case:assign` | none | `assigned_to` | No | Insert assignment_history | `case_assigned` → assignee | `assigned` | `case.assigned` | No-op if same user | 409 |
 | C2 | assigned | under_review | begin_review | Assignee | `case:transition` | `assigned_to == user.id` | none | No | none | none | `under_review` | `case.under_review` | No-op | 409 |
-| C3 | under_review | awaiting_information | request_information | Assignee | `case:transition` | `assigned_to == user.id` | IR question + assigned analyst | No | Insert information_request | `ir_created` → analyst | `awaiting_information` | `case.awaiting_info` | No-op | 409 |
+| C3 | under_review | awaiting_information | request_information | Assignee | `case:transition` | `assigned_to == user.id` | `expected_case_version`, IR question + assigned analyst | No | Atomic tx: lock/version-check case, verify status=under_review, insert information_request, set case.status=awaiting_information, increment case.version, insert timeline (ir_created + case.awaiting_info), insert notification → analyst, insert audit outbox (ir.created + case.awaiting_info) | `ir_created` → analyst | `awaiting_information` | `case.awaiting_info` | No-op | 409 |
 | C4 | awaiting_information | under_review | info_received | Assignee | `case:transition` | `assigned_to == user.id` | IR status = accepted | No | none | none | `under_review_resumed` | `case.resumed` | No-op | 409 |
 | C5 | under_review | decision_pending | ready_for_decision | Assignee | `case:transition` | `assigned_to == user.id` | none | No | none | `case_decision_pending` → compliance admin | `decision_pending` | `case.decision_pending` | No-op | 409 |
-| C6 | decision_pending | resolved | record_decision_no_action | Compliance | `case:decision` | `assigned_to == user.id` | Decision: no_action or case_closed, `rationale` | No | Insert decision, set current_disposition_id, set resolved_at, resolved_by | `case_resolved` → admin | `resolved` | `case.resolved` | 409 if already resolved |  409 |
-| C7 | decision_pending | awaiting_compliance_action | record_decision_requires_action | Compliance | `case:decision` | `assigned_to == user.id` | Decision type IN (warning, enhanced_due_diligence_recommended, account_action_recommended) or report_to_authority_recommended + approval for report_to_authority | Approval for report_to_authority | Insert decision, set current_disposition_id | `case_decision_recorded` → admin | `awaiting_compliance_action` | `case.decision_recorded` | No-op | 409 |
+| C6 | decision_pending | resolved | record_decision_no_action | Compliance | `case:decision` | `assigned_to == user.id` | Decision: no_action or closure_recommended, `rationale` | No | Insert decision, set current_disposition_id, set resolved_at, resolved_by | `case_resolved` → admin | `resolved` | `case.resolved` | 409 if already resolved |  409 |
+| C7 | decision_pending | awaiting_compliance_action | record_decision_requires_action | Compliance | `case:decision` | `assigned_to == user.id` | Decision type IN (warning, enhanced_due_diligence_recommended, account_action_recommended) or report_to_authority_recommended + approval (entity_type=compliance_case, action_type=decision_report_to_authority) with proposed_payload containing decision_type | Yes (entity_type=compliance_case, action_type=decision_report_to_authority; approval approved, unconsumed, same case, decision_type matches) | Insert decision, set current_disposition_id, consume approval (set executed_at) | `case_decision_recorded` → admin | `awaiting_compliance_action` | `case.decision_recorded` | No-op | 409 |
 | C8 | awaiting_compliance_action | resolved | action_completed | Compliance | `case:transition` | `assigned_to == user.id` | `resolution` text | No | Set resolved_at, resolved_by | `case_resolved` → admin | `resolved` | `case.resolved` | No-op | 409 |
 | C9 | resolved | closed | close | Compliance | `case:close` | `assigned_to == user.id` | `resolution` non-empty | Approval if risk_level IN (critical, high) | Set closed_at, closed_by; insert audit event | `case_closed` → admin | `closed` | `case.closed` | No-op if already closed | 409 |
 | C10 | open | cancelled | cancel | Admin | `case:assign` | none | `cancel_reason` as comment | No | Insert comment | `case_cancelled` → assignee (if any) | `cancelled` | `case.cancelled` | No-op | 409 |
 | C11 | assigned | cancelled | cancel | Admin | `case:assign` | none | `cancel_reason` as comment | No | same | same | `cancelled` | `case.cancelled` | No-op | 409 |
-| C12 | closed | open | reopen | Admin | `case:reopen` | none | `reopen_reason` | Approval: 1 admin + 1 compliance | Clear closed_at/closed_by, set reopen_reason, insert assignment_history | `case_reopened` → compliance | `reopened` (event only; state = open) | `case.reopened` | No-op if already open | 409 |
+| C12 | closed | open | reopen | Admin | `case:reopen` | none | `reopen_reason` | Yes (Compliance approval; Admin requests reopening via `approval:request` with `action_type=case_reopen`, does not vote) | Clear closed_at/closed_by, set reopen_reason, insert assignment_history | `case_reopened` → compliance | `reopened` (event only; state = open) | `case.reopened` | No-op if already open | 409 |
 
 **Forbidden:**
 - Admin: `case:decision`, `case:close`, `case:transition` — PROHIBITED
 - Analyst: `case:decision`, `case:close`, `case:assign` — PROHIBITED
 - Transition from `closed` to any state except `open` via C12: 400
 - C6/C7 requires `decided_by != approved_by` for report_to_authority: checked at approval decision step
+- Once a decision moves the case out of `decision_pending`, no further decisions are accepted until the case is reopened.
+- **Decision reconsideration and superseding is Phase 2D.**
 
 ---
 
@@ -149,7 +150,7 @@ acknowledged → cancelled
 
 | # | From | To | Action | Actor | Perm | OLP | Required Fields | Approval | Side Effects | Notification | Timeline | Audit | Idempotency | Conflict |
 |---|------|----|--------|-------|------|-----|-----------------|----------|--------------|--------------|----------|-------|-------------|----------|
-| IR1 | open | acknowledged | acknowledge | Assigned Analyst | `info_request:respond` | `assigned_to == user.id` | none | No | none | none | `ir_acknowledged` | `ir.acknowledged` | No-op | 409 |
+| IR1 | open | acknowledged | acknowledge | Assigned Analyst | `info_request:respond` | `assigned_to == user.id` | none | No | insert timeline event, insert notification → compliance IR creator, insert audit outbox event | `ir_acknowledged` → compliance IR creator | `ir_acknowledged` | `ir.acknowledged` | No-op | 409 |
 | IR2 | acknowledged | responded | respond | Assigned Analyst | `info_request:respond` | `assigned_to == user.id` | `response_text` non-empty | No | Set responded_at | `ir_responded` → IR creator (compliance) | `ir_responded` | `ir.responded` | No-op | 409 |
 | IR3 | responded | accepted | accept | IR Creator (Compliance) | `info_request:accept` | `created_by == user.id` | `acceptance_note` optional | No | Set accepted_at, accepted_by; trigger case C4 if case awaiting_information | none | `ir_accepted` | `ir.accepted` | No-op | 409 |
 | IR4 | responded | returned | return | IR Creator (Compliance) | `info_request:return` | `created_by == user.id` | `return_reason` | No | Set returned_at, returned_by | `ir_returned` → analyst | `ir_returned` | `ir.returned` | No-op | 409 |

@@ -1,6 +1,8 @@
-"""
-services/audit_agent/audit_logger.py
+"""services/audit_agent/audit_logger.py
 Core audit logging logic — inserts records into the immutable audit_log table.
+
+Supports idempotency key: if the same key is used twice, returns the existing
+record without error (idempotent POST /log_access).
 
 CRITICAL: This table is append-only. No UPDATE or DELETE ever.
           The PostgreSQL RULE enforces this at the DB level.
@@ -22,6 +24,7 @@ class AuditLogger:
     """
     Writes immutable audit log entries to the audit_log table.
 
+    Supports idempotency via idempotency_key column with UNIQUE constraint.
     Every public method uses a parameterized INSERT — no string interpolation.
     The DB-level RULE prevents any UPDATE or DELETE from taking effect.
     """
@@ -29,12 +32,20 @@ class AuditLogger:
     def __init__(self, db: DatabaseConnector):
         self._db = db
 
-    async def log_access(self, entry: AuditLogEntry) -> AuditLogResponse:
+    async def log_access(
+        self,
+        entry: AuditLogEntry,
+        idempotency_key: Optional[str] = None,
+    ) -> AuditLogResponse:
         """
         Insert one audit log record.
 
+        If idempotency_key is provided and a row with that key already exists,
+        returns the existing audit_id (200, not 409). No duplicate row is created.
+
         Args:
             entry: Fully populated AuditLogEntry model.
+            idempotency_key: Optional X-Idempotency-Key for deduplication.
 
         Returns:
             AuditLogResponse with logged=True and the audit_id.
@@ -42,36 +53,34 @@ class AuditLogger:
         Raises:
             AuditLoggingError: If the INSERT fails (caller decides how to handle).
         """
-        # Serialize tables_accessed list to JSON string for TEXT column
         tables_json: Optional[str] = None
         if entry.tables_accessed:
             tables_json = json.dumps(entry.tables_accessed)
 
-        # Serialize metadata dict to JSONB-compatible string
         metadata_json: Optional[str] = None
         if entry.metadata:
             metadata_json = json.dumps(entry.metadata, default=str)
 
-        # ─── Parameterized INSERT — no f-strings, no concatenation ───────────
+        if idempotency_key:
+            return await self._log_access_idempotent(
+                entry, idempotency_key, tables_json, metadata_json,
+            )
+
+        return await self._log_access_simple(entry, tables_json, metadata_json)
+
+    async def _log_access_simple(
+        self,
+        entry: AuditLogEntry,
+        tables_json: Optional[str],
+        metadata_json: Optional[str],
+    ) -> AuditLogResponse:
         sql = """
             INSERT INTO audit_log (
-                audit_id,
-                timestamp,
-                user_id,
-                user_role,
-                action,
-                query_intent,
-                tables_accessed,
-                rows_accessed,
-                execution_time_ms,
-                status,
-                ip_address,
-                endpoint,
-                http_method,
-                query_signature,
-                data_freshness,
-                error_message,
-                metadata
+                audit_id, timestamp, user_id, user_role, action,
+                query_intent, tables_accessed, rows_accessed,
+                execution_time_ms, status, ip_address, endpoint,
+                http_method, query_signature, data_freshness,
+                error_message, metadata
             ) VALUES (
                 $1, $2, $3, $4, $5,
                 $6, $7, $8, $9, $10,
@@ -79,8 +88,68 @@ class AuditLogger:
                 $16, $17::jsonb
             )
         """
+        params = self._build_params(entry, tables_json, metadata_json)
 
-        params = [
+        try:
+            await self._db.execute(sql, params)
+            logger.info("Audit log entry written", extra={
+                "audit_id": entry.audit_id, "user_id": entry.user_id,
+                "action": entry.action, "status": entry.status,
+            })
+            return AuditLogResponse(logged=True, audit_id=entry.audit_id)
+        except DatabaseError as exc:
+            logger.error("Failed to write audit log", extra={
+                "audit_id": entry.audit_id, "error": str(exc),
+            })
+            raise AuditLoggingError(str(exc)) from exc
+
+    async def _log_access_idempotent(
+        self,
+        entry: AuditLogEntry,
+        idempotency_key: str,
+        tables_json: Optional[str],
+        metadata_json: Optional[str],
+    ) -> AuditLogResponse:
+        sql = """
+            INSERT INTO audit_log (
+                audit_id, timestamp, user_id, user_role, action,
+                query_intent, tables_accessed, rows_accessed,
+                execution_time_ms, status, ip_address, endpoint,
+                http_method, query_signature, data_freshness,
+                error_message, metadata, idempotency_key
+            ) VALUES (
+                $1, $2, $3, $4, $5,
+                $6, $7, $8, $9, $10,
+                $11, $12, $13, $14, $15,
+                $16, $17::jsonb, $18
+            )
+            ON CONFLICT (idempotency_key) DO NOTHING
+        """
+        params = self._build_params(entry, tables_json, metadata_json) + [idempotency_key]
+
+        try:
+            result = await self._db.execute(sql, params)
+            if result and result.strip() == "INSERT 0 0":
+                existing = await self._db.fetch_one(
+                    "SELECT audit_id FROM audit_log WHERE idempotency_key = $1",
+                    [idempotency_key],
+                )
+                if existing:
+                    return AuditLogResponse(logged=True, audit_id=existing["audit_id"])
+            return AuditLogResponse(logged=True, audit_id=entry.audit_id)
+        except DatabaseError as exc:
+            logger.error("Failed to write audit log", extra={
+                "audit_id": entry.audit_id, "error": str(exc),
+            })
+            raise AuditLoggingError(str(exc)) from exc
+
+    def _build_params(
+        self,
+        entry: AuditLogEntry,
+        tables_json: Optional[str],
+        metadata_json: Optional[str],
+    ) -> list:
+        return [
             entry.audit_id,
             entry.timestamp,
             entry.user_id,
@@ -100,55 +169,19 @@ class AuditLogger:
             metadata_json,
         ]
 
-        try:
-            await self._db.execute(sql, params)
-            logger.info(
-                "Audit log entry written",
-                extra={
-                    "audit_id": entry.audit_id,
-                    "user_id": entry.user_id,
-                    "action": entry.action,
-                    "status": entry.status,
-                },
-            )
-            return AuditLogResponse(logged=True, audit_id=entry.audit_id)
-
-        except DatabaseError as exc:
-            logger.error(
-                "Failed to write audit log",
-                extra={"audit_id": entry.audit_id, "error": str(exc)},
-            )
-            raise AuditLoggingError(str(exc)) from exc
-
     async def get_recent_logs(
         self,
         user_id: Optional[str] = None,
         limit: int = 100,
     ) -> list:
-        """
-        Fetch recent audit log entries (read-only, for compliance review).
-
-        Args:
-            user_id: Filter by specific user (optional).
-            limit:   Maximum rows to return (max 1000).
-
-        Returns:
-            List of audit_log row dicts ordered by timestamp DESC.
-        """
-        limit = min(limit, 1000)  # safety cap
-
+        """Fetch recent audit log entries (read-only, for compliance review)."""
+        limit = min(limit, 1000)
         if user_id:
-            sql = """
-                SELECT * FROM audit_log
-                WHERE user_id = $1
-                ORDER BY timestamp DESC
-                LIMIT $2
-            """
-            return await self._db.fetch_all(sql, [user_id, limit])
-        else:
-            sql = """
-                SELECT * FROM audit_log
-                ORDER BY timestamp DESC
-                LIMIT $1
-            """
-            return await self._db.fetch_all(sql, [limit])
+            return await self._db.fetch_all(
+                "SELECT * FROM audit_log WHERE user_id = $1 ORDER BY timestamp DESC LIMIT $2",
+                [user_id, limit],
+            )
+        return await self._db.fetch_all(
+            "SELECT * FROM audit_log ORDER BY timestamp DESC LIMIT $1",
+            [limit],
+        )

@@ -35,6 +35,7 @@ investigation:read            # read any investigation (compliance, admin)
 investigation:update          # update findings_text, findings_refs, conclusion
 investigation:modify_findings # SENSITIVE — same as update but explicit for audit; analyst only
 investigation:transition      # start, submit, revise, complete transitions
+investigation:review          # approve/return submitted investigations (compliance only)
 investigation:assign          # assign investigation (admin) + cancel
 
 # Compliance Case
@@ -64,7 +65,8 @@ approval:read         # read approval requests (all roles, own scope)
 # Comments
 comment:create        # create comment on accessible entity
 comment:read          # read public comments on accessible entity
-comment:view_internal # read internal comments (compliance, admin)
+comment:view_internal_content # read full internal comment text (compliance only)
+comment:view_metadata # see comment existence metadata (count, author, created_at) without content (admin)
 comment:redact        # redact comment (admin only)
 
 # Timeline
@@ -98,6 +100,7 @@ admin:outbox_retry    # trigger outbox retry (admin only)
 | `investigation:update` | ✓ | — | — |
 | `investigation:modify_findings` | ✓ | — | — |
 | `investigation:transition` | ✓ | — | — |
+| `investigation:review` | — | ✓ | — |
 | `investigation:assign` | — | — | ✓ |
 | `case:create` | — | ✓ | — |
 | `case:read_assigned` | ✓ | ✓ | — |
@@ -114,12 +117,13 @@ admin:outbox_retry    # trigger outbox retry (admin only)
 | `info_request:accept` | — | ✓ | — |
 | `info_request:return` | — | ✓ | — |
 | `info_request:cancel` | — | ✓ | ✓ |
-| `approval:request` | ✓ (for alert:dismiss gated action) | ✓ | — |
+| `approval:request` | ✓ (for alert:dismiss gated action) | ✓ | ✓ (case_reopen only) |
 | `approval:approve` | ✗ PROHIBITED | ✓ | — |
 | `approval:read` | ✓ | ✓ | ✓ |
 | `comment:create` | ✓ | ✓ | ✓ |
 | `comment:read` | ✓ | ✓ | ✓ |
-| `comment:view_internal` | — | ✓ | ✓ |
+| `comment:view_internal_content` | — | ✓ | — |
+| `comment:view_metadata` | — | — | ✓ |
 | `comment:redact` | — | — | ✓ |
 | `timeline:read` | ✓ | ✓ | ✓ |
 | `notification:read` | ✓ | ✓ | ✓ |
@@ -138,6 +142,7 @@ PROHIBITED: frozenset[tuple[str, str]] = frozenset({
     # Admin SoD
     ('admin', 'case:decision'),
     ('admin', 'case:close'),
+    ('admin', 'investigation:review'),
     ('admin', 'investigation:modify_findings'),
     ('admin', 'remediation:verify'),       # Phase 2D; blocked in advance
     ('admin', 'evidence:destroy'),         # Phase 2D; blocked in advance
@@ -234,6 +239,7 @@ APPROVAL_GATED_ACTIONS: dict[str, str] = {
     # action: approval_request.action_type
     'alert:dismiss':         'alert_dismissal_critical_high',   # only if severity IN (critical, high)
     'case:close':            'case_closure_critical_high',       # only if risk_level IN (critical, high)
+    # decision_report_to_authority approval is on entity_type=compliance_case, entity_id=case_id
     'case:decision[report]': 'decision_report_to_authority',    # decision_type = report_to_authority_recommended
     'case:reopen':           'case_reopen',                     # always
 }

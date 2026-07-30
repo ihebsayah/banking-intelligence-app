@@ -38,6 +38,23 @@ _db: DatabaseConnector = None
 _audit_logger: AuditLogger = None
 
 
+async def _apply_audit_migrations(db: DatabaseConnector) -> None:
+    """Apply additive schema changes to postgres-audit."""
+    try:
+        await db.execute("""
+            ALTER TABLE audit_log
+                ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(255)
+        """)
+        await db.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_audit_log_idempotency
+                ON audit_log(idempotency_key)
+                WHERE idempotency_key IS NOT NULL
+        """)
+        logger.info("Audit migrations applied")
+    except Exception as exc:
+        logger.warning("Audit migration had issues (may be idempotent)", extra={"error": str(exc)})
+
+
 # ─── Lifespan ─────────────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -48,6 +65,9 @@ async def lifespan(app: FastAPI):
     # Connect to postgres-audit
     _db = DatabaseConnector(settings.AUDIT_DATABASE_URL)
     await _db.initialize()
+
+    await _apply_audit_migrations(_db)
+
     _audit_logger = AuditLogger(_db)
 
     logger.info("Audit Agent ready — connected to postgres-audit")
@@ -116,15 +136,22 @@ async def health() -> HealthResponse:
     summary="Write an audit log entry",
     tags=["audit"],
 )
-async def log_access(entry: AuditLogEntry) -> AuditLogResponse:
+async def log_access(
+    entry: AuditLogEntry,
+    request: Request,
+) -> AuditLogResponse:
     """
     Accept an audit log entry from any service and write it to the
     immutable audit_log table.
+
+    Supports X-Idempotency-Key header for deduplication. If the same
+    key is submitted again, returns 200 with the existing audit_id.
 
     Called by:
       - api-gateway (every HTTP request)
       - execution-agent (every query execution)
       - any other agent that needs to record an auditable action
+      - outbox worker (delivering batched audit events)
 
     Returns:
         AuditLogResponse confirming the write with the audit_id.
@@ -135,8 +162,10 @@ async def log_access(entry: AuditLogEntry) -> AuditLogResponse:
             detail="Audit logger not initialized",
         )
 
+    idempotency_key = request.headers.get("X-Idempotency-Key")
+
     try:
-        result = await _audit_logger.log_access(entry)
+        result = await _audit_logger.log_access(entry, idempotency_key=idempotency_key)
         return result
     except AuditLoggingError as exc:
         logger.error("Audit write failed", extra={"error": str(exc)})

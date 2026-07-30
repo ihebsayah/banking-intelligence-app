@@ -45,6 +45,8 @@ interface MeResponse {
   last_login: string;
   status: string;
   must_change_password: boolean;
+  permissions?: string[];
+  legacy_role?: string;
 }
 
 async function fetchApplicationUser(): Promise<MeResponse> {
@@ -94,14 +96,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         bank_id: me.bank_id,
         created_at: me.created_at,
         last_login: me.last_login,
+        permissions: me.permissions ?? [],
+        legacy_role: me.legacy_role,
       };
 
       setApplicationUser(user);
+      setPermissions(me.permissions ?? []);
       setPhase('authenticated');
       setError(null);
-
-      // Load permissions from backend response (stored in Zustand for UX only)
-      // Permissions come from backend, not Keycloak realm roles
       return true;
     } catch (err: unknown) {
       const status = (err as { response?: { status?: number } })?.response?.status;

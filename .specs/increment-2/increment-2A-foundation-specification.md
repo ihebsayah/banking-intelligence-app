@@ -228,6 +228,7 @@ CREATE TABLE audit_outbox (
     status              audit_outbox_status NOT NULL DEFAULT 'pending',
     attempt_count       SMALLINT     NOT NULL DEFAULT 0,
     last_attempt_at     TIMESTAMPTZ,
+    next_attempt_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     last_error          TEXT,
     locked_by           VARCHAR(100),   -- worker instance id
     locked_at           TIMESTAMPTZ,
@@ -237,7 +238,7 @@ CREATE TABLE audit_outbox (
 );
 
 CREATE INDEX idx_audit_outbox_pending
-    ON audit_outbox(status, created_at)
+    ON audit_outbox(status, next_attempt_at)
     WHERE status IN ('pending','failed');
 
 CREATE UNIQUE INDEX idx_audit_outbox_idem
@@ -375,11 +376,13 @@ export function PermissionGate({
 
 ## 9. Init Script Retirement Plan
 
+Alembic is the authoritative schema management tool for ALL Increment 2+ tables. Init scripts (`init/*.sql`) must NOT create any Increment 2 tables (alerts, investigations, compliance_cases, decisions, information_requests, approval_requests, approval_decisions, comments, activity_timeline, notifications, assignment_history, organisation_scopes, user_scopes, audit_outbox). The transition is temporary and time-boxed.
+
 | Stage | Action |
 |-------|--------|
-| Phase 2A shipped | Alembic added; init scripts kept for fresh-env docker-compose only |
-| After 2B on staging | Remove `apply_migrations()` from `main.py`; add startup check that alembic_version = current head |
-| After all envs on Alembic | Move init SQL to `init/legacy/`; update README |
+| Phase 2A shipped | Alembic added; init scripts kept for fresh-env docker-compose only. Init scripts remain for Inc 1 tables (users, org, banking-domain) but must NOT include any Inc 2 DDL. |
+| **After Phase 2B ships on staging** | Remove `apply_migrations()` from `main.py`. Add startup check that `alembic_version` = current head; fail fast if missing. Init scripts NO LONGER create any Inc 2 tables. Fresh environments run `alembic upgrade head` from empty database. |
+| After all envs on Alembic | Move init SQL to `init/legacy/`; update README. Only `alembic upgrade head` runs on startup. |
 
 ---
 

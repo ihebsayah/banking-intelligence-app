@@ -1,6 +1,6 @@
 # Increment 2B — API Contracts
 
-Total endpoints: **42**
+Total endpoints: **44**
 
 All paths prefixed `/api/v1`. All responses use envelope:
 ```json
@@ -22,11 +22,33 @@ Standard error codes:
 - 428 — approval required (missing ApprovalRequest)
 
 `expected_version` required on all mutation requests that use optimistic locking. Missing = 422.
-Idempotency-Key header optional; if provided, stored and returned on duplicate.
+Two separate idempotency mechanisms: (1) API idempotency via `X-Idempotency-Key` stored in `idempotency_cache` (24h TTL); (2) Audit outbox uses own deterministic key — see §0 below.
 
 ---
 
-## 1. ALERTS (6 endpoints)
+## 0. Idempotency Design
+
+Two separate idempotency mechanisms:
+
+### API Idempotency (client-facing)
+- Client provides `X-Idempotency-Key: <uuid>` header on mutation requests (optional).
+- Backend stores `(key, user_id, route, response_body)` in `idempotency_cache` table.
+- Cache key normalized: lowercase method + path + sorted request body SHA256.
+- Same key + same normalized body → return stored response (200, not 201 for creates).
+- Same key + different body → 409 Conflict ("idempotency_key_mismatch").
+- Keys expire after 24 hours (TTL column; cleanup worker runs hourly).
+- Scope: per-user, per-route. Different users with same key do not collide.
+- **Not** stored in audit_outbox — that is a separate concern (see below).
+
+### Audit Outbox Idempotency (internal)
+- The audit outbox generates its own deterministic `idempotency_key = f"{event_type}:{entity_type}:{entity_id}:{occurred_at_epoch}"`.
+- `audit_outbox.idempotency_key` UNIQUE index prevents duplicate delivery to audit store.
+- This is NOT the same header as the client-facing `X-Idempotency-Key`.
+- See `increment-2B-audit-outbox-design.md` for details.
+
+---
+
+## 1. ALERTS (7 endpoints)
 
 ### A1 — GET /alerts/assigned
 List alerts assigned to current user.
@@ -72,7 +94,27 @@ Alert detail.
 
 ---
 
-### A3 — PATCH /alerts/{alert_id}/acknowledge
+### A3 — PATCH /alerts/{alert_id}/assign
+Assign alert to analyst or compliance user (admin only).
+
+| Field | Value |
+|-------|-------|
+| Permission | `alert:assign` (admin only) |
+| OLP | Admin only |
+| Request | `{ "assigned_to": "user_id", "expected_version": int, "reason": "string?" }` |
+| Response | Updated Alert |
+| Errors | 400, 401, 403, 404, 409 |
+| Preconditions | Target user `status = 'active'`; target user has scope access; target user has `info_request:respond` (if analyst role) or `case:read_assigned` (if compliance role) |
+| Transaction | UPDATE alerts (assigned_to=target, status→assigned if status=new, version+=1 WHERE version=expected_version) + INSERT assignment_history + INSERT activity_timeline + INSERT notifications + INSERT audit_outbox |
+| Timeline | `alert.assigned` |
+| Notification | `alert_assigned` → new assignee |
+| Audit | `alert.assigned` |
+| Idempotency | No-op if already assigned to same user (compare assigned_to and status) |
+| Conflict | version mismatch → 409 |
+
+---
+
+### A4 — PATCH /alerts/{alert_id}/acknowledge
 Acknowledge assigned alert.
 
 | Field | Value |
@@ -92,7 +134,7 @@ Acknowledge assigned alert.
 
 ---
 
-### A4 — PATCH /alerts/{alert_id}/dismiss
+### A5 — PATCH /alerts/{alert_id}/dismiss
 Dismiss alert (requires approval if critical/high).
 
 | Field | Value |
@@ -111,7 +153,7 @@ Dismiss alert (requires approval if critical/high).
 
 ---
 
-### A5 — POST /alerts/{alert_id}/investigate
+### A6 — POST /alerts/{alert_id}/investigate
 Create investigation from alert. Transitions alert to under_investigation.
 
 | Field | Value |
@@ -130,7 +172,7 @@ Create investigation from alert. Transitions alert to under_investigation.
 
 ---
 
-### A6 — POST /alerts/{alert_id}/escalate
+### A7 — POST /alerts/{alert_id}/escalate
 Create ComplianceCase from alert. Alert stays in under_investigation.
 
 | Field | Value |
@@ -156,7 +198,7 @@ List investigations assigned to current user.
 
 | Field | Value |
 |-------|-------|
-| Permission | `investigation:read_own` |
+| Permission | `investigation:read_assigned` |
 | Query params | `status`, `page`, `per_page` |
 | Response | `{ data: Investigation[], pagination }` |
 
@@ -189,7 +231,7 @@ Investigation detail.
 
 | Field | Value |
 |-------|-------|
-| Permission | `investigation:read_own` (assignee) or `investigation:read` (compliance on linked case, admin) |
+| Permission | `investigation:read_assigned` (assignee) or `investigation:read` (compliance on linked case, admin) |
 | OLP | Own, or case assignee for linked case, or admin (metadata only) |
 | Errors | 401, 403, 404 |
 
@@ -200,7 +242,7 @@ Update findings and conclusion.
 
 | Field | Value |
 |-------|-------|
-| Permission | `investigation:update` (= `investigation:modify_findings`) |
+| Permission | `investigation:modify_findings` |
 | OLP | `assigned_to == user.id` |
 | Request | `{ "findings_text": "string?", "findings_refs": []?, "conclusion": "string?", "expected_version": int }` |
 | Response | Updated Investigation |
@@ -218,7 +260,7 @@ Transition investigation status.
 
 | Field | Value |
 |-------|-------|
-| Permission | `investigation:transition` (assignee) or `investigation:read` (compliance for submit approval) |
+| Permission | `investigation:transition` (assignee) or `investigation:review` (compliance for submit approval) |
 | OLP | Varies per transition (see state machine) |
 | Request | `{ "target_status": "active|awaiting_information|submitted|completed|returned", "return_reason": "string (required if target=returned)", "expected_version": int }` |
 | Response | Updated Investigation |
@@ -344,18 +386,21 @@ Cancel open/assigned case (admin).
 ## 4. INFORMATION REQUESTS (8 endpoints)
 
 ### IR1 — POST /cases/{case_id}/information-requests
-Create information request.
+Create information request. Atomically transitions case to `awaiting_information`.
 
 | Field | Value |
 |-------|-------|
 | Permission | `info_request:create` |
 | OLP | `case.assigned_to == user.id` |
-| Request | `{ "assigned_to": "user_id (analyst)", "question": "string", "due_date": "date?" }` |
+| Request | `{ "assigned_to": "user_id (analyst)", "question": "string", "due_date": "date?", "expected_case_version": int }` |
 | Response | Created InformationRequest (201) |
 | Errors | 400, 401, 403, 404, 409 |
-| Transaction | INSERT information_request + INSERT activity_timeline + INSERT notifications + INSERT audit_outbox |
+| Preconditions | `case.status = under_review` (status pre-check) |
+| Transaction | UPDATE case (status=awaiting_information, version+=1 WHERE version=expected_case_version) + INSERT information_request + INSERT activity_timeline (case.awaiting_information) + INSERT activity_timeline (ir.created) + INSERT notifications + INSERT audit_outbox |
 | Notification | `ir_created` → assigned analyst |
-| Audit | `ir.created` |
+| Audit | `ir.created`, `case.awaiting_info` |
+| Idempotency | Same IR request with same key → 200 (case already awaiting_information due to this IR) |
+| Conflict | case version mismatch → 409 |
 
 ---
 
@@ -455,12 +500,12 @@ Record compliance decision.
 |-------|-------|
 | Permission | `case:decision` — PROHIBITED for admin and analyst |
 | OLP | `case.assigned_to == user.id` |
-| Request | `{ "decision_type": "no_action|warning|enhanced_due_diligence_recommended|report_to_authority_recommended|account_action_recommended|case_closed", "rationale": "string (required)", "expected_version": int, "approval_request_id": "uuid (required if decision_type=report_to_authority_recommended)" }` |
+| Request | `{ "decision_type": "no_action|warning|enhanced_due_diligence_recommended|report_to_authority_recommended|account_action_recommended|closure_recommended", "rationale": "string (required)", "expected_version": int, "approval_request_id": "uuid (required if decision_type=report_to_authority_recommended)" }` |
 | Response | Created Decision (201) |
 | Errors | 400, 401, 403, 404, 409, 428 |
-| Preconditions | case.status = decision_pending |
-| Transaction | INSERT decision + UPDATE case (current_disposition_id, status based on decision_type) + activity_timeline + audit_outbox + UPDATE approval consumed (if applicable) |
-| Decision → case status | `no_action`, `case_closed` → resolved | `warning`, `edd`, `account_action`, `report_to_authority` → awaiting_compliance_action |
+| Preconditions | case.status = decision_pending; if decision_type=report_to_authority_recommended: approval_request_id must reference an ApprovalRequest with entity_type=compliance_case, entity_id=case_id, action_type=decision_report_to_authority, status=approved, executed_at IS NULL, and proposed_payload.decision_type must match |
+| Transaction | INSERT decision + UPDATE case (current_disposition_id, status based on decision_type) + activity_timeline + audit_outbox + UPDATE approval SET executed_at=NOW() WHERE approval_request_id=$1 (if applicable) |
+| Decision → case status | `no_action`, `closure_recommended` → resolved | `warning`, `edd`, `account_action`, `report_to_authority` → awaiting_compliance_action |
 | Notification | `case_decision_recorded` → admin |
 | Audit | `case.decision_recorded` |
 
@@ -484,10 +529,10 @@ Create approval request.
 | Field | Value |
 |-------|-------|
 | Permission | `approval:request` |
-| Request | `{ "action_type": "alert_dismissal_critical_high|case_closure_critical_high|decision_report_to_authority|case_reopen", "entity_type": "alert|compliance_case|decision", "entity_id": "uuid", "rationale": "string" }` |
+| Request | `{ "action_type": "alert_dismissal_critical_high|case_closure_critical_high|decision_report_to_authority|case_reopen", "entity_type": "alert|compliance_case", "entity_id": "uuid", "proposed_payload": "object?", "rationale": "string" }` |
 | Response | Created ApprovalRequest (201) |
 | Errors | 400, 401, 403, 404 |
-| Preconditions | Entity exists, user has scope access, action_type matches entity state |
+| Preconditions | Entity exists, user has scope access, action_type matches entity state. **When action_type=decision_report_to_authority:** entity_type MUST be `compliance_case` (not `decision`) and entity_id MUST be the case UUID. `proposed_payload` shape: `{ "decision_type": "report_to_authority_recommended" }`. |
 | Transaction | INSERT approval_request + INSERT activity_timeline + INSERT notifications (all eligible approvers) + INSERT audit_outbox |
 | Notification | `approval_requested` → all compliance officers in scope |
 | Audit | `approval.created` |
@@ -630,7 +675,7 @@ Mark all own notifications read.
 
 ---
 
-## 10. ADMIN OPERATIONAL (2 endpoints)
+## 10. ADMIN OPERATIONAL (3 endpoints)
 
 ### AD1 — GET /admin/outbox
 List audit outbox records (admin only).
@@ -655,12 +700,26 @@ Force retry of failed/poison outbox record (admin).
 
 ---
 
+### AD3 — GET /admin/orphan-assignments
+Detect entities assigned to suspended, inactive, or out-of-scope users (admin).
+
+| Field | Value |
+|-------|-------|
+| Permission | `admin:orphan_monitor` |
+| Response | `{ "alerts": [...], "investigations": [...], "cases": [...] }` |
+| Each entity | `{ "entity_id": "uuid", "title": "string", "status": "string", "assigned_to": { "user_id": "uuid", "status": "string" } }` |
+| Query | `SELECT entities where assigned_to IN (SELECT user_id FROM users WHERE status NOT IN ('active', 'active_pending')) OR assigned_to NOT IN (SELECT user_id FROM user_scopes WHERE scope_id = entity.scope_id)` |
+| Errors | 401, 403 |
+| Audit | None (read-only) |
+
+---
+
 ## Common Request Headers
 
 ```
 Authorization: Bearer <jwt>
 X-Request-ID: <uuid>           (tracing; generated by client or gateway)
-X-Idempotency-Key: <uuid>      (optional; stored on outbox record)
+X-Idempotency-Key: <uuid>      (optional for mutations; stored in idempotency_cache for 24h; 409 if same key + different body)
 ```
 
 ## Common Response Headers

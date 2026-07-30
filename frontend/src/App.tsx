@@ -86,10 +86,10 @@ function AppShell() {
             <Route path="/branches"        element={<ProtectedRoute><Branches /></ProtectedRoute>} />
             <Route path="/assistant"       element={<ProtectedRoute><Assistant /></ProtectedRoute>} />
             <Route path="/kpi"             element={<ProtectedRoute><KpiPage /></ProtectedRoute>} />
-            <Route path="/kpi-governance"  element={<ProtectedRoute requiredRole={['analyst', 'manager', 'compliance', 'admin']}><KpiGovernancePage /></ProtectedRoute>} />
-            <Route path="/risk"            element={<ProtectedRoute requiredRole={['analyst', 'manager', 'compliance', 'admin']}><RiskPage /></ProtectedRoute>} />
-            <Route path="/compliance"      element={<ProtectedRoute requiredRole={['compliance', 'manager', 'admin']}><CompliancePage /></ProtectedRoute>} />
-            <Route path="/reports"         element={<ProtectedRoute requiredRole={['manager', 'admin']}><ReportsPage /></ProtectedRoute>} />
+            <Route path="/kpi-governance"  element={<ProtectedRoute requiredRole={['analyst', 'manager', 'compliance', 'admin']} requiredPermission="workbench:access"><KpiGovernancePage /></ProtectedRoute>} />
+            <Route path="/risk"            element={<ProtectedRoute requiredRole={['analyst', 'manager', 'compliance', 'admin']} requiredPermission="workbench:access"><RiskPage /></ProtectedRoute>} />
+            <Route path="/compliance"      element={<ProtectedRoute requiredRole={['compliance', 'manager', 'admin']} requiredPermission="workbench:access"><CompliancePage /></ProtectedRoute>} />
+            <Route path="/reports"         element={<ProtectedRoute requiredRole={['manager', 'admin']} requiredPermission="workbench:access"><ReportsPage /></ProtectedRoute>} />
             <Route path="/admin"           element={<ProtectedRoute requiredRole="admin"><AdminPage /></ProtectedRoute>} />
             <Route path="/profile"         element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
             <Route path="/settings"        element={<ProtectedRoute><Settings /></ProtectedRoute>} />

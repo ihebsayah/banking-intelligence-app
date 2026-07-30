@@ -65,13 +65,13 @@ Alert created/assigned (system or admin)
 
 ## Endpoint Count
 
-**Total Phase 2B endpoints: 42**
+**Total Phase 2B endpoints: 44**
 
 Breakdown by domain:
 
 | Domain | Count |
 |--------|-------|
-| Alerts | 6 |
+| Alerts | 7 |
 | Investigations | 5 |
 | Cases | 7 |
 | Information Requests | 8 |
@@ -80,8 +80,8 @@ Breakdown by domain:
 | Comments | 3 |
 | Timeline | 2 |
 | Notifications | 3 |
-| Admin (operational) | 2 |
-| **Total** | **42** |
+| Admin (operational) | 3 |
+| **Total** | **44** |
 
 Full per-endpoint specification in increment-2B-api-contracts.md.
 
@@ -137,7 +137,7 @@ Actions requiring approval in 2B:
 | Alert dismissal | critical or high | 1 additional compliance officer |
 | Case closure | critical or high risk_level | 1 additional compliance officer |
 | Decision: report_to_authority_recommended | any | 1 compliance officer (not the recorder) |
-| Case reopening | any | 1 admin + 1 compliance officer |
+| Case reopening | any | 1 compliance officer (admin requests reopening via `approval:request` with `action_type=case_reopen`, does not vote) |
 
 Rules:
 - Requester cannot approve own request (step 7 in authorise())
@@ -173,4 +173,4 @@ Each mutation that triggers a notification inserts a row atomically in the same 
 | ComplianceCase.current_disposition_id FK | Application-level validation: decision must belong to same case |
 | No-action decision had no closure path | Explicit transition: decision_pending → resolved (no_action path) |
 | Warning/EDD recommendations — no next state | Explicit: decision_pending → awaiting_compliance_action → resolved |
-| Reopened as both transient and long-lived | Reopened is a short-lived transient state; must be assigned within 24h |
+| Reopened as both transient and long-lived | Reopened is a timeline/audit event only, NOT a stored DB state; canonical transition is closed → open |

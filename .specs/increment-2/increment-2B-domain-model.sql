@@ -172,7 +172,7 @@ CREATE TABLE IF NOT EXISTS compliance_cases (
                         CHECK (status IN (
                             'open','assigned','under_review','awaiting_information',
                             'decision_pending','awaiting_compliance_action',
-                            'resolved','closed','cancelled','reopened'
+                            'resolved','closed','cancelled'
                         )),
     -- NOTE: 'escalated' removed — was inconsistent. If further escalation needed,
     -- a new case or admin alert covers it in Phase 2E.
@@ -180,7 +180,7 @@ CREATE TABLE IF NOT EXISTS compliance_cases (
     priority            VARCHAR(10) NOT NULL DEFAULT 'medium'
                         CHECK (priority IN ('critical','high','medium','low')),
     risk_level          VARCHAR(10)
-                        CHECK (risk_level IN ('high','medium','low')),
+                        CHECK (risk_level IN ('critical','high','medium','low')),
     regulatory_frameworks TEXT[],
     assigned_to         VARCHAR(100) REFERENCES users(user_id),
     created_by          VARCHAR(100) NOT NULL REFERENCES users(user_id),
@@ -227,7 +227,7 @@ CREATE TABLE IF NOT EXISTS decisions (
                             'enhanced_due_diligence_recommended',
                             'report_to_authority_recommended',
                             'account_action_recommended',
-                            'case_closed'
+                            'closure_recommended'
                         )),
     rationale           TEXT        NOT NULL,
     decided_by          VARCHAR(100) NOT NULL REFERENCES users(user_id),
@@ -305,7 +305,7 @@ CREATE TABLE IF NOT EXISTS approval_requests (
                             'case_reopen'
                         )),
     entity_type         VARCHAR(50) NOT NULL
-                        CHECK (entity_type IN ('alert','compliance_case','decision')),
+                        CHECK (entity_type IN ('alert','compliance_case')),
     entity_id           UUID        NOT NULL,
     requested_by        VARCHAR(100) NOT NULL REFERENCES users(user_id),
     rationale           TEXT        NOT NULL,
@@ -369,6 +369,8 @@ CREATE TABLE IF NOT EXISTS comments (
     is_redacted         BOOLEAN     NOT NULL DEFAULT FALSE,
     redacted_at         TIMESTAMPTZ,
     redacted_by         VARCHAR(100) REFERENCES users(user_id),
+    original_content_hash VARCHAR(64),   -- SHA-256 of original content before redaction
+    redaction_reason    TEXT,
     version             INTEGER     NOT NULL DEFAULT 1,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -431,9 +433,54 @@ ALTER TABLE decisions
 -- 13. AUDIT OUTBOX (already in 0003 — no repeat here)
 -- ---------------------------------------------------------------------------
 -- See migration 0003_add_audit_outbox.py
+-- C9: Add next_attempt_at for retry scheduling
+ALTER TABLE IF EXISTS audit_outbox
+    ADD COLUMN IF NOT EXISTS next_attempt_at TIMESTAMPTZ;
 
 -- ---------------------------------------------------------------------------
--- 14. LIFECYCLE NOTES
+-- 14. TRIGGER: current_disposition_id must reference a decision of the same case
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION validate_case_disposition()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.current_disposition_id IS NOT NULL THEN
+        IF NOT EXISTS (
+            SELECT 1 FROM decisions d
+            WHERE d.decision_id = NEW.current_disposition_id
+              AND d.case_id = NEW.case_id
+        ) THEN
+            RAISE EXCEPTION 'current_disposition_id % does not reference a decision belonging to case %',
+                NEW.current_disposition_id, NEW.case_id;
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_validate_case_disposition ON compliance_cases;
+CREATE TRIGGER trg_validate_case_disposition
+    BEFORE INSERT OR UPDATE OF current_disposition_id ON compliance_cases
+    FOR EACH ROW
+    EXECUTE FUNCTION validate_case_disposition();
+
+-- ---------------------------------------------------------------------------
+-- 15. PARTIAL UNIQUE INDEXES (C11)
+-- ---------------------------------------------------------------------------
+
+-- One non-cancelled investigation per alert
+CREATE UNIQUE INDEX IF NOT EXISTS idx_investigations_active_alert
+    ON investigations(alert_id) WHERE status NOT IN ('cancelled');
+
+-- One non-cancelled case per alert
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cases_active_alert
+    ON compliance_cases(alert_id) WHERE status NOT IN ('cancelled');
+
+-- One active ApprovalRequest per entity/action
+CREATE UNIQUE INDEX IF NOT EXISTS idx_approval_active_entity_action
+    ON approval_requests(entity_type, entity_id, action_type) WHERE status = 'pending';
+
+-- ---------------------------------------------------------------------------
+-- 16. LIFECYCLE NOTES
 -- ---------------------------------------------------------------------------
 -- Archive / cancel behaviour:
 --   alert:      dismissed (terminal, immutable fields: dismissed_reason, dismissed_at, dismissed_by)

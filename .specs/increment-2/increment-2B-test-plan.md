@@ -8,7 +8,8 @@ Executable scenarios. Each row: ID, category, setup, action, expected result, pa
 
 | ID | Scenario | Setup | Action | Expected |
 |----|----------|-------|--------|---------|
-| T01 | Alert assignment | Admin, alert status=new | POST/PATCH assign | Alert status=assigned; notification sent to analyst; timeline entry; audit outbox entry |
+| T00 | Alert assignment via dedicated endpoint | Admin, alert status=new | PATCH /alerts/:id/assign (assigned_to=analyst) | Alert status=assigned; assigned_to set; assignment_history inserted; notification to assignee; timeline `alert.assigned`; audit outbox entry |
+| T01 | Alert reassignment — same user (idempotent) | Admin, alert already assigned to user | PATCH /alerts/:id/assign (same assigned_to) | Alert unchanged; no-op; 200 |
 | T02 | Alert acknowledgment | Analyst, alert assigned to them, status=assigned | PATCH /acknowledge | Alert status=acknowledged; timeline entry |
 | T03 | Create investigation | Analyst, alert status=acknowledged, assigned to them | POST /investigate | Alert status=under_investigation; investigation created status=open; audit outbox entry |
 | T04 | Investigation start | Analyst, investigation assigned to them, status=open | PATCH /transition target=active | Investigation status=active; started_at set |
@@ -25,7 +26,7 @@ Executable scenarios. Each row: ID, category, setup, action, expected result, pa
 | T15 | Resume case after IR | Compliance, case status=awaiting_information | PATCH /transition target=under_review | Case status=under_review |
 | T16 | Decision pending | Compliance, case status=under_review | PATCH /transition target=decision_pending | Case status=decision_pending |
 | T17 | Record no_action decision | Compliance, case status=decision_pending | POST /decisions (no_action) | Decision inserted; case status=resolved; current_disposition_id set |
-| T18 | Record case_closed decision | Compliance, case status=decision_pending | POST /decisions (case_closed) | Decision inserted; case status=resolved |
+| T18 | Record closure_recommended decision | Compliance, case status=decision_pending | POST /decisions (closure_recommended) | Decision inserted; case status=resolved |
 | T19 | Record warning decision | Compliance, case status=decision_pending | POST /decisions (warning) | Decision inserted; case status=awaiting_compliance_action |
 | T20 | Action completed | Compliance, case status=awaiting_compliance_action | PATCH /transition target=resolved | Case status=resolved |
 | T21 | Close low-risk case | Compliance, case status=resolved, risk_level=low | POST /close (no approval) | Case status=closed; closed_at set; alert resolved if linked |
@@ -67,6 +68,7 @@ Executable scenarios. Each row: ID, category, setup, action, expected result, pa
 | F15 | IR accept before response | Compliance, IR status=open | PATCH /accept | 409 |
 | F16 | Case:close without approval when risk_level=high | Compliance, case risk_level=high, no approval | POST /close | 428 — approval required |
 | F17 | Execute approval twice | Compliance, approval executed_at already set | POST /close (same approval_request_id) | 409 — approval already consumed |
+| F18 | Assign alert to suspended user | Admin, target user status=suspended | PATCH /alerts/:id/assign (assigned_to=suspended_user) | 400 — target user is not active |
 
 ---
 
@@ -96,9 +98,12 @@ Executable scenarios. Each row: ID, category, setup, action, expected result, pa
 | V03 | Duplicate escalation | Alert already has linked non-cancelled case; POST /escalate again | 200 — idempotent, returns existing case |
 | V04 | Duplicate investigation creation | Alert already has non-cancelled investigation; POST /investigate again | 200 — idempotent, returns existing investigation |
 | V05 | Duplicate IR acknowledgment | IR already acknowledged; PATCH /acknowledge again | 200 — no-op |
-| V06 | Concurrent case close attempts | Two compliance officers both attempt close | First succeeds (409); second gets stale version error |
+| V06 | Concurrent case close attempts | Two compliance officers both attempt close on same case | First succeeds (200); second receives 409 (stale version) |
 | V07 | Approval already consumed | POST /close with approval_request_id that has executed_at set | 409 |
 | V08 | Approval expired then used | ApprovalRequest expired; attempt to close case | 428 — approval not in approved state |
+| V09 | Idempotent replay — same key + same body | Mutation with X-Idempotency-Key, first call succeeds | Second call with same key + same body | 200 — stored response returned (not 201 for creates) |
+| V10 | Idempotent conflict — same key + different body | Mutation with X-Idempotency-Key, first call succeeds | Second call with same key + different body | 409 — idempotency_key_mismatch |
+| V11 | Idempotent key expired — new request allowed | Idempotency key stored > 24h ago | Request with same key + same body | 200 — key expired, treated as new; original response not replayed |
 
 ---
 
@@ -158,7 +163,7 @@ Executable scenarios. Each row: ID, category, setup, action, expected result, pa
 | DP02 | Warning decision → awaiting_compliance_action → resolved | decision_type=warning | Case status=awaiting_compliance_action; compliance marks action completed → resolved |
 | DP03 | EDD decision → awaiting_compliance_action → resolved | decision_type=enhanced_due_diligence_recommended | Same flow as DP02 |
 | DP04 | Account action decision | decision_type=account_action_recommended | Case status=awaiting_compliance_action; compliance must document action in resolution text; no actual account freeze in 2B |
-| DP05 | Multiple decisions on same case | First decision recorded, superseded by second | Both in decisions table; current_disposition_id updated to latest; second has supersedes_decision_id set |
+| DP05 | *(removed — decision superseding is Phase 2D)* | | | |
 
 ---
 
@@ -174,3 +179,12 @@ Executable scenarios. Each row: ID, category, setup, action, expected result, pa
 | EC06 | Request ID tracing | Client sends X-Request-ID | X-Request-ID echoed in response; stored in audit_outbox payload.request_id |
 | EC07 | Unknown action in authorise() | Non-existent permission code passed | 400 — Unknown action |
 | EC08 | Version overflow | version = 2147483647 (INT max) | 400 — implementation should use BIGINT or detect and reject; mark as tech debt |
+
+---
+
+## 11. Orphan Assignment Detection
+
+| ID | Scenario | Expected |
+|----|----------|---------|
+| O001 | Suspended user has active assignments | Alert, investigation, or case assigned to suspended user | GET /admin/orphan-assignments returns them in appropriate list(s) |
+| O002 | All users active — no orphans | All assigned-to users have status=active | GET /admin/orphan-assignments returns empty lists `{ alerts: [], investigations: [], cases: [] }` |
