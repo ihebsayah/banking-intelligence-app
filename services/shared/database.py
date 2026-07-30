@@ -6,6 +6,7 @@ All services use DatabaseConnector to run queries safely.
 CRITICAL RULE: ONLY parameterized queries. No f-strings in SQL. Ever.
 """
 import asyncio
+from contextlib import asynccontextmanager
 from typing import Any, List, Optional, Dict
 import asyncpg
 
@@ -86,6 +87,30 @@ class DatabaseConnector:
         return self._pool
 
     # ─── Core Query Methods ──────────────────────────────────────────────────
+
+    async def acquire(self) -> "asyncpg.Connection":
+        """Acquire a single connection from the pool."""
+        pool = self._ensure_pool()
+        return await pool.acquire()
+
+    async def release(self, conn: "asyncpg.Connection") -> None:
+        """Release a connection back to the pool."""
+        if self._pool and conn:
+            await self._pool.release(conn)
+
+    @asynccontextmanager
+    async def transaction(self):
+        """Async context manager wrapping a DB transaction.
+
+        Usage:
+            async with db.transaction() as conn:
+                await conn.execute("INSERT ...")
+                # auto-commits on success, rolls back on exception
+        """
+        pool = self._ensure_pool()
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                yield conn
 
     async def fetch_all(
         self,
