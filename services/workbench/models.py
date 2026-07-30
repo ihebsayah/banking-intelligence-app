@@ -198,6 +198,16 @@ class AssignmentHistoryEntry(BaseModel):
     assigned_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class IdempotencyRecord(BaseModel):
+    idempotency_key: str
+    request_method: str
+    request_path: str
+    request_body_sha256: str
+    response_status: int
+    response_body: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class AuditOutboxEvent(BaseModel):
     outbox_id: str
     idempotency_key: str

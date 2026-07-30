@@ -15,7 +15,7 @@ from shared.errors import DatabaseError
 from .models import (
     ActivityTimelineEntry, Alert, ApprovalDecision, ApprovalRequest,
     AssignmentHistoryEntry, AuditOutboxEvent, Comment, ComplianceCase,
-    Decision, InformationRequest, Investigation, Notification,
+    Decision, IdempotencyRecord, InformationRequest, Investigation, Notification,
 )
 
 T = TypeVar("T")
@@ -128,6 +128,12 @@ class InvestigationRepo:
         r = await _fetch_one(self._db, "SELECT * FROM investigations WHERE investigation_id = $1", [investigation_id], conn)
         return Investigation(**r) if r else None
 
+    async def fetch_by_alert(self, alert_id: str, conn: asyncpg.Connection | None = None) -> Investigation | None:
+        r = await _fetch_one(self._db,
+            "SELECT * FROM investigations WHERE alert_id = $1 AND status NOT IN ('cancelled') LIMIT 1",
+            [alert_id], conn)
+        return Investigation(**r) if r else None
+
     async def list(self, scope_id: str | None = None, status: str | None = None,
                    assigned_to: str | None = None, limit: int = 50, offset: int = 0,
                    conn: asyncpg.Connection | None = None) -> list[Investigation]:
@@ -189,6 +195,12 @@ class CaseRepo:
 
     async def fetch_by_id(self, case_id: str, conn: asyncpg.Connection | None = None) -> ComplianceCase | None:
         r = await _fetch_one(self._db, "SELECT * FROM compliance_cases WHERE case_id = $1", [case_id], conn)
+        return ComplianceCase(**r) if r else None
+
+    async def fetch_active_for_alert(self, alert_id: str, conn: asyncpg.Connection | None = None) -> ComplianceCase | None:
+        r = await _fetch_one(self._db,
+            "SELECT * FROM compliance_cases WHERE alert_id = $1 AND status NOT IN ('cancelled') LIMIT 1",
+            [alert_id], conn)
         return ComplianceCase(**r) if r else None
 
     async def list(self, scope_id: str | None = None, status: str | None = None,
@@ -626,7 +638,8 @@ class OutboxRepo:
         from datetime import timedelta
         cutoff = _now() - timedelta(minutes=stale_minutes)
         rows = await _fetch_all(self._db, """
-            UPDATE audit_outbox SET status='failed', last_error='Reconciled: stuck in delivering'
+            UPDATE audit_outbox SET status='pending', locked_by=NULL,
+                locked_at=NULL, last_error='Reconciled: stuck in delivering'
             WHERE status='delivering' AND locked_at < $1
             RETURNING *
         """, [cutoff], conn)
@@ -635,3 +648,29 @@ class OutboxRepo:
     async def count_poison(self, conn: asyncpg.Connection | None = None) -> int:
         r = await _fetch_one(self._db, "SELECT COUNT(*) AS cnt FROM audit_outbox WHERE status='poison'", [], conn)
         return r["cnt"] if r else 0
+
+
+# ── API Idempotency Repository ─────────────────────────────────────────────────
+
+class IdempotencyRepo:
+    def __init__(self, db: DatabaseConnector) -> None:
+        self._db = db
+
+    async def lookup(self, idempotency_key: str, conn: asyncpg.Connection | None = None) -> IdempotencyRecord | None:
+        r = await _fetch_one(self._db,
+            "SELECT * FROM api_idempotency WHERE idempotency_key = $1",
+            [idempotency_key], conn)
+        return IdempotencyRecord(**r) if r else None
+
+    async def store(self, record: IdempotencyRecord, conn: asyncpg.Connection | None = None) -> IdempotencyRecord:
+        await _execute(self._db, """
+            INSERT INTO api_idempotency (idempotency_key, request_method, request_path,
+                request_body_sha256, response_status, response_body, created_at)
+            VALUES ($1,$2,$3,$4,$5,$6,$7)
+            ON CONFLICT (idempotency_key) DO NOTHING
+        """, [
+            record.idempotency_key, record.request_method, record.request_path,
+            record.request_body_sha256, record.response_status, record.response_body,
+            record.created_at,
+        ], conn)
+        return record
