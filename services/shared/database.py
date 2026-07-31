@@ -6,6 +6,7 @@ All services use DatabaseConnector to run queries safely.
 CRITICAL RULE: ONLY parameterized queries. No f-strings in SQL. Ever.
 """
 import asyncio
+import json
 from contextlib import asynccontextmanager
 from typing import Any, List, Optional, Dict
 import asyncpg
@@ -24,6 +25,18 @@ DEFAULT_MIN_SIZE = 5
 DEFAULT_MAX_SIZE = 20
 DEFAULT_QUERY_TIMEOUT = 30.0   # seconds
 DEFAULT_POOL_TIMEOUT = 10.0    # seconds to wait for a connection from pool
+
+
+async def _init_conn(conn: "asyncpg.Connection") -> None:
+    """Per-connection type codecs matching the pydantic model contract.
+
+    asyncpg returns uuid columns as UUID objects and jsonb as strings; the
+    model layer (e.g. workbench.models) is str/dict-typed, so decode uuid as
+    str and json/jsonb as Python objects. Encoders accept both so bound values
+    round-trip regardless of source type.
+    """
+    await conn.set_type_codec("uuid", encoder=str, decoder=str, schema="pg_catalog")
+    await conn.set_type_codec("jsonb", encoder=json.dumps, decoder=json.loads, schema="pg_catalog")
 
 
 class DatabaseConnector:
@@ -67,6 +80,7 @@ class DatabaseConnector:
                 min_size=self.min_size,
                 max_size=self.max_size,
                 command_timeout=self.query_timeout,
+                init=_init_conn,
             )
             logger.info("Database connection pool initialized successfully")
         except Exception as exc:

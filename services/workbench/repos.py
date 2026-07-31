@@ -457,6 +457,30 @@ class ApprovalRepo:
         """, [approval_request_id, decision, _now()], conn)
         return ApprovalRequest(**r) if r else None
 
+    async def expire_due(self, batch_size: int,
+                         conn: asyncpg.Connection | None = None) -> List[ApprovalRequest]:
+        """Atomically claim and expire pending approvals past their due date (AP5).
+
+        Mirrors OutboxRepo.claim_next_batch: UPDATE ... WHERE id IN
+        (SELECT ... FOR UPDATE SKIP LOCKED) RETURNING *. The outer
+        status='pending' guard prevents a concurrent worker re-processing
+        a row another worker just expired.
+        """
+        rows = await _fetch_all(self._db, """
+            UPDATE approval_requests
+            SET status='expired', version=version+1, updated_at=$1
+            WHERE approval_request_id IN (
+                SELECT approval_request_id FROM approval_requests
+                WHERE status='pending' AND expires_at <= $1
+                ORDER BY expires_at ASC
+                LIMIT $2
+                FOR UPDATE SKIP LOCKED
+            )
+            AND status='pending'
+            RETURNING *
+        """, [_now(), batch_size], conn)
+        return [ApprovalRequest(**r) for r in rows]
+
     async def list(self, user_id: str, role: str, scopes: List[str],
                    status: Optional[str] = None, action_type: Optional[str] = None,
                    limit: int = 50, offset: int = 0,

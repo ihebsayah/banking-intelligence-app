@@ -151,6 +151,28 @@ def upgrade() -> None:
     op.execute("CREATE INDEX IF NOT EXISTS idx_investigations_status ON investigations(status);")
 
     # ── 5. COMPLIANCE CASES ───────────────────────────────────────────
+    # The Inc 1 baseline (0001) created a legacy compliance_cases table
+    # (compliance_case_id PK, French 'ouvert' status). Phase 2B defines its own
+    # compliance_cases with a different schema and the same name, so on any DB
+    # where the legacy table exists (empty-DB chain OR stamped Inc 1 DB) it is
+    # renamed aside first. The legacy table has no column-level consumers (only
+    # table-name allowlists in the Inc 1 SQL agents). compliance_reviews' FK
+    # follows the rename automatically. Idempotent: the Phase 2B table has
+    # case_id, so a re-run skips the rename.
+    op.execute("""
+        DO $$
+        BEGIN
+            IF EXISTS (SELECT 1 FROM information_schema.tables
+                       WHERE table_schema = current_schema()
+                         AND table_name = 'compliance_cases')
+               AND NOT EXISTS (SELECT 1 FROM information_schema.columns
+                               WHERE table_schema = current_schema()
+                                 AND table_name = 'compliance_cases'
+                                 AND column_name = 'case_id') THEN
+                ALTER TABLE compliance_cases RENAME TO legacy_compliance_cases;
+            END IF;
+        END $$;
+    """)
     op.execute("""
         CREATE TABLE IF NOT EXISTS compliance_cases (
             case_id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),

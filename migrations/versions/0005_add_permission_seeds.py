@@ -124,6 +124,22 @@ def upgrade() -> None:
     conn = op.get_bind()
     from sqlalchemy import text
 
+    # Empty-DB chain prerequisite: on a stamped Inc 1 DB the base roles already
+    # exist (init/02-users-kpis.sql); on an empty DB they must be seeded here so
+    # the role_permissions FK below resolves. ON CONFLICT makes it a no-op on
+    # the stamped path. 'manager' is seeded (baseline parity) but granted no
+    # Phase 2B permissions; 0006 deprecates it.
+    conn.execute(
+        text("""
+            INSERT INTO roles (role_id, label, description) VALUES
+                ('analyst', 'Analyst', 'Financial data analyst with read access to reports and key metrics'),
+                ('manager', 'Branch Manager', 'Branch manager with operational reporting and summary performance access'),
+                ('compliance', 'Compliance Officer', 'Compliance and risk officer with access to risk flags and audit trails'),
+                ('admin', 'System Administrator', 'IT administrator with full access to user management and permission governance')
+            ON CONFLICT (role_id) DO NOTHING
+        """),
+    )
+
     for pk, label, desc, cat in ALL_PERMISSIONS:
         conn.execute(
             text("""

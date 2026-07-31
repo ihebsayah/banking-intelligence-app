@@ -274,6 +274,35 @@ class TestApprovalRepo:
                 "alert", UID(), "alert_dismissal_critical_high")
         assert result is None
 
+    @pytest.mark.asyncio
+    async def test_expire_due_claims_only_pending_with_skip_locked(self, mock_db):
+        ar = make_approval(status="expired", version=2)
+        row = dict(
+            approval_request_id=ar.approval_request_id,
+            action_type=ar.action_type, entity_type=ar.entity_type,
+            entity_id=ar.entity_id, requested_by=ar.requested_by,
+            rationale=ar.rationale, required_approvals=1, approval_count=0,
+            status="expired", expires_at=NOW, executed_at=None,
+            version=2, created_at=NOW, updated_at=NOW,
+        )
+        mock_fetch = AsyncMock(return_value=[row])
+        with patch("workbench.repos._fetch_all", mock_fetch):
+            result = await ApprovalRepo(mock_db).expire_due(10)
+        assert len(result) == 1
+        assert result[0].status == "expired"
+        assert result[0].version == 2
+        sql = mock_fetch.call_args[0][1]
+        assert "FOR UPDATE SKIP LOCKED" in sql
+        assert "status='pending'" in sql
+        assert "expires_at <= $1" in sql
+        assert "RETURNING *" in sql
+
+    @pytest.mark.asyncio
+    async def test_expire_due_empty_batch(self, mock_db):
+        with patch("workbench.repos._fetch_all", AsyncMock(return_value=[])):
+            result = await ApprovalRepo(mock_db).expire_due(10)
+        assert result == []
+
 
 # ── Approval Decision Repo Tests ──────────────────────────────────────────────
 
