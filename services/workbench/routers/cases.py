@@ -9,9 +9,9 @@ from shared.authorise import ApplicationUser
 from shared.database import DatabaseConnector
 
 from workbench.schemas.cases import (
-    AssignCaseRequest, CaseAdminResponse, CaseDecisionResponse,
-    CaseListResponse, CaseResponse, RecordDecisionRequest,
-    TransitionCaseRequest,
+    AssignCaseRequest, CaseAdminResponse, CaseDecisionListResponse,
+    CaseDecisionResponse, CaseListResponse, CaseResponse,
+    RecordDecisionRequest, TransitionCaseRequest,
 )
 from workbench.services.case_service import CaseService
 
@@ -89,7 +89,8 @@ async def transition_case(
     return JSONResponse(content=result.model_dump(), headers={"X-Version": str(result.version)})
 
 
-@router.post("/{case_id}/decisions", response_model=CaseDecisionResponse)
+@router.post("/{case_id}/decisions", response_model=CaseDecisionResponse,
+             status_code=201)
 async def record_decision(
     case_id: str, req: RecordDecisionRequest, request: Request,
     x_idempotency_key: Optional[str] = Header(None, alias="X-Idempotency-Key"),
@@ -99,3 +100,14 @@ async def record_decision(
     svc = _service(request)
     result = await svc.record_decision(u, case_id, req, x_idempotency_key, x_request_id or "")
     return JSONResponse(content=result.model_dump(), headers={"X-Version": str(result.version)})
+
+
+@router.get("/{case_id}/decisions", response_model=CaseDecisionListResponse)
+async def list_decisions(
+    case_id: str, request: Request,
+    x_request_id: Optional[str] = Header(None, alias="X-Request-ID"),
+):
+    u = _get_user(request)
+    svc = _service(request)
+    result = await svc.list_decisions(u, case_id, x_request_id or "")
+    return CaseDecisionListResponse(data=result)

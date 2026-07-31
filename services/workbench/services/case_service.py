@@ -15,16 +15,17 @@ from shared.authorise import (
 from shared.database import DatabaseConnector
 
 from workbench.exceptions import (
-    IdempotencyMismatch, InvalidAssignee, InvalidTransition,
-    ResourceNotFound, VersionConflict,
+    ApprovalConsumed, ApprovalRequired, IdempotencyMismatch,
+    InvalidAssignee, InvalidTransition, ResourceNotFound, VersionConflict,
 )
 from workbench.models import (
-    ActivityTimelineEntry, AssignmentHistoryEntry, AuditOutboxEvent,
-    ComplianceCase, Decision, IdempotencyRecord, Notification,
+    ActivityTimelineEntry, ApprovalRequest, AssignmentHistoryEntry,
+    AuditOutboxEvent, ComplianceCase, Decision, IdempotencyRecord,
+    Notification,
 )
 from workbench.repos import (
-    AssignmentHistoryRepo, CaseRepo, DecisionRepo, IdempotencyRepo,
-    NotificationRepo, OutboxRepo, TimelineRepo,
+    ApprovalRepo, AssignmentHistoryRepo, CaseRepo, DecisionRepo,
+    IdempotencyRepo, NotificationRepo, OutboxRepo, TimelineRepo,
 )
 from workbench.schemas.cases import (
     AssignCaseRequest, CaseAdminResponse, CaseAdminView,
@@ -104,6 +105,38 @@ def _make_assignment(entity_type: str, entity_id: str, assigned_from: Optional[s
         assigned_from=assigned_from, assigned_to=assigned_to,
         assigned_by=assigned_by, reason=reason, assigned_at=_now(),
     )
+
+
+def _audit_payload(event_type: str, entity_type: str, entity_id: str,
+                   actor_id: str, actor_role: str,
+                   before: Optional[Dict[str, Any]] = None,
+                   after: Optional[Dict[str, Any]] = None,
+                   request_id: str = "",
+                   metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "event_type": event_type,
+        "entity_type": entity_type,
+        "entity_id": entity_id,
+        "actor_id": actor_id,
+        "actor_role": actor_role,
+        "occurred_at": _now().isoformat(),
+        "request_id": request_id,
+        "before": before or {},
+        "after": after or {},
+        "metadata": metadata or {},
+    }
+
+
+async def _fetch_admin_for_scope(db: DatabaseConnector, scope_id: str,
+                                 conn: Any) -> Optional[str]:
+    row = await db.fetch_one(
+        "SELECT u.user_id FROM users u "
+        "JOIN user_scopes us ON us.user_id = u.user_id "
+        "WHERE u.role = 'admin' AND u.status = 'active' AND us.scope_id = $1 "
+        "ORDER BY u.user_id LIMIT 1",
+        [scope_id], conn=conn)
+    return row["user_id"] if row else None
 
 
 def _resource_from_case(c: ComplianceCase) -> Resource:
@@ -375,16 +408,38 @@ class CaseService:
                             _resource_from_case(c), self._db,
                             RequestContext(request_id=request_id))
 
+            decision_type = req.decision_type.value
+            target_status = DECISION_TYPE_TARGET.get(decision_type, "awaiting_compliance_action")
+
+            approval_id = None
+            if decision_type == "report_to_authority_recommended":
+                if not req.approval_request_id:
+                    raise ApprovalRequired("case:decision")
+                approval = await ApprovalRepo(self._db).fetch_by_id(
+                    req.approval_request_id, uow.conn)
+                if approval is None:
+                    raise ResourceNotFound("ApprovalRequest", req.approval_request_id)
+                if (approval.entity_type != "compliance_case"
+                        or approval.entity_id != case_id
+                        or approval.action_type != "decision_report_to_authority"):
+                    raise InvalidTransition(c.status, "decision_approval_mismatch")
+                if approval.status != "approved":
+                    raise ApprovalRequired("case:decision")
+                if approval.executed_at is not None:
+                    raise ApprovalConsumed()
+                consumed = await ApprovalRepo(self._db).consume(
+                    approval.approval_request_id, uow.conn)
+                if consumed is None:
+                    raise ApprovalConsumed()
+                approval_id = approval.approval_request_id
+
             decision = Decision(
                 decision_id=_uuid(), case_id=case_id,
-                decision_type=req.decision_type.value, rationale=req.rationale,
+                decision_type=decision_type, rationale=req.rationale,
                 decided_by=user.user_id, decided_at=_now(),
-                is_final=req.is_final,
-                supersedes_decision_id=req.supersedes_decision_id,
+                approval_id=approval_id,
             )
             await DecisionRepo(self._db).create(decision, uow.conn)
-
-            target_status = DECISION_TYPE_TARGET.get(req.decision_type.value, "awaiting_compliance_action")
 
             old_status = c.status
             c.status = target_status
@@ -400,29 +455,49 @@ class CaseService:
             if updated is None:
                 raise VersionConflict()
 
+            if target_status == "resolved":
+                timeline_event = "case.resolved"
+                audit_event = "case.resolved"
+                notif_type = "case_resolved"
+            else:
+                timeline_event = "case.decision_recorded"
+                audit_event = "case.decision_recorded"
+                notif_type = "case_decision_recorded"
+
             await TimelineRepo(self._db).insert(
                 _make_timeline("compliance_case", case_id,
-                              "case.decision_recorded", user.user_id,
-                              {"status": old_status, "decision_type": req.decision_type.value},
+                              timeline_event, user.user_id,
+                              {"status": old_status, "decision_type": decision_type},
                               {"status": target_status, "decision_id": decision.decision_id}),
                 uow.conn)
 
-            await NotificationRepo(self._db).insert(
-                _make_notification(c.created_by, "case_decision",
-                                  f"Decision recorded on case",
-                                  f"{req.decision_type.value}: {req.rationale}",
-                                  "compliance_case", case_id),
-                uow.conn)
+            admin_user = await _fetch_admin_for_scope(self._db, c.scope_id, uow.conn)
+            if admin_user is not None:
+                await NotificationRepo(self._db).insert(
+                    _make_notification(admin_user, notif_type,
+                                      f"Decision recorded on case",
+                                      f"{decision_type}: {req.rationale}",
+                                      "compliance_case", case_id),
+                    uow.conn)
 
             await OutboxRepo(self._db).insert(
-                _make_outbox("case.decision_recorded", "compliance_case",
+                _make_outbox(audit_event, "compliance_case",
                             case_id, user.user_id, user.role,
-                            {"case_id": case_id,
-                             "decision_id": decision.decision_id,
-                             "decision_type": req.decision_type.value,
-                             "rationale": req.rationale,
-                             "is_final": req.is_final,
-                             "target_status": target_status}),
+                            _audit_payload(
+                                audit_event, "compliance_case", case_id,
+                                user.user_id, user.role,
+                                before={"status": old_status},
+                                after={
+                                    "status": target_status,
+                                    "decision_id": decision.decision_id,
+                                    "decision_type": decision_type,
+                                    "version": c.version,
+                                },
+                                request_id=request_id,
+                                metadata={
+                                    "approval_id": approval_id,
+                                    "rationale_sha256": _sha256(req.rationale),
+                                })),
                 uow.conn)
 
             admin_view = CaseAdminView(**c.model_dump())
@@ -432,5 +507,31 @@ class CaseService:
                 version=c.version)
             await _store_idempotency(
                 IdempotencyRepo(self._db), idempotency_key, "POST", path,
-                req.model_dump(), 200, resp.model_dump_json(), uow.conn)
+                req.model_dump(), 201, resp.model_dump_json(), uow.conn)
             return resp
+
+    async def list_decisions(
+        self, user: ApplicationUser, case_id: str,
+        request_id: str = "",
+    ) -> List[Dict[str, Any]]:
+        c = await CaseRepo(self._db).fetch_by_id(case_id)
+        if c is None:
+            raise ResourceNotFound("Case", case_id)
+        resource = _resource_from_case(c)
+        try:
+            await authorise(user, "case:read_assigned", resource, self._db,
+                            RequestContext(request_id=request_id))
+            if c.assigned_to == user.user_id:
+                decisions = await DecisionRepo(self._db).list_by_case(case_id)
+                return [d.model_dump() for d in decisions]
+        except (AuthOwnershipDenied, AuthScopeDenied, AuthPermissionDenied):
+            pass
+        try:
+            await authorise(user, "case:read", resource, self._db,
+                            RequestContext(request_id=request_id))
+            decisions = await DecisionRepo(self._db).list_by_case(case_id)
+            return [d.model_dump() for d in decisions]
+        except AuthPermissionDenied:
+            raise ResourceNotFound("Case", case_id)
+        decisions = await DecisionRepo(self._db).list_by_case(case_id)
+        return [d.model_dump() for d in decisions]

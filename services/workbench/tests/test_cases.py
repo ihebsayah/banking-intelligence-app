@@ -9,13 +9,13 @@ import pytest
 from shared.authorise import ApplicationUser
 
 from workbench.exceptions import (
-    IdempotencyMismatch, InvalidAssignee, InvalidTransition,
-    ResourceNotFound, VersionConflict,
+    ApprovalConsumed, ApprovalRequired, IdempotencyMismatch,
+    InvalidAssignee, InvalidTransition, ResourceNotFound, VersionConflict,
 )
-from workbench.models import ComplianceCase
+from workbench.models import ApprovalRequest, ComplianceCase, Decision
 from workbench.schemas.cases import (
     AssignCaseRequest, CaseAdminResponse, CaseAdminView,
-    CaseResponse, DecisionType,
+    CaseDecisionResponse, CaseResponse, DecisionType,
     RecordDecisionRequest, TransitionCaseRequest,
 )
 from workbench.services.case_service import CaseService, _validate_assignee
@@ -436,7 +436,8 @@ class TestDecision:
              patch(AUTH_TARGET, AsyncMock()), \
              patch("workbench.repos._fetch_one", AsyncMock(return_value=c.model_dump())), \
              patch("workbench.repos._execute", AsyncMock(return_value="UPDATE 1")), \
-             patch("workbench.repos.DecisionRepo.create", AsyncMock()):
+             patch("workbench.repos.DecisionRepo.create", AsyncMock()), \
+             patch("workbench.services.case_service._fetch_admin_for_scope", AsyncMock(return_value=None)):
             result = await CaseService(mock_db).record_decision(MOCK_USER, c.case_id, req)
         assert result.case.status == "awaiting_compliance_action"
         assert result.decision["decision_type"] == "warning"
@@ -451,7 +452,8 @@ class TestDecision:
              patch(AUTH_TARGET, AsyncMock()), \
              patch("workbench.repos._fetch_one", AsyncMock(return_value=c.model_dump())), \
              patch("workbench.repos._execute", AsyncMock(return_value="UPDATE 1")), \
-             patch("workbench.repos.DecisionRepo.create", AsyncMock()):
+             patch("workbench.repos.DecisionRepo.create", AsyncMock()), \
+             patch("workbench.services.case_service._fetch_admin_for_scope", AsyncMock(return_value=None)):
             result = await CaseService(mock_db).record_decision(MOCK_USER, c.case_id, req)
         assert result.case.status == "resolved"
         assert result.case.resolved_at is not None
@@ -467,7 +469,8 @@ class TestDecision:
              patch(AUTH_TARGET, AsyncMock()), \
              patch("workbench.repos._fetch_one", AsyncMock(return_value=c.model_dump())), \
              patch("workbench.repos._execute", AsyncMock(return_value="UPDATE 1")), \
-             patch("workbench.repos.DecisionRepo.create", AsyncMock()):
+             patch("workbench.repos.DecisionRepo.create", AsyncMock()), \
+             patch("workbench.services.case_service._fetch_admin_for_scope", AsyncMock(return_value=None)):
             result = await CaseService(mock_db).record_decision(MOCK_USER, c.case_id, req)
         assert result.case.status == "resolved"
 
@@ -496,7 +499,8 @@ class TestDecision:
              patch("workbench.repos.DecisionRepo.create", mock_decision_create), \
              patch("workbench.repos.TimelineRepo.insert", AsyncMock()), \
              patch("workbench.repos.NotificationRepo.insert", AsyncMock()), \
-             patch("workbench.repos.OutboxRepo.insert", AsyncMock()):
+             patch("workbench.repos.OutboxRepo.insert", AsyncMock()), \
+             patch("workbench.services.case_service._fetch_admin_for_scope", AsyncMock(return_value=None)):
             await CaseService(mock_db).record_decision(MOCK_USER, c.case_id, req)
         mock_decision_create.assert_awaited_once()
         args = mock_decision_create.await_args[0][0]
@@ -518,12 +522,272 @@ class TestDecision:
              patch("workbench.repos.DecisionRepo.create", AsyncMock()), \
              patch("workbench.repos.TimelineRepo.insert", AsyncMock()), \
              patch("workbench.repos.NotificationRepo.insert", mock_notify), \
-             patch("workbench.repos.OutboxRepo.insert", AsyncMock()):
+             patch("workbench.repos.OutboxRepo.insert", AsyncMock()), \
+             patch("workbench.services.case_service._fetch_admin_for_scope", AsyncMock(return_value="admin1")):
             await CaseService(mock_db).record_decision(MOCK_USER, c.case_id, req)
         mock_notify.assert_awaited_once()
         args = mock_notify.await_args[0][0]
-        assert args.notification_type == "case_decision"
-        assert args.user_id == "creator1"
+        assert args.notification_type == "case_decision_recorded"
+        assert args.user_id == "admin1"
+        assert args.entity_type == "compliance_case"
+
+    @pytest.mark.asyncio
+    async def test_decision_resolution_events(self, mock_db):
+        c = make_case(status="decision_pending", assigned_to="user1", version=3)
+        req = RecordDecisionRequest(decision_type=DecisionType.NO_ACTION, rationale="No issues", expected_version=3)
+        uow_mock = make_uow_mock()
+        mock_timeline = AsyncMock()
+        mock_notify = AsyncMock()
+        mock_outbox = AsyncMock()
+        with patch(UOW_TARGET, return_value=uow_mock), \
+             patch(AUTH_TARGET, AsyncMock()), \
+             patch("workbench.repos._fetch_one", AsyncMock(return_value=c.model_dump())), \
+             patch("workbench.repos._execute", AsyncMock(return_value="UPDATE 1")), \
+             patch("workbench.repos.DecisionRepo.create", AsyncMock()), \
+             patch("workbench.repos.TimelineRepo.insert", mock_timeline), \
+             patch("workbench.repos.NotificationRepo.insert", mock_notify), \
+             patch("workbench.repos.OutboxRepo.insert", mock_outbox), \
+             patch("workbench.services.case_service._fetch_admin_for_scope", AsyncMock(return_value="admin1")):
+            result = await CaseService(mock_db).record_decision(MOCK_USER, c.case_id, req)
+        assert result.case.status == "resolved"
+        assert mock_timeline.await_args[0][0].event_type == "case.resolved"
+        assert mock_notify.await_args[0][0].notification_type == "case_resolved"
+        assert mock_outbox.await_args[0][0].event_type == "case.resolved"
+
+    @pytest.mark.asyncio
+    async def test_decision_audit_payload_envelope(self, mock_db):
+        c = make_case(status="decision_pending", assigned_to="user1", version=3)
+        req = RecordDecisionRequest(decision_type=DecisionType.WARNING, rationale="secret detail", expected_version=3)
+        uow_mock = make_uow_mock()
+        mock_outbox = AsyncMock()
+        with patch(UOW_TARGET, return_value=uow_mock), \
+             patch(AUTH_TARGET, AsyncMock()), \
+             patch("workbench.repos._fetch_one", AsyncMock(return_value=c.model_dump())), \
+             patch("workbench.repos._execute", AsyncMock(return_value="UPDATE 1")), \
+             patch("workbench.repos.DecisionRepo.create", AsyncMock()), \
+             patch("workbench.repos.TimelineRepo.insert", AsyncMock()), \
+             patch("workbench.repos.NotificationRepo.insert", AsyncMock()), \
+             patch("workbench.repos.OutboxRepo.insert", mock_outbox), \
+             patch("workbench.services.case_service._fetch_admin_for_scope", AsyncMock(return_value=None)):
+            await CaseService(mock_db).record_decision(MOCK_USER, c.case_id, req)
+        payload = mock_outbox.await_args[0][0].payload
+        assert payload["event_type"] == "case.decision_recorded"
+        assert payload["schema_version"] == 1
+        assert payload["entity_type"] == "compliance_case"
+        assert payload["entity_id"] == c.case_id
+        assert payload["actor_id"] == "user1"
+        assert "secret detail" not in json.dumps(payload)
+        assert payload["metadata"]["rationale_sha256"] == HASH("secret detail")
+
+    @pytest.mark.asyncio
+    async def test_report_to_authority_requires_approval(self, mock_db):
+        c = make_case(status="decision_pending", assigned_to="user1", version=3)
+        req = RecordDecisionRequest(decision_type=DecisionType.REPORT_TO_AUTHORITY_RECOMMENDED,
+                                    rationale="Must report", expected_version=3)
+        uow_mock = make_uow_mock()
+        with patch(UOW_TARGET, return_value=uow_mock), \
+             patch(AUTH_TARGET, AsyncMock()), \
+             patch("workbench.repos._fetch_one", AsyncMock(return_value=c.model_dump())), \
+             patch("workbench.repos._execute", AsyncMock(return_value="UPDATE 1")):
+            with pytest.raises(ApprovalRequired):
+                await CaseService(mock_db).record_decision(MOCK_USER, c.case_id, req)
+
+    @pytest.mark.asyncio
+    async def test_report_to_authority_consumes_approval(self, mock_db):
+        c = make_case(status="decision_pending", assigned_to="user1", version=3)
+        approval = ApprovalRequest(
+            approval_request_id="ap1", action_type="decision_report_to_authority",
+            entity_type="compliance_case", entity_id=c.case_id, requested_by="user1",
+            rationale="report", required_approvals=1, approval_count=1,
+            status="approved", expires_at=NOW)
+        req = RecordDecisionRequest(decision_type=DecisionType.REPORT_TO_AUTHORITY_RECOMMENDED,
+                                    rationale="Must report", approval_request_id="ap1", expected_version=3)
+        uow_mock = make_uow_mock()
+        mock_consume = AsyncMock(return_value=approval)
+        mock_decision_create = AsyncMock()
+        mock_outbox = AsyncMock()
+        with patch(UOW_TARGET, return_value=uow_mock), \
+             patch(AUTH_TARGET, AsyncMock()), \
+             patch("workbench.repos._fetch_one", AsyncMock(return_value=c.model_dump())), \
+             patch("workbench.repos._execute", AsyncMock(return_value="UPDATE 1")), \
+             patch("workbench.repos.ApprovalRepo.fetch_by_id", AsyncMock(return_value=approval)), \
+             patch("workbench.repos.ApprovalRepo.consume", mock_consume), \
+             patch("workbench.repos.DecisionRepo.create", mock_decision_create), \
+             patch("workbench.repos.TimelineRepo.insert", AsyncMock()), \
+             patch("workbench.repos.NotificationRepo.insert", AsyncMock()), \
+             patch("workbench.repos.OutboxRepo.insert", mock_outbox), \
+             patch("workbench.services.case_service._fetch_admin_for_scope", AsyncMock(return_value=None)):
+            result = await CaseService(mock_db).record_decision(MOCK_USER, c.case_id, req)
+        assert result.case.status == "awaiting_compliance_action"
+        mock_consume.assert_awaited_once()
+        assert mock_consume.await_args[0][0] == "ap1"
+        assert mock_consume.await_args[0][1] is uow_mock.__aenter__.return_value.conn
+        args = mock_decision_create.await_args[0][0]
+        assert args.approval_id == "ap1"
+        assert mock_outbox.await_args[0][0].event_type == "case.decision_recorded"
+        assert mock_outbox.await_args[0][0].payload["metadata"]["approval_id"] == "ap1"
+
+    @pytest.mark.asyncio
+    async def test_report_to_authority_approval_wrong_entity(self, mock_db):
+        c = make_case(status="decision_pending", assigned_to="user1", version=3)
+        approval = ApprovalRequest(
+            approval_request_id="ap1", action_type="decision_report_to_authority",
+            entity_type="compliance_case", entity_id="other-case", requested_by="user1",
+            rationale="report", required_approvals=1, approval_count=1,
+            status="approved", expires_at=NOW)
+        req = RecordDecisionRequest(decision_type=DecisionType.REPORT_TO_AUTHORITY_RECOMMENDED,
+                                    rationale="Must report", approval_request_id="ap1", expected_version=3)
+        uow_mock = make_uow_mock()
+        with patch(UOW_TARGET, return_value=uow_mock), \
+             patch(AUTH_TARGET, AsyncMock()), \
+             patch("workbench.repos._fetch_one", AsyncMock(return_value=c.model_dump())), \
+             patch("workbench.repos._execute", AsyncMock(return_value="UPDATE 1")), \
+             patch("workbench.repos.ApprovalRepo.fetch_by_id", AsyncMock(return_value=approval)):
+            with pytest.raises(InvalidTransition):
+                await CaseService(mock_db).record_decision(MOCK_USER, c.case_id, req)
+
+    @pytest.mark.asyncio
+    async def test_report_to_authority_approval_not_approved(self, mock_db):
+        c = make_case(status="decision_pending", assigned_to="user1", version=3)
+        approval = ApprovalRequest(
+            approval_request_id="ap1", action_type="decision_report_to_authority",
+            entity_type="compliance_case", entity_id=c.case_id, requested_by="user1",
+            rationale="report", required_approvals=1, approval_count=0,
+            status="pending", expires_at=NOW)
+        req = RecordDecisionRequest(decision_type=DecisionType.REPORT_TO_AUTHORITY_RECOMMENDED,
+                                    rationale="Must report", approval_request_id="ap1", expected_version=3)
+        uow_mock = make_uow_mock()
+        with patch(UOW_TARGET, return_value=uow_mock), \
+             patch(AUTH_TARGET, AsyncMock()), \
+             patch("workbench.repos._fetch_one", AsyncMock(return_value=c.model_dump())), \
+             patch("workbench.repos._execute", AsyncMock(return_value="UPDATE 1")), \
+             patch("workbench.repos.ApprovalRepo.fetch_by_id", AsyncMock(return_value=approval)):
+            with pytest.raises(ApprovalRequired):
+                await CaseService(mock_db).record_decision(MOCK_USER, c.case_id, req)
+
+    @pytest.mark.asyncio
+    async def test_report_to_authority_approval_already_consumed(self, mock_db):
+        c = make_case(status="decision_pending", assigned_to="user1", version=3)
+        approval = ApprovalRequest(
+            approval_request_id="ap1", action_type="decision_report_to_authority",
+            entity_type="compliance_case", entity_id=c.case_id, requested_by="user1",
+            rationale="report", required_approvals=1, approval_count=1,
+            status="approved", expires_at=NOW, executed_at=NOW)
+        req = RecordDecisionRequest(decision_type=DecisionType.REPORT_TO_AUTHORITY_RECOMMENDED,
+                                    rationale="Must report", approval_request_id="ap1", expected_version=3)
+        uow_mock = make_uow_mock()
+        with patch(UOW_TARGET, return_value=uow_mock), \
+             patch(AUTH_TARGET, AsyncMock()), \
+             patch("workbench.repos._fetch_one", AsyncMock(return_value=c.model_dump())), \
+             patch("workbench.repos._execute", AsyncMock(return_value="UPDATE 1")), \
+             patch("workbench.repos.ApprovalRepo.fetch_by_id", AsyncMock(return_value=approval)):
+            with pytest.raises(ApprovalConsumed):
+                await CaseService(mock_db).record_decision(MOCK_USER, c.case_id, req)
+
+    @pytest.mark.asyncio
+    async def test_report_to_authority_approval_not_found(self, mock_db):
+        c = make_case(status="decision_pending", assigned_to="user1", version=3)
+        req = RecordDecisionRequest(decision_type=DecisionType.REPORT_TO_AUTHORITY_RECOMMENDED,
+                                    rationale="Must report", approval_request_id="ap1", expected_version=3)
+        uow_mock = make_uow_mock()
+        with patch(UOW_TARGET, return_value=uow_mock), \
+             patch(AUTH_TARGET, AsyncMock()), \
+             patch("workbench.repos._fetch_one", AsyncMock(return_value=c.model_dump())), \
+             patch("workbench.repos._execute", AsyncMock(return_value="UPDATE 1")), \
+             patch("workbench.repos.ApprovalRepo.fetch_by_id", AsyncMock(return_value=None)):
+            with pytest.raises(ResourceNotFound):
+                await CaseService(mock_db).record_decision(MOCK_USER, c.case_id, req)
+
+    @pytest.mark.asyncio
+    async def test_decision_idempotency_replay(self, mock_db):
+        c = make_case(status="decision_pending", assigned_to="user1", version=3)
+        req = RecordDecisionRequest(decision_type=DecisionType.WARNING, rationale="test", expected_version=3)
+        fake_resp = CaseDecisionResponse(
+            case=CaseAdminView(**c.model_dump()), decision={"decision_type": "warning"}, version=3)
+        stored_body = fake_resp.model_dump_json()
+        body_hash = HASH({"decision_type": "warning", "rationale": "test",
+                          "approval_request_id": None, "expected_version": 3})
+        uow_mock = make_uow_mock()
+        with patch(UOW_TARGET, return_value=uow_mock), \
+             patch("workbench.repos._fetch_one", AsyncMock(return_value=dict(
+                 idempotency_key="dup-key", request_method="POST",
+                 request_path=f"/api/v1/cases/{c.case_id}/decisions",
+                 request_body_sha256=body_hash,
+                 response_status=201, response_body=stored_body,
+                 created_at=NOW,
+             ))):
+            result = await CaseService(mock_db).record_decision(
+                MOCK_USER, c.case_id, req, idempotency_key="dup-key")
+        assert result.case.case_id == c.case_id
+
+
+class TestListDecisions:
+    def make_decisions(self, case_id):
+        return [
+            Decision(decision_id=f"d1", case_id=case_id, decision_type="warning",
+                     rationale="first", decided_by="user1", decided_at=NOW,
+                     is_final=False, version=1, created_at=NOW),
+            Decision(decision_id=f"d2", case_id=case_id, decision_type="no_action",
+                     rationale="second", decided_by="user1", decided_at=NOW,
+                     is_final=False, version=1, created_at=NOW),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_assigned_owner_lists(self, mock_db):
+        c = make_case(assigned_to="user1", status="resolved")
+        mock_auth = AsyncMock()
+        mock_list = AsyncMock(return_value=self.make_decisions(c.case_id))
+        with patch("workbench.repos._fetch_one", AsyncMock(return_value=c.model_dump())), \
+             patch(AUTH_TARGET, mock_auth), \
+             patch("workbench.repos.DecisionRepo.list_by_case", mock_list):
+            result = await CaseService(mock_db).list_decisions(MOCK_USER, c.case_id)
+        assert len(result) == 2
+        mock_auth.assert_awaited_once()
+        assert mock_auth.await_args[0][1] == "case:read_assigned"
+        mock_list.assert_awaited_once_with(c.case_id)
+
+    @pytest.mark.asyncio
+    async def test_admin_read_fallback(self, mock_db):
+        from shared.authorise import PermissionDeniedError
+        c = make_case(assigned_to="user1", status="resolved")
+        admin = ApplicationUser(user_id="admin1", role="admin", permissions=["case:read"])
+        mock_list = AsyncMock(return_value=self.make_decisions(c.case_id))
+        with patch("workbench.repos._fetch_one", AsyncMock(return_value=c.model_dump())), \
+             patch(AUTH_TARGET, AsyncMock(side_effect=[
+                 PermissionDeniedError("case:read_assigned"), AsyncMock(),
+             ])), \
+             patch("workbench.repos.DecisionRepo.list_by_case", mock_list):
+            result = await CaseService(mock_db).list_decisions(admin, c.case_id)
+        assert len(result) == 2
+
+    @pytest.mark.asyncio
+    async def test_non_owner_read_assigned_denied(self, mock_db):
+        from shared.authorise import PermissionDeniedError
+        c = make_case(assigned_to="user1", status="resolved")
+        with patch("workbench.repos._fetch_one", AsyncMock(return_value=c.model_dump())), \
+             patch(AUTH_TARGET, AsyncMock(side_effect=[
+                 AsyncMock(), PermissionDeniedError("case:read"),
+             ])):
+            with pytest.raises(ResourceNotFound):
+                await CaseService(mock_db).list_decisions(OTHER_USER, c.case_id)
+
+    @pytest.mark.asyncio
+    async def test_no_permission_returns_not_found(self, mock_db):
+        from shared.authorise import PermissionDeniedError
+        c = make_case(assigned_to="user1", status="resolved")
+        with patch("workbench.repos._fetch_one", AsyncMock(return_value=c.model_dump())), \
+             patch(AUTH_TARGET, AsyncMock(side_effect=[
+                 PermissionDeniedError("case:read_assigned"),
+                 PermissionDeniedError("case:read"),
+             ])):
+            with pytest.raises(ResourceNotFound):
+                await CaseService(mock_db).list_decisions(NO_PERM_USER, c.case_id)
+
+    @pytest.mark.asyncio
+    async def test_missing_case_404(self, mock_db):
+        with patch("workbench.repos._fetch_one", AsyncMock(return_value=None)):
+            with pytest.raises(ResourceNotFound):
+                await CaseService(mock_db).list_decisions(MOCK_USER, "bad-id")
 
     @pytest.mark.asyncio
     async def test_decision_version_conflict(self, mock_db):
@@ -626,6 +890,7 @@ class TestRouteRegistration:
         assert ("/api/v1/cases/{case_id}", ("GET",)) in routes
         assert ("/api/v1/cases/{case_id}/assign", ("PATCH",)) in routes
         assert ("/api/v1/cases/{case_id}/transition", ("PATCH",)) in routes
+        assert ("/api/v1/cases/{case_id}/decisions", ("GET",)) in routes
         assert ("/api/v1/cases/{case_id}/decisions", ("POST",)) in routes
 
     def test_obsolete_routes_absent(self):
@@ -635,6 +900,6 @@ class TestRouteRegistration:
         assert "/api/v1/cases/{case_id}/close" not in paths
         assert "/api/v1/cases/{case_id}/reopen" not in paths
 
-    def test_exact_count_five(self):
+    def test_exact_count_six(self):
         from workbench.routers.cases import router
-        assert len(router.routes) == 5
+        assert len(router.routes) == 6

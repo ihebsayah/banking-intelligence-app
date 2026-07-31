@@ -50,8 +50,7 @@ class TransitionCaseRequest(BaseModel):
 class RecordDecisionRequest(BaseModel):
     decision_type: DecisionType
     rationale: str = Field(min_length=1)
-    is_final: bool = False
-    supersedes_decision_id: Optional[str] = None
+    approval_request_id: Optional[str] = None
     expected_version: int = Field(ge=1)
 
 
@@ -131,3 +130,21 @@ class CaseDecisionResponse(BaseModel):
     case: CaseAdminView
     decision: dict
     version: int
+
+
+class DecisionResponse(BaseModel):
+    decision_id: str
+    case_id: str
+    decision_type: str
+    rationale: str
+    decided_by: str
+    decided_at: datetime
+    is_final: bool
+    supersedes_decision_id: Optional[str] = None
+    approval_id: Optional[str] = None
+    version: int
+    created_at: datetime
+
+
+class CaseDecisionListResponse(BaseModel):
+    data: List[DecisionResponse] = []
