@@ -89,6 +89,7 @@ class Resource:
     entity_type: str = "unknown"
     severity: Optional[str] = None
     risk_level: Optional[str] = None
+    created_by: Optional[str] = None
 
 
 @dataclass
@@ -161,7 +162,16 @@ OWNERSHIP_ACTIONS: frozenset[str] = frozenset({
     "alert:acknowledge", "alert:dismiss", "alert:investigate",
     "investigation:update", "investigation:modify_findings",
     "investigation:transition",
-    "info_request:respond",
+    "case:transition", "case:decision",
+    "info_request:create", "info_request:respond",
+})
+
+CREATOR_ACTIONS: frozenset[str] = frozenset({
+    "info_request:accept", "info_request:return",
+})
+
+CREATOR_OR_ADMIN_ACTIONS: frozenset[str] = frozenset({
+    "info_request:cancel",
 })
 
 ASSIGNED_READ_ACTIONS: frozenset[str] = frozenset({
@@ -206,35 +216,50 @@ INVESTIGATION_TRANSITIONS: Dict[str, set] = {
     "active": {"investigation:update", "investigation:modify_findings",
                "investigation:transition", "investigation:assign",
                "investigation:read_own", "investigation:read"},
-    "awaiting_information": {"investigation:read_own", "investigation:read"},
+    "awaiting_information": {"investigation:read_own", "investigation:read",
+                             "investigation:assign"},
     "submitted": {"investigation:review", "investigation:assign",
                   "investigation:read_own", "investigation:read"},
     "returned": {"investigation:update", "investigation:modify_findings",
-                 "investigation:transition", "investigation:read_own", "investigation:read"},
+                 "investigation:transition", "investigation:assign",
+                 "investigation:read_own", "investigation:read"},
     "completed": {"investigation:read_own", "investigation:read"},
     "cancelled": {"investigation:read"},
 }
 
 CASE_TRANSITIONS: Dict[str, set] = {
-    "open": {"case:assign", "case:read_assigned", "case:read"},
-    "assigned": {"case:transition", "case:read_assigned", "case:read"},
+    "open": {"case:assign", "case:read_assigned", "case:read",
+             "info_request:read_assigned", "info_request:read"},
+    "assigned": {"case:transition", "case:read_assigned", "case:read",
+                 "info_request:read_assigned", "info_request:read"},
     "under_review": {"case:transition", "case:decision",
-                     "case:read_assigned", "case:read"},
-    "awaiting_information": {"case:read_assigned", "case:read"},
-    "decision_pending": {"case:transition", "case:read_assigned", "case:read"},
-    "awaiting_compliance_action": {"case:transition", "case:read_assigned", "case:read"},
-    "resolved": {"case:transition", "case:close", "case:read_assigned", "case:read"},
-    "closed": {"case:reopen", "case:read"},
-    "cancelled": {"case:read"},
+                     "info_request:create",
+                     "case:read_assigned", "case:read",
+                     "info_request:read_assigned", "info_request:read"},
+    "awaiting_information": {"case:read_assigned", "case:read",
+                             "info_request:read_assigned", "info_request:read"},
+    "decision_pending": {"case:transition", "case:read_assigned", "case:read",
+                         "info_request:read_assigned", "info_request:read"},
+    "awaiting_compliance_action": {"case:transition", "case:read_assigned", "case:read",
+                                   "info_request:read_assigned", "info_request:read"},
+    "resolved": {"case:transition", "case:close",
+                 "case:read_assigned", "case:read",
+                 "info_request:read_assigned", "info_request:read"},
+    "closed": {"case:reopen", "case:read",
+               "info_request:read_assigned", "info_request:read"},
+    "cancelled": {"case:read", "info_request:read_assigned", "info_request:read"},
 }
 
 IR_TRANSITIONS: Dict[str, set] = {
-    "open": {"info_request:read_assigned", "info_request:read"},
-    "acknowledged": {"info_request:respond", "info_request:read_assigned", "info_request:read"},
+    "open": {"info_request:respond", "info_request:cancel",
+             "info_request:read_assigned", "info_request:read"},
+    "acknowledged": {"info_request:respond", "info_request:cancel",
+                     "info_request:read_assigned", "info_request:read"},
     "responded": {"info_request:accept", "info_request:return",
                   "info_request:read_assigned", "info_request:read"},
     "accepted": {"info_request:read"},
-    "returned": {"info_request:read_assigned", "info_request:read"},
+    "returned": {"info_request:respond",
+                 "info_request:read_assigned", "info_request:read"},
     "cancelled": {"info_request:read"},
 }
 
@@ -287,6 +312,12 @@ async def authorise(
     # Step 5 — Ownership/assignment check
     if action in OWNERSHIP_ACTIONS:
         if resource.assigned_to != user.user_id:
+            raise OwnershipDeniedError()
+    if action in CREATOR_ACTIONS:
+        if resource.created_by != user.user_id:
+            raise OwnershipDeniedError()
+    if action in CREATOR_OR_ADMIN_ACTIONS:
+        if resource.created_by != user.user_id and user.role != "admin":
             raise OwnershipDeniedError()
 
     # Step 6 — Workflow state permits action?

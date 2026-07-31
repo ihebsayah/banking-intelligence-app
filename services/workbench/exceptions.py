@@ -26,9 +26,9 @@ class PermissionDenied(WorkbenchError):
 
 
 class InvalidTransition(WorkbenchError):
-    def __init__(self, status: str, action: str) -> None:
-        super().__init__("INVALID_TRANSITION",
-                         f"Cannot {action} alert in status {status}", 409)
+    def __init__(self, status: str, action: str, detail: str = "") -> None:
+        msg = detail or f"Cannot {action} alert in status {status}"
+        super().__init__("INVALID_TRANSITION", msg, 409)
 
 
 class VersionConflict(WorkbenchError):

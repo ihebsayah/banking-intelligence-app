@@ -321,8 +321,32 @@ class InfoRequestRepo:
         r = await _fetch_one(self._db, "SELECT * FROM information_requests WHERE ir_id = $1", [ir_id], conn)
         return InformationRequest(**r) if r else None
 
-    async def list_by_case(self, case_id: str, conn: asyncpg.Connection | None = None) -> list[InformationRequest]:
-        rows = await _fetch_all(self._db, "SELECT * FROM information_requests WHERE case_id = $1 ORDER BY created_at DESC", [case_id], conn)
+    async def list_by_case(self, case_id: str, status: str | None = None,
+                           limit: int = 100, offset: int = 0,
+                           conn: asyncpg.Connection | None = None) -> list[InformationRequest]:
+        parts = ["SELECT * FROM information_requests WHERE case_id = $1"]
+        params: list = [case_id]
+        i = 2
+        if status:
+            parts.append(f"AND status = ${i}"); params.append(status); i += 1
+        parts.append(f"ORDER BY created_at DESC LIMIT ${i} OFFSET ${i+1}")
+        params.extend([limit, offset])
+        rows = await _fetch_all(self._db, " ".join(parts), params, conn)
+        return [InformationRequest(**r) for r in rows]
+
+    async def fetch_active_by_case_assignee(self, case_id: str, assigned_to: str,
+                                            conn: asyncpg.Connection | None = None) -> list[InformationRequest]:
+        """Active (open/acknowledged/responded/returned) IRs for a case+assignee.
+
+        Enforces the consistency constraint: at most one non-cancelled,
+        non-accepted IR per (case_id, assigned_to) per status cycle.
+        """
+        rows = await _fetch_all(self._db, """
+            SELECT * FROM information_requests
+            WHERE case_id = $1 AND assigned_to = $2
+              AND status NOT IN ('cancelled', 'accepted')
+            ORDER BY created_at DESC
+        """, [case_id, assigned_to], conn)
         return [InformationRequest(**r) for r in rows]
 
     async def create(self, ir: InformationRequest, conn: asyncpg.Connection | None = None) -> InformationRequest:
