@@ -346,6 +346,33 @@ class TestCommentRepo:
         assert result is not None
         sql = mock_exec.call_args[0][1]
         assert "is_redacted" in sql
+        assert "original_content_hash" in sql
+
+    @pytest.mark.asyncio
+    async def test_list_for_entity_excludes_internal(self, mock_db):
+        mock_fetch = AsyncMock(return_value=[])
+        with patch("workbench.repos._fetch_all", mock_fetch):
+            await CommentRepo(mock_db).list_for_entity(
+                "alert", "a1", include_internal=False)
+        sql = mock_fetch.call_args[0][1]
+        assert "AND is_internal=FALSE" in sql
+
+    @pytest.mark.asyncio
+    async def test_list_for_entity_includes_internal_by_default(self, mock_db):
+        mock_fetch = AsyncMock(return_value=[])
+        with patch("workbench.repos._fetch_all", mock_fetch):
+            await CommentRepo(mock_db).list_for_entity("alert", "a1")
+        sql = mock_fetch.call_args[0][1]
+        assert "is_internal=FALSE" not in sql
+
+    @pytest.mark.asyncio
+    async def test_count_for_entity(self, mock_db):
+        mock_fetch = AsyncMock(return_value={"cnt": 7})
+        with patch("workbench.repos._fetch_one", mock_fetch):
+            cnt = await CommentRepo(mock_db).count_for_entity(
+                "alert", "a1", include_internal=False)
+        assert cnt == 7
+        assert "is_internal=FALSE" in mock_fetch.call_args[0][1]
 
 
 # ── Timeline / Notification / Assignment / Outbox Tests ───────────────────────
@@ -359,6 +386,35 @@ class TestTimelineRepo:
             result = await TimelineRepo(mock_db).insert(entry)
         assert result.timeline_id == entry.timeline_id
 
+    @pytest.mark.asyncio
+    async def test_list_for_entity_orders_occurred_at_asc(self, mock_db):
+        mock_fetch = AsyncMock(return_value=[])
+        with patch("workbench.repos._fetch_all", mock_fetch):
+            await TimelineRepo(mock_db).list_for_entity(
+                "investigation", "inv1", event_type="investigation.completed")
+        sql = mock_fetch.call_args[0][1]
+        assert "ORDER BY occurred_at" in sql
+        assert "event_type=$3" in sql
+
+    @pytest.mark.asyncio
+    async def test_list_for_user_own_entities_only(self, mock_db):
+        mock_fetch = AsyncMock(return_value=[])
+        with patch("workbench.repos._fetch_all", mock_fetch):
+            await TimelineRepo(mock_db).list_for_user(
+                "user1", entity_type="compliance_case", since=NOW)
+        sql = mock_fetch.call_args[0][1]
+        assert "ORDER BY t.occurred_at ASC" in sql
+        assert "activity_timeline t WHERE" in sql
+        assert "t.entity_type=$2" in sql
+
+    @pytest.mark.asyncio
+    async def test_count_for_user(self, mock_db):
+        mock_fetch = AsyncMock(return_value={"cnt": 4})
+        with patch("workbench.repos._fetch_one", mock_fetch):
+            cnt = await TimelineRepo(mock_db).count_for_user("user1")
+        assert cnt == 4
+        assert "COUNT(*)" in mock_fetch.call_args[0][1]
+
 
 class TestNotificationRepo:
     @pytest.mark.asyncio
@@ -368,6 +424,35 @@ class TestNotificationRepo:
         with patch("workbench.repos._execute", mock_exec):
             await NotificationRepo(mock_db).insert(n)
             await NotificationRepo(mock_db).mark_read(n.notification_id)
+
+    @pytest.mark.asyncio
+    async def test_list_for_user_is_read_filter(self, mock_db):
+        mock_fetch = AsyncMock(return_value=[])
+        with patch("workbench.repos._fetch_all", mock_fetch):
+            await NotificationRepo(mock_db).list_for_user("user1", is_read=False)
+        sql = mock_fetch.call_args[0][1]
+        assert "user_id=$1" in sql
+        assert "is_read=$2" in sql
+        assert "ORDER BY created_at DESC" in sql
+
+    @pytest.mark.asyncio
+    async def test_unread_count(self, mock_db):
+        mock_fetch = AsyncMock(return_value={"cnt": 3})
+        with patch("workbench.repos._fetch_one", mock_fetch):
+            cnt = await NotificationRepo(mock_db).unread_count("user1")
+        assert cnt == 3
+        assert "is_read=FALSE" in mock_fetch.call_args[0][1]
+
+    @pytest.mark.asyncio
+    async def test_mark_all_read_returns_count(self, mock_db):
+        mock_fetch = AsyncMock(return_value=[{"notification_id": "n1"},
+                                             {"notification_id": "n2"}])
+        with patch("workbench.repos._fetch_all", mock_fetch):
+            marked = await NotificationRepo(mock_db).mark_all_read("user1")
+        assert marked == 2
+        sql = mock_fetch.call_args[0][1]
+        assert "is_read=FALSE" in sql
+        assert "RETURNING notification_id" in sql
 
 
 class TestAssignmentHistoryRepo:

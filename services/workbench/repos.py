@@ -6,7 +6,7 @@ a UnitOfWork. Without a connection, methods auto-acquire from the pool.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, TypeVar
+from typing import Any, Dict, List, Optional, Tuple, TypeVar
 
 import asyncpg
 from shared.database import DatabaseConnector
@@ -47,6 +47,26 @@ async def _fetch_all(db: DatabaseConnector, sql: str, params: list, conn: asyncp
         rows = await conn.fetch(sql, *params)
         return [dict(r) for r in rows]
     return await db.fetch_all(sql, params)
+
+
+def _own_entity_timeline_sql(user_id: str) -> Tuple[str, List[Any]]:
+    """Parenthesised ownership group for the cross-entity timeline (TL2).
+
+    Restricts timeline entries to entities currently assigned to the user.
+    Returns (group_sql, params) where group_sql is already parenthesised so
+    callers can append additional AND filters without precedence bugs.
+    """
+    group = " OR ".join([
+        "(t.entity_type='alert' AND EXISTS (SELECT 1 FROM alerts a"
+        " WHERE a.alert_id = t.entity_id AND a.assigned_to = $1))",
+        "(t.entity_type='investigation' AND EXISTS (SELECT 1 FROM investigations i"
+        " WHERE i.investigation_id = t.entity_id AND i.assigned_to = $1))",
+        "(t.entity_type='compliance_case' AND EXISTS (SELECT 1 FROM compliance_cases cc"
+        " WHERE cc.case_id = t.entity_id AND cc.assigned_to = $1))",
+        "(t.entity_type='information_request' AND EXISTS (SELECT 1 FROM information_requests ir"
+        " WHERE ir.ir_id = t.entity_id AND ir.assigned_to = $1))",
+    ])
+    return f"({group})", [user_id]
 
 
 # ── Alert Repository ──────────────────────────────────────────────────────────
@@ -555,11 +575,33 @@ class CommentRepo:
         return Comment(**r) if r else None
 
     async def list_for_entity(self, entity_type: str, entity_id: str,
+                              limit: Optional[int] = None,
+                              offset: Optional[int] = None,
+                              include_internal: bool = True,
                               conn: asyncpg.Connection | None = None) -> list[Comment]:
-        rows = await _fetch_all(self._db,
-            "SELECT * FROM comments WHERE entity_type=$1 AND entity_id=$2 ORDER BY created_at",
-            [entity_type, entity_id], conn)
+        parts = ["SELECT * FROM comments WHERE entity_type=$1 AND entity_id=$2"]
+        params: List[Any] = [entity_type, entity_id]
+        if not include_internal:
+            parts.append(f"AND is_internal=FALSE")
+        parts.append("ORDER BY created_at")
+        if limit is not None:
+            parts.append(f"LIMIT ${len(params) + 1}")
+            params.append(limit)
+        if offset is not None:
+            parts.append(f"OFFSET ${len(params) + 1}")
+            params.append(offset)
+        rows = await _fetch_all(self._db, " ".join(parts), params, conn)
         return [Comment(**r) for r in rows]
+
+    async def count_for_entity(self, entity_type: str, entity_id: str,
+                               include_internal: bool = True,
+                               conn: asyncpg.Connection | None = None) -> int:
+        parts = ["SELECT COUNT(*) AS cnt FROM comments WHERE entity_type=$1 AND entity_id=$2"]
+        params: List[Any] = [entity_type, entity_id]
+        if not include_internal:
+            parts.append(f"AND is_internal=FALSE")
+        r = await _fetch_one(self._db, " ".join(parts), params, conn)
+        return r["cnt"] if r else 0
 
     async def create(self, c: Comment, conn: asyncpg.Connection | None = None) -> Comment:
         await _execute(self._db, """
@@ -600,11 +642,69 @@ class TimelineRepo:
         self._db = db
 
     async def list_for_entity(self, entity_type: str, entity_id: str,
+                              event_type: Optional[str] = None,
+                              limit: Optional[int] = None,
+                              offset: Optional[int] = None,
                               conn: asyncpg.Connection | None = None) -> list[ActivityTimelineEntry]:
-        rows = await _fetch_all(self._db,
-            "SELECT * FROM activity_timeline WHERE entity_type=$1 AND entity_id=$2 ORDER BY occurred_at",
-            [entity_type, entity_id], conn)
+        parts = ["SELECT * FROM activity_timeline WHERE entity_type=$1 AND entity_id=$2"]
+        params: List[Any] = [entity_type, entity_id]
+        if event_type:
+            parts.append(f"AND event_type=${len(params) + 1}")
+            params.append(event_type)
+        parts.append("ORDER BY occurred_at")
+        if limit is not None:
+            parts.append(f"LIMIT ${len(params) + 1}")
+            params.append(limit)
+        if offset is not None:
+            parts.append(f"OFFSET ${len(params) + 1}")
+            params.append(offset)
+        rows = await _fetch_all(self._db, " ".join(parts), params, conn)
         return [ActivityTimelineEntry(**r) for r in rows]
+
+    async def count_for_entity(self, entity_type: str, entity_id: str,
+                               event_type: Optional[str] = None,
+                               conn: asyncpg.Connection | None = None) -> int:
+        parts = ["SELECT COUNT(*) AS cnt FROM activity_timeline WHERE entity_type=$1 AND entity_id=$2"]
+        params: List[Any] = [entity_type, entity_id]
+        if event_type:
+            parts.append(f"AND event_type=${len(params) + 1}")
+            params.append(event_type)
+        r = await _fetch_one(self._db, " ".join(parts), params, conn)
+        return r["cnt"] if r else 0
+
+    async def list_for_user(self, user_id: str,
+                            entity_type: Optional[str] = None,
+                            since: Optional[datetime] = None,
+                            limit: int = 50, offset: int = 0,
+                            conn: asyncpg.Connection | None = None) -> list[ActivityTimelineEntry]:
+        """Cross-entity timeline for entities currently assigned to a user (TL2)."""
+        group, params = _own_entity_timeline_sql(user_id)
+        parts = ["SELECT * FROM activity_timeline t WHERE", group]
+        if entity_type:
+            parts.append(f"AND t.entity_type=${len(params) + 1}")
+            params.append(entity_type)
+        if since is not None:
+            parts.append(f"AND t.occurred_at >= ${len(params) + 1}")
+            params.append(since)
+        parts.append(f"ORDER BY t.occurred_at ASC LIMIT ${len(params) + 1} OFFSET ${len(params) + 2}")
+        params.extend([limit, offset])
+        rows = await _fetch_all(self._db, " ".join(parts), params, conn)
+        return [ActivityTimelineEntry(**r) for r in rows]
+
+    async def count_for_user(self, user_id: str,
+                             entity_type: Optional[str] = None,
+                             since: Optional[datetime] = None,
+                             conn: asyncpg.Connection | None = None) -> int:
+        group, params = _own_entity_timeline_sql(user_id)
+        parts = ["SELECT COUNT(*) AS cnt FROM activity_timeline t WHERE", group]
+        if entity_type:
+            parts.append(f"AND t.entity_type=${len(params) + 1}")
+            params.append(entity_type)
+        if since is not None:
+            parts.append(f"AND t.occurred_at >= ${len(params) + 1}")
+            params.append(since)
+        r = await _fetch_one(self._db, " ".join(parts), params, conn)
+        return r["cnt"] if r else 0
 
     async def insert(self, entry: ActivityTimelineEntry, conn: asyncpg.Connection | None = None) -> ActivityTimelineEntry:
         await _execute(self._db, """
@@ -625,17 +725,40 @@ class NotificationRepo:
     def __init__(self, db: DatabaseConnector) -> None:
         self._db = db
 
-    async def list_for_user(self, user_id: str, unread_only: bool = False,
-                            limit: int = 50, conn: asyncpg.Connection | None = None) -> list[Notification]:
-        if unread_only:
-            rows = await _fetch_all(self._db,
-                "SELECT * FROM notifications WHERE user_id=$1 AND is_read=FALSE ORDER BY created_at DESC LIMIT $2",
-                [user_id, limit], conn)
-        else:
-            rows = await _fetch_all(self._db,
-                "SELECT * FROM notifications WHERE user_id=$1 ORDER BY created_at DESC LIMIT $2",
-                [user_id, limit], conn)
+    async def fetch_by_id(self, notification_id: str, conn: asyncpg.Connection | None = None) -> Notification | None:
+        r = await _fetch_one(self._db,
+            "SELECT * FROM notifications WHERE notification_id = $1",
+            [notification_id], conn)
+        return Notification(**r) if r else None
+
+    async def list_for_user(self, user_id: str, is_read: Optional[bool] = None,
+                            limit: int = 50, offset: int = 0,
+                            conn: asyncpg.Connection | None = None) -> list[Notification]:
+        parts = ["SELECT * FROM notifications WHERE user_id=$1"]
+        params: List[Any] = [user_id]
+        if is_read is not None:
+            parts.append(f"AND is_read=${len(params) + 1}")
+            params.append(bool(is_read))
+        parts.append(f"ORDER BY created_at DESC LIMIT ${len(params) + 1} OFFSET ${len(params) + 2}")
+        params.extend([limit, offset])
+        rows = await _fetch_all(self._db, " ".join(parts), params, conn)
         return [Notification(**r) for r in rows]
+
+    async def count_for_user(self, user_id: str, is_read: Optional[bool] = None,
+                             conn: asyncpg.Connection | None = None) -> int:
+        parts = ["SELECT COUNT(*) AS cnt FROM notifications WHERE user_id=$1"]
+        params: List[Any] = [user_id]
+        if is_read is not None:
+            parts.append(f"AND is_read=${len(params) + 1}")
+            params.append(bool(is_read))
+        r = await _fetch_one(self._db, " ".join(parts), params, conn)
+        return r["cnt"] if r else 0
+
+    async def unread_count(self, user_id: str, conn: asyncpg.Connection | None = None) -> int:
+        r = await _fetch_one(self._db,
+            "SELECT COUNT(*) AS cnt FROM notifications WHERE user_id=$1 AND is_read=FALSE",
+            [user_id], conn)
+        return r["cnt"] if r else 0
 
     async def insert(self, n: Notification, conn: asyncpg.Connection | None = None) -> Notification:
         await _execute(self._db, """
@@ -652,6 +775,15 @@ class NotificationRepo:
         await _execute(self._db,
             "UPDATE notifications SET is_read=TRUE, read_at=$1 WHERE notification_id=$2",
             [_now(), notification_id], conn)
+
+    async def mark_all_read(self, user_id: str, conn: asyncpg.Connection | None = None) -> int:
+        """Mark all of a user's unread notifications read; returns the count marked."""
+        rows = await _fetch_all(self._db, """
+            UPDATE notifications SET is_read=TRUE, read_at=$1
+            WHERE user_id=$2 AND is_read=FALSE
+            RETURNING notification_id
+        """, [_now(), user_id], conn)
+        return len(rows)
 
 
 # ── Assignment History Repository ──────────────────────────────────────────────

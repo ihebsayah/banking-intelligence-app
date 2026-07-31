@@ -201,69 +201,80 @@ OVERRIDEABLE_ACTIONS: frozenset[str] = frozenset()  # Phase 2H
 # ── State machine transition map ──────────────────────────────────────────────
 # entity_type -> status -> set of allowed actions
 
+# Phase 2B.9 comment/timeline actions are evaluated against the PARENT entity
+# resource so the workflow gate applies (e.g. EC05: comment:create is not
+# permitted once a case is closed or cancelled). comment:redact is state-agnostic
+# (admin cleanup) but still runs through the same map so it never 409s.
+COMMENT_ACTIONS: frozenset[str] = frozenset({
+    "comment:read", "comment:create", "comment:redact", "timeline:read",
+})
+COMMENT_READ_ACTIONS: frozenset[str] = frozenset({
+    "comment:read", "comment:redact", "timeline:read",
+})
+
 ALERT_TRANSITIONS: Dict[str, set] = {
-    "new": {"alert:assign", "alert:read_assigned", "alert:read"},
-    "assigned": {"alert:acknowledge", "alert:assign", "alert:read_assigned", "alert:read"},
-    "acknowledged": {"alert:investigate", "alert:dismiss", "alert:assign", "alert:read_assigned", "alert:read", "approval:request"},
-    "under_investigation": {"alert:transition", "alert:assign", "alert:read_assigned", "alert:read", "approval:request"},
-    "resolved": {"alert:read"},
-    "dismissed": {"alert:read"},
+    "new": {"alert:assign", "alert:read_assigned", "alert:read"} | COMMENT_ACTIONS,
+    "assigned": {"alert:acknowledge", "alert:assign", "alert:read_assigned", "alert:read"} | COMMENT_ACTIONS,
+    "acknowledged": {"alert:investigate", "alert:dismiss", "alert:assign", "alert:read_assigned", "alert:read", "approval:request"} | COMMENT_ACTIONS,
+    "under_investigation": {"alert:transition", "alert:assign", "alert:read_assigned", "alert:read", "approval:request"} | COMMENT_ACTIONS,
+    "resolved": {"alert:read"} | COMMENT_ACTIONS,
+    "dismissed": {"alert:read"} | COMMENT_ACTIONS,
 }
 
 INVESTIGATION_TRANSITIONS: Dict[str, set] = {
     "open": {"investigation:assign", "investigation:transition",
-             "investigation:read_own", "investigation:read"},
+             "investigation:read_own", "investigation:read"} | COMMENT_ACTIONS,
     "active": {"investigation:update", "investigation:modify_findings",
                "investigation:transition", "investigation:assign",
-               "investigation:read_own", "investigation:read"},
+               "investigation:read_own", "investigation:read"} | COMMENT_ACTIONS,
     "awaiting_information": {"investigation:read_own", "investigation:read",
-                             "investigation:assign"},
+                             "investigation:assign"} | COMMENT_ACTIONS,
     "submitted": {"investigation:review", "investigation:assign",
-                  "investigation:read_own", "investigation:read"},
+                  "investigation:read_own", "investigation:read"} | COMMENT_ACTIONS,
     "returned": {"investigation:update", "investigation:modify_findings",
                  "investigation:transition", "investigation:assign",
-                 "investigation:read_own", "investigation:read"},
-    "completed": {"investigation:read_own", "investigation:read"},
-    "cancelled": {"investigation:read"},
+                 "investigation:read_own", "investigation:read"} | COMMENT_ACTIONS,
+    "completed": {"investigation:read_own", "investigation:read"} | COMMENT_ACTIONS,
+    "cancelled": {"investigation:read"} | COMMENT_ACTIONS,
 }
 
 CASE_TRANSITIONS: Dict[str, set] = {
     "open": {"case:assign", "case:read_assigned", "case:read",
-             "info_request:read_assigned", "info_request:read"},
+             "info_request:read_assigned", "info_request:read"} | COMMENT_ACTIONS,
     "assigned": {"case:transition", "case:read_assigned", "case:read",
-                 "info_request:read_assigned", "info_request:read"},
+                 "info_request:read_assigned", "info_request:read"} | COMMENT_ACTIONS,
     "under_review": {"case:transition", "case:decision",
                      "info_request:create",
                      "case:read_assigned", "case:read",
-                     "info_request:read_assigned", "info_request:read"},
+                     "info_request:read_assigned", "info_request:read"} | COMMENT_ACTIONS,
     "awaiting_information": {"case:read_assigned", "case:read",
-                             "info_request:read_assigned", "info_request:read"},
+                             "info_request:read_assigned", "info_request:read"} | COMMENT_ACTIONS,
     "decision_pending": {"case:transition", "case:read_assigned", "case:read",
                          "info_request:read_assigned", "info_request:read",
-                         "approval:request"},
+                         "approval:request"} | COMMENT_ACTIONS,
     "awaiting_compliance_action": {"case:transition", "case:read_assigned", "case:read",
-                                   "info_request:read_assigned", "info_request:read"},
+                                   "info_request:read_assigned", "info_request:read"} | COMMENT_ACTIONS,
     "resolved": {"case:transition", "case:close",
                  "case:read_assigned", "case:read",
                  "info_request:read_assigned", "info_request:read",
-                 "approval:request"},
+                 "approval:request"} | COMMENT_ACTIONS,
     "closed": {"case:reopen", "case:read",
                "info_request:read_assigned", "info_request:read",
-               "approval:request"},
-    "cancelled": {"case:read", "info_request:read_assigned", "info_request:read"},
+               "approval:request"} | COMMENT_READ_ACTIONS,
+    "cancelled": {"case:read", "info_request:read_assigned", "info_request:read"} | COMMENT_READ_ACTIONS,
 }
 
 IR_TRANSITIONS: Dict[str, set] = {
     "open": {"info_request:respond", "info_request:cancel",
-             "info_request:read_assigned", "info_request:read"},
+             "info_request:read_assigned", "info_request:read"} | COMMENT_ACTIONS,
     "acknowledged": {"info_request:respond", "info_request:cancel",
-                     "info_request:read_assigned", "info_request:read"},
+                     "info_request:read_assigned", "info_request:read"} | COMMENT_ACTIONS,
     "responded": {"info_request:accept", "info_request:return",
-                  "info_request:read_assigned", "info_request:read"},
-    "accepted": {"info_request:read"},
+                  "info_request:read_assigned", "info_request:read"} | COMMENT_ACTIONS,
+    "accepted": {"info_request:read"} | COMMENT_ACTIONS,
     "returned": {"info_request:respond",
-                 "info_request:read_assigned", "info_request:read"},
-    "cancelled": {"info_request:read"},
+                 "info_request:read_assigned", "info_request:read"} | COMMENT_ACTIONS,
+    "cancelled": {"info_request:read"} | COMMENT_ACTIONS,
 }
 
 APPROVAL_TRANSITIONS: Dict[str, set] = {
@@ -274,12 +285,28 @@ APPROVAL_TRANSITIONS: Dict[str, set] = {
     "cancelled": {"approval:read"},
 }
 
+# Notifications carry no workflow status; is_read is mapped to a synthetic
+# "unread"/"read" state so notification actions run through authorise()'s
+# permission check without ever triggering a workflow 409.
+NOTIFICATION_TRANSITIONS: Dict[str, set] = {
+    "unread": {"notification:read", "notification:update"},
+    "read": {"notification:read", "notification:update"},
+}
+
+# Cross-entity timeline (TL2) has no single parent resource; a synthetic
+# "active" state allows the bare timeline:read check to pass the workflow step.
+TIMELINE_TRANSITIONS: Dict[str, set] = {
+    "active": {"timeline:read"},
+}
+
 ENTITY_TRANSITIONS: Dict[str, Dict[str, set]] = {
     "alert": ALERT_TRANSITIONS,
     "investigation": INVESTIGATION_TRANSITIONS,
     "compliance_case": CASE_TRANSITIONS,
     "information_request": IR_TRANSITIONS,
     "approval_request": APPROVAL_TRANSITIONS,
+    "notification": NOTIFICATION_TRANSITIONS,
+    "timeline": TIMELINE_TRANSITIONS,
 }
 
 
