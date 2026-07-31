@@ -699,6 +699,28 @@ class TestDecision:
                 await CaseService(mock_db).record_decision(MOCK_USER, c.case_id, req)
 
     @pytest.mark.asyncio
+    async def test_report_to_authority_concurrent_consume_race(self, mock_db):
+        c = make_case(status="decision_pending", assigned_to="user1", version=3)
+        approval = ApprovalRequest(
+            approval_request_id="ap1", action_type="decision_report_to_authority",
+            entity_type="compliance_case", entity_id=c.case_id, requested_by="user1",
+            rationale="report", required_approvals=1, approval_count=1,
+            status="approved", expires_at=NOW)
+        req = RecordDecisionRequest(decision_type=DecisionType.REPORT_TO_AUTHORITY_RECOMMENDED,
+                                    rationale="Must report", approval_request_id="ap1", expected_version=3)
+        uow_mock = make_uow_mock()
+        mock_consume = AsyncMock(return_value=None)
+        with patch(UOW_TARGET, return_value=uow_mock), \
+             patch(AUTH_TARGET, AsyncMock()), \
+             patch("workbench.repos._fetch_one", AsyncMock(return_value=c.model_dump())), \
+             patch("workbench.repos._execute", AsyncMock(return_value="UPDATE 1")), \
+             patch("workbench.repos.ApprovalRepo.fetch_by_id", AsyncMock(return_value=approval)), \
+             patch("workbench.repos.ApprovalRepo.consume", mock_consume):
+            with pytest.raises(ApprovalConsumed):
+                await CaseService(mock_db).record_decision(MOCK_USER, c.case_id, req)
+        mock_consume.assert_awaited_once_with("ap1", uow_mock.__aenter__.return_value.conn)
+
+    @pytest.mark.asyncio
     async def test_decision_idempotency_replay(self, mock_db):
         c = make_case(status="decision_pending", assigned_to="user1", version=3)
         req = RecordDecisionRequest(decision_type=DecisionType.WARNING, rationale="test", expected_version=3)
