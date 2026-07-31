@@ -204,8 +204,8 @@ OVERRIDEABLE_ACTIONS: frozenset[str] = frozenset()  # Phase 2H
 ALERT_TRANSITIONS: Dict[str, set] = {
     "new": {"alert:assign", "alert:read_assigned", "alert:read"},
     "assigned": {"alert:acknowledge", "alert:assign", "alert:read_assigned", "alert:read"},
-    "acknowledged": {"alert:investigate", "alert:dismiss", "alert:assign", "alert:read_assigned", "alert:read"},
-    "under_investigation": {"alert:transition", "alert:assign", "alert:read_assigned", "alert:read"},
+    "acknowledged": {"alert:investigate", "alert:dismiss", "alert:assign", "alert:read_assigned", "alert:read", "approval:request"},
+    "under_investigation": {"alert:transition", "alert:assign", "alert:read_assigned", "alert:read", "approval:request"},
     "resolved": {"alert:read"},
     "dismissed": {"alert:read"},
 }
@@ -239,14 +239,17 @@ CASE_TRANSITIONS: Dict[str, set] = {
     "awaiting_information": {"case:read_assigned", "case:read",
                              "info_request:read_assigned", "info_request:read"},
     "decision_pending": {"case:transition", "case:read_assigned", "case:read",
-                         "info_request:read_assigned", "info_request:read"},
+                         "info_request:read_assigned", "info_request:read",
+                         "approval:request"},
     "awaiting_compliance_action": {"case:transition", "case:read_assigned", "case:read",
                                    "info_request:read_assigned", "info_request:read"},
     "resolved": {"case:transition", "case:close",
                  "case:read_assigned", "case:read",
-                 "info_request:read_assigned", "info_request:read"},
+                 "info_request:read_assigned", "info_request:read",
+                 "approval:request"},
     "closed": {"case:reopen", "case:read",
-               "info_request:read_assigned", "info_request:read"},
+               "info_request:read_assigned", "info_request:read",
+               "approval:request"},
     "cancelled": {"case:read", "info_request:read_assigned", "info_request:read"},
 }
 
@@ -263,11 +266,20 @@ IR_TRANSITIONS: Dict[str, set] = {
     "cancelled": {"info_request:read"},
 }
 
+APPROVAL_TRANSITIONS: Dict[str, set] = {
+    "pending": {"approval:approve", "approval:read"},
+    "approved": {"approval:read"},
+    "rejected": {"approval:read"},
+    "expired": {"approval:read"},
+    "cancelled": {"approval:read"},
+}
+
 ENTITY_TRANSITIONS: Dict[str, Dict[str, set]] = {
     "alert": ALERT_TRANSITIONS,
     "investigation": INVESTIGATION_TRANSITIONS,
     "compliance_case": CASE_TRANSITIONS,
     "information_request": IR_TRANSITIONS,
+    "approval_request": APPROVAL_TRANSITIONS,
 }
 
 

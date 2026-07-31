@@ -423,13 +423,77 @@ class ApprovalRepo:
         return ar
 
     async def consume(self, approval_request_id: str, conn: asyncpg.Connection | None = None) -> ApprovalRequest | None:
-        """Atomically mark an approval as executed (consumed)."""
+        """Atomically mark an approved approval as executed (consumed).
+
+        Only an approval that has reached `approved` and is not yet consumed
+        can be executed exactly once.
+        """
         r = await _fetch_one(self._db, """
             UPDATE approval_requests SET status='approved', executed_at=$1, version=version+1, updated_at=$1
-            WHERE approval_request_id=$2 AND status='pending'
+            WHERE approval_request_id=$2 AND status='approved' AND executed_at IS NULL
             RETURNING *
         """, [_now(), approval_request_id], conn)
         return ApprovalRequest(**r) if r else None
+
+    async def cast_vote(self, approval_request_id: str, decision: str,
+                        conn: asyncpg.Connection | None = None) -> ApprovalRequest | None:
+        """Atomically record one vote on a pending approval request.
+
+        Increments approval_count and transitions to `approved` once
+        approval_count >= required_approvals, or to `rejected` on any rejection.
+        Returns None when the request is no longer pending (race guard).
+        """
+        r = await _fetch_one(self._db, """
+            UPDATE approval_requests
+            SET approval_count = approval_count + 1,
+                status = CASE
+                    WHEN $2 = 'rejected' THEN 'rejected'
+                    WHEN approval_count + 1 >= required_approvals THEN 'approved'
+                    ELSE status END,
+                version = version + 1,
+                updated_at = $3
+            WHERE approval_request_id = $1 AND status = 'pending'
+            RETURNING *
+        """, [approval_request_id, decision, _now()], conn)
+        return ApprovalRequest(**r) if r else None
+
+    async def list(self, user_id: str, role: str, scopes: List[str],
+                   status: Optional[str] = None, action_type: Optional[str] = None,
+                   limit: int = 50, offset: int = 0,
+                   conn: asyncpg.Connection | None = None) -> List[ApprovalRequest]:
+        """List approval requests visible to a user within their scopes.
+
+        OLP: admin sees all in scope; analyst sees own requests;
+        compliance sees requests where they are an eligible approver.
+        """
+        parts = [
+            "SELECT ar.* FROM approval_requests ar",
+            "LEFT JOIN alerts a ON ar.entity_type='alert' AND a.alert_id = ar.entity_id",
+            "LEFT JOIN compliance_cases cc ON ar.entity_type='compliance_case' AND cc.case_id = ar.entity_id",
+            "WHERE COALESCE(a.scope_id, cc.scope_id) = ANY($1::varchar[])",
+        ]
+        params: List[Any] = [scopes or ["hq_main"]]
+        i = 2
+        if role == "analyst":
+            parts.append(f"AND ar.requested_by = ${i}")
+            params.append(user_id)
+            i += 1
+        elif role == "compliance":
+            parts.append(f"AND ar.requested_by != ${i}")
+            params.append(user_id)
+            i += 1
+        if status:
+            parts.append(f"AND ar.status = ${i}")
+            params.append(status)
+            i += 1
+        if action_type:
+            parts.append(f"AND ar.action_type = ${i}")
+            params.append(action_type)
+            i += 1
+        parts.append(f"ORDER BY ar.created_at DESC LIMIT ${i} OFFSET ${i + 1}")
+        params.extend([limit, offset])
+        rows = await _fetch_all(self._db, " ".join(parts), params, conn)
+        return [ApprovalRequest(**r) for r in rows]
 
 
 # ── Approval Decision Repository ───────────────────────────────────────────────
