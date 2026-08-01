@@ -28,6 +28,7 @@ import { InvestigationQueuePage } from './components/investigations/Investigatio
 import { InvestigationDetailPage } from './components/investigations/InvestigationDetailPage';
 import { CaseQueuePage } from './components/cases/CaseQueuePage';
 import { CaseDetailPage } from './components/cases/CaseDetailPage';
+import { IRInboxPage } from './components/informationRequests/IRInboxPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { AdminPage } from './pages/AdminPage';
 import { ProfilePage } from './pages/ProfilePage';
@@ -100,6 +101,7 @@ function AppShell() {
             <Route path="/workbench/investigations/:investigationId" element={<ProtectedRoute requiredRole={['analyst', 'compliance', 'admin']} requiredPermission="investigation:read_own"><InvestigationDetailPage /></ProtectedRoute>} />
             <Route path="/workbench/cases" element={<ProtectedRoute requiredRole={['analyst', 'compliance', 'admin']} requiredPermission="case:read_assigned"><CaseQueuePage /></ProtectedRoute>} />
             <Route path="/workbench/cases/:caseId" element={<ProtectedRoute requiredRole={['analyst', 'compliance', 'admin']} requiredPermission="case:read_assigned"><CaseDetailPage /></ProtectedRoute>} />
+            <Route path="/workbench/information-requests" element={<ProtectedRoute requiredRole={['analyst', 'compliance', 'admin']} requiredPermission="info_request:read_assigned"><IRInboxPage /></ProtectedRoute>} />
             <Route path="/compliance"      element={<ProtectedRoute requiredRole={['compliance', 'manager', 'admin']} requiredPermission="workbench:access"><CompliancePage /></ProtectedRoute>} />
             <Route path="/reports"         element={<ProtectedRoute requiredRole={['manager', 'admin']} requiredPermission="workbench:access"><ReportsPage /></ProtectedRoute>} />
             <Route path="/admin"           element={<ProtectedRoute requiredRole="admin"><AdminPage /></ProtectedRoute>} />

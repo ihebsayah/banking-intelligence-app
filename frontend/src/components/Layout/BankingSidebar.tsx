@@ -14,6 +14,7 @@ import {
   Shield,
   BellRing,
   FileSearch,
+  MessageSquare,
   ChevronsLeft,
   ChevronsRight,
 } from 'lucide-react';
@@ -34,6 +35,7 @@ const NAV_ITEMS = [
   { to: '/workbench/alerts', icon: BellRing,       label: 'Alert Queue',    roles: ['analyst', 'compliance', 'admin'] },
   { to: '/workbench/investigations', icon: FileSearch, label: 'Investigations', roles: ['analyst', 'compliance', 'admin'] },
   { to: '/workbench/cases', icon: Scale,           label: 'Cases',          roles: ['analyst', 'compliance', 'admin'] },
+  { to: '/workbench/information-requests', icon: MessageSquare, label: 'Information Requests', roles: ['analyst', 'compliance', 'admin'] },
   { to: '/compliance',      icon: Shield,           label: 'Compliance',     roles: ['compliance', 'manager', 'admin'] },
   { to: '/reports',         icon: FileText,        label: 'Reports',        roles: ['manager', 'admin'] },
   { to: '/admin',           icon: Settings2,       label: 'Admin',          roles: ['admin'] },
