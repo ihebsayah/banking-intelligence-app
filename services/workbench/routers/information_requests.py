@@ -76,6 +76,25 @@ async def list_information_requests(
     return InformationRequestListResponse(total=total, page=page, page_size=per_page, items=items)
 
 
+# ── IR2.5 — GET /information-requests/assigned (analyst inbox) ────────────────
+# Registered before IR3's dynamic /{ir_id} route so "assigned" can never be
+# captured as an ir_id (FastAPI matches routes in registration order).
+
+@router.get("/information-requests/assigned",
+            response_model=InformationRequestListResponse)
+async def list_assigned_information_requests(
+    request: Request,
+    status_filter: Optional[str] = Query(None, alias="status"),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=100),
+):
+    u = _get_user(request)
+    svc = _service(request)
+    items, total = await svc.list_assigned(
+        u, _get_scope(request), status_filter, page, per_page)
+    return InformationRequestListResponse(total=total, page=page, page_size=per_page, items=items)
+
+
 # ── IR3 — GET /information-requests/{ir_id} ───────────────────────────────────
 
 @router.get("/information-requests/{ir_id}",

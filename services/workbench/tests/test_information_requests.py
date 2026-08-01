@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from shared.authorise import ApplicationUser
+from shared.authorise import ApplicationUser, PermissionDeniedError
 
 from workbench.exceptions import (
     IdempotencyMismatch, InvalidAssignee, InvalidTransition,
@@ -1188,12 +1188,19 @@ class TestRouteRegistration:
         routes = {(r.path, tuple(sorted(r.methods))) for r in router.routes}
         assert ("/api/v1/cases/{case_id}/information-requests", ("POST",)) in routes
         assert ("/api/v1/cases/{case_id}/information-requests", ("GET",)) in routes
+        assert ("/api/v1/information-requests/assigned", ("GET",)) in routes
         assert ("/api/v1/information-requests/{ir_id}", ("GET",)) in routes
         assert ("/api/v1/information-requests/{ir_id}/acknowledge", ("PATCH",)) in routes
         assert ("/api/v1/information-requests/{ir_id}/respond", ("PATCH",)) in routes
         assert ("/api/v1/information-requests/{ir_id}/accept", ("PATCH",)) in routes
         assert ("/api/v1/information-requests/{ir_id}/return", ("PATCH",)) in routes
         assert ("/api/v1/information-requests/{ir_id}/cancel", ("POST",)) in routes
+
+    def test_static_assigned_precedes_dynamic_detail(self):
+        from workbench.routers.information_requests import router
+        paths = [r.path for r in router.routes]
+        assert paths.index("/api/v1/information-requests/assigned") < \
+            paths.index("/api/v1/information-requests/{ir_id}")
 
     def test_obsolete_routes_absent(self):
         from workbench.routers.information_requests import router
@@ -1202,6 +1209,101 @@ class TestRouteRegistration:
         assert "/api/v1/information-requests/{ir_id}/submit" not in paths
         assert "/api/v1/cases/{case_id}/information-requests/{ir_id}" not in paths
 
-    def test_exact_count_eight(self):
+    def test_exact_count_nine(self):
         from workbench.routers.information_requests import router
-        assert len(router.routes) == 8
+        assert len(router.routes) == 9
+
+
+class TestListAssigned:
+    @pytest.mark.asyncio
+    async def test_own_assigned_returned_with_full_dto(self, mock_db):
+        ir = make_ir(assigned_to="user1", status="open",
+                     due_date=date(2026, 1, 31), question="Send statements")
+        with patch("workbench.repos._fetch_all", AsyncMock(return_value=[ir.model_dump()])), \
+             patch("workbench.repos._fetch_one", AsyncMock(return_value={"count": 1})), \
+             patch(AUTH_TARGET, AsyncMock()):
+            items, total = await InformationRequestService(mock_db).list_assigned(ANALYST, "hq_main")
+        assert total == 1
+        assert items[0].ir_id == ir.ir_id
+        assert items[0].question == "Send statements"
+        assert items[0].due_date == date(2026, 1, 31)
+
+    @pytest.mark.asyncio
+    async def test_query_restricts_to_current_user(self, mock_db):
+        mock_fetch_all = AsyncMock(return_value=[])
+        with patch("workbench.repos._fetch_all", mock_fetch_all), \
+             patch("workbench.repos._fetch_one", AsyncMock(return_value={"count": 0})), \
+             patch(AUTH_TARGET, AsyncMock()):
+            await InformationRequestService(mock_db).list_assigned(ANALYST, "hq_main")
+        sql, params = mock_fetch_all.call_args[0][1], mock_fetch_all.call_args[0][2]
+        assert "ir.assigned_to = $1" in sql
+        assert params[0] == "user1"
+
+    @pytest.mark.asyncio
+    async def test_status_filter_and_pagination(self, mock_db):
+        mock_fetch_all = AsyncMock(return_value=[])
+        mock_fetch_one = AsyncMock(return_value={"count": 7})
+        with patch("workbench.repos._fetch_all", mock_fetch_all), \
+             patch("workbench.repos._fetch_one", mock_fetch_one), \
+             patch(AUTH_TARGET, AsyncMock()):
+            items, total = await InformationRequestService(mock_db).list_assigned(
+                ANALYST, "hq_main", status="returned", page=2, per_page=10)
+        assert total == 7
+        assert items == []
+        list_params = mock_fetch_all.call_args[0][2]
+        assert list_params[0] == "user1"
+        assert list_params[2] == "returned"
+        assert list_params[3:] == [10, 10]
+        assert mock_fetch_one.call_args[0][2][2] == "returned"
+
+    @pytest.mark.asyncio
+    async def test_real_total_count(self, mock_db):
+        with patch("workbench.repos._fetch_all", AsyncMock(return_value=[])), \
+             patch("workbench.repos._fetch_one", AsyncMock(return_value={"count": 42})), \
+             patch(AUTH_TARGET, AsyncMock()):
+            _, total = await InformationRequestService(mock_db).list_assigned(ANALYST, "hq_main")
+        assert total == 42
+
+    @pytest.mark.asyncio
+    async def test_empty_inbox(self, mock_db):
+        with patch("workbench.repos._fetch_all", AsyncMock(return_value=[])), \
+             patch("workbench.repos._fetch_one", AsyncMock(return_value={"count": 0})), \
+             patch(AUTH_TARGET, AsyncMock()):
+            items, total = await InformationRequestService(mock_db).list_assigned(ANALYST, "hq_main")
+        assert items == []
+        assert total == 0
+
+    @pytest.mark.asyncio
+    async def test_authorise_called_with_read_assigned(self, mock_db):
+        mock_auth = AsyncMock()
+        with patch("workbench.repos._fetch_all", AsyncMock(return_value=[])), \
+             patch("workbench.repos._fetch_one", AsyncMock(return_value={"count": 0})), \
+             patch(AUTH_TARGET, mock_auth):
+            await InformationRequestService(mock_db).list_assigned(ANALYST, "hq_main")
+        mock_auth.assert_awaited_once()
+        assert mock_auth.await_args[0][1] == "info_request:read_assigned"
+
+    @pytest.mark.asyncio
+    async def test_permission_denied_propagates(self, mock_db):
+        with patch("workbench.repos._fetch_all", AsyncMock(return_value=[])), \
+             patch("workbench.repos._fetch_one", AsyncMock(return_value={"count": 0})), \
+             patch(AUTH_TARGET, AsyncMock(
+                 side_effect=PermissionDeniedError("info_request:read_assigned"))):
+            with pytest.raises(PermissionDeniedError):
+                await InformationRequestService(mock_db).list_assigned(ANALYST, "hq_main")
+
+    @pytest.mark.asyncio
+    async def test_no_mutation_side_effects(self, mock_db):
+        """Read-only: only SELECT list/count run; no outbox/timeline/idempotency writes."""
+        with patch("workbench.repos._fetch_all", AsyncMock(return_value=[])), \
+             patch("workbench.repos._fetch_one", AsyncMock(return_value={"count": 0})), \
+             patch(AUTH_TARGET, AsyncMock()), \
+             patch("workbench.services.information_request_service.UnitOfWork") as uow, \
+             patch("workbench.repos.TimelineRepo.insert") as tl, \
+             patch("workbench.repos.OutboxRepo.insert") as ob, \
+             patch("workbench.repos.NotificationRepo.insert") as nt:
+            await InformationRequestService(mock_db).list_assigned(ANALYST, "hq_main")
+        uow.assert_not_called()
+        tl.assert_not_called()
+        ob.assert_not_called()
+        nt.assert_not_called()

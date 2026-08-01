@@ -348,6 +348,25 @@ class InformationRequestService:
             return [_admin_view(ir) for ir in irs], len(irs)
         return [_full_response(ir) for ir in irs], len(irs)
 
+    # ── IR2.5 — GET /information-requests/assigned ────────────────────────────
+
+    async def list_assigned(
+        self, user: ApplicationUser, scope: str,
+        status: Optional[str] = None, page: int = 1, per_page: int = 50,
+    ) -> Tuple[List[InformationRequestResponse], int]:
+        await authorise(
+            user, "info_request:read_assigned",
+            Resource(id="", status="", entity_type="information_request"),
+            self._db, RequestContext())
+        limit = min(per_page, 100)
+        scopes = user.scopes or [scope]
+        irs = await InfoRequestRepo(self._db).list_assigned(
+            user.user_id, scopes, status=status, limit=limit,
+            offset=(page - 1) * limit)
+        total = await InfoRequestRepo(self._db).count_assigned(
+            user.user_id, scopes, status=status)
+        return [_full_response(ir) for ir in irs], total
+
     # ── IR3 — GET /information-requests/{ir_id} ───────────────────────────────
 
     async def get_by_id(

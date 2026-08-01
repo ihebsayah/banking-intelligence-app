@@ -744,3 +744,64 @@ class TestUnitOfWorkTransaction:
         mock_conn.execute.assert_any_call("BEGIN")
         mock_conn.execute.assert_any_call("ROLLBACK")
         mock_pool.release.assert_called_once_with(mock_conn)
+
+
+class TestInfoRequestAssignedRepo:
+    @pytest.mark.asyncio
+    async def test_list_assigned_filters_assignee_and_scope(self, mock_db):
+        ir = make_info_request(assigned_to="user2")
+        mock_fetch_all = AsyncMock(return_value=[ir.model_dump()])
+        with patch("workbench.repos._fetch_all", mock_fetch_all):
+            result = await InfoRequestRepo(mock_db).list_assigned("user2", ["hq_main"])
+        sql, params = mock_fetch_all.call_args[0][1], mock_fetch_all.call_args[0][2]
+        assert "ir.assigned_to = $1" in sql
+        assert "scope_id = ANY($2::text[])" in sql
+        assert "JOIN compliance_cases c ON c.case_id = ir.case_id" in sql
+        assert "ORDER BY ir.created_at DESC, ir.ir_id" in sql
+        assert params[0] == "user2"
+        assert params[1] == ["hq_main"]
+        assert result[0].ir_id == ir.ir_id
+        assert result[0].question == ir.question
+
+    @pytest.mark.asyncio
+    async def test_list_assigned_status_and_pagination(self, mock_db):
+        mock_fetch_all = AsyncMock(return_value=[])
+        with patch("workbench.repos._fetch_all", mock_fetch_all):
+            await InfoRequestRepo(mock_db).list_assigned("user2", ["hq_main"],
+                                                         status="returned",
+                                                         limit=25, offset=50)
+        sql, params = mock_fetch_all.call_args[0][1], mock_fetch_all.call_args[0][2]
+        assert "ir.status = $3" in sql
+        assert "LIMIT $4 OFFSET $5" in sql
+        assert params[2:] == ["returned", 25, 50]
+
+    @pytest.mark.asyncio
+    async def test_list_assigned_no_creator_broadening(self, mock_db):
+        # WHERE clause has no created_by predicate; only the assigned_to predicate.
+        mock_fetch_all = AsyncMock(return_value=[])
+        with patch("workbench.repos._fetch_all", mock_fetch_all):
+            await InfoRequestRepo(mock_db).list_assigned("user2", ["hq_main"])
+        sql = mock_fetch_all.call_args[0][1]
+        assert "created_by" not in sql.split("WHERE")[1]
+        assert sql.lstrip().startswith("SELECT")
+
+    @pytest.mark.asyncio
+    async def test_count_assigned_same_predicate(self, mock_db):
+        mock_fetch_one = AsyncMock(return_value={"count": 3})
+        with patch("workbench.repos._fetch_one", mock_fetch_one):
+            total = await InfoRequestRepo(mock_db).count_assigned("user2", ["hq_main"],
+                                                                  status="open")
+        sql, params = mock_fetch_one.call_args[0][1], mock_fetch_one.call_args[0][2]
+        assert "COUNT(*)" in sql
+        assert "ir.assigned_to = $1" in sql
+        assert "scope_id = ANY($2::text[])" in sql
+        assert params[0] == "user2"
+        assert params[1] == ["hq_main"]
+        assert params[2] == "open"
+        assert total == 3
+
+    @pytest.mark.asyncio
+    async def test_count_assigned_empty(self, mock_db):
+        with patch("workbench.repos._fetch_one", AsyncMock(return_value=None)):
+            total = await InfoRequestRepo(mock_db).count_assigned("user2", ["hq_main"])
+        assert total == 0

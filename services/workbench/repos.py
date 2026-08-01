@@ -354,6 +354,36 @@ class InfoRequestRepo:
         rows = await _fetch_all(self._db, " ".join(parts), params, conn)
         return [InformationRequest(**r) for r in rows]
 
+    async def list_assigned(self, assigned_to: str, scopes: list[str],
+                            status: str | None = None, limit: int = 100,
+                            offset: int = 0,
+                            conn: asyncpg.Connection | None = None) -> list[InformationRequest]:
+        """IRs assigned to a user, restricted to the owning case's scope."""
+        parts = ["""SELECT ir.* FROM information_requests ir
+                    JOIN compliance_cases c ON c.case_id = ir.case_id
+                    WHERE ir.assigned_to = $1 AND c.scope_id = ANY($2::text[])"""]
+        params: list = [assigned_to, scopes]
+        i = 3
+        if status:
+            parts.append(f"AND ir.status = ${i}"); params.append(status); i += 1
+        parts.append(f"ORDER BY ir.created_at DESC, ir.ir_id LIMIT ${i} OFFSET ${i+1}")
+        params.extend([limit, offset])
+        rows = await _fetch_all(self._db, " ".join(parts), params, conn)
+        return [InformationRequest(**r) for r in rows]
+
+    async def count_assigned(self, assigned_to: str, scopes: list[str],
+                             status: str | None = None,
+                             conn: asyncpg.Connection | None = None) -> int:
+        parts = ["""SELECT COUNT(*) FROM information_requests ir
+                    JOIN compliance_cases c ON c.case_id = ir.case_id
+                    WHERE ir.assigned_to = $1 AND c.scope_id = ANY($2::text[])"""]
+        params: list = [assigned_to, scopes]
+        i = 3
+        if status:
+            parts.append(f"AND ir.status = ${i}"); params.append(status); i += 1
+        row = await _fetch_one(self._db, " ".join(parts), params, conn)
+        return int(row["count"]) if row else 0
+
     async def fetch_active_by_case_assignee(self, case_id: str, assigned_to: str,
                                             conn: asyncpg.Connection | None = None) -> list[InformationRequest]:
         """Active (open/acknowledged/responded/returned) IRs for a case+assignee.
