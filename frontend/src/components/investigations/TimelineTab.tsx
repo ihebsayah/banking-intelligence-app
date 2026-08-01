@@ -5,12 +5,12 @@ import { clsx } from 'clsx';
 import { investigationsApi } from '../../api/investigationsApi';
 import { parseInvestigationError } from './investigationErrors';
 import { formatDateTime } from '../../utils/formatters';
-import type { TimelineEntry } from '../../types/investigations';
+import type { TimelineEntry, TimelineListResponse } from '../../types/investigations';
 
 const PER_PAGE = 50;
 
 function humanise(eventType: string): string {
-  return eventType.replace(/^investigation\./, '').replace(/_/g, ' ');
+  return eventType.replace(/^investigation\./, '').replace(/^case\./, '').replace(/_/g, ' ');
 }
 
 function deltaSummary(entry: TimelineEntry): string | null {
@@ -22,7 +22,16 @@ function deltaSummary(entry: TimelineEntry): string | null {
   return null;
 }
 
-export function TimelineTab({ investigationId }: { investigationId: string }) {
+export interface TimelineApiLike {
+  listTimeline: (entityId: string, page?: number, perPage?: number) => Promise<TimelineListResponse>;
+}
+
+interface Props {
+  entityId: string;
+  api?: TimelineApiLike;
+}
+
+export function TimelineTab({ entityId, api = investigationsApi as unknown as TimelineApiLike }: Props) {
   const [entries, setEntries] = useState<TimelineEntry[]>([]);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -32,7 +41,7 @@ export function TimelineTab({ investigationId }: { investigationId: string }) {
     setLoading(true);
     setError(null);
     try {
-      const res = await investigationsApi.listTimeline(investigationId, page, PER_PAGE);
+      const res = await api.listTimeline(entityId, page, PER_PAGE);
       setEntries(res.items);
     } catch (err) {
       setError(parseInvestigationError(err).message);
@@ -40,7 +49,7 @@ export function TimelineTab({ investigationId }: { investigationId: string }) {
     } finally {
       setLoading(false);
     }
-  }, [investigationId, page]);
+  }, [entityId, page, api]);
 
   useEffect(() => { fetchTimeline(); }, [fetchTimeline]);
 

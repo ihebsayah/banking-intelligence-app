@@ -7,11 +7,21 @@ import { parseInvestigationError } from './investigationErrors';
 import { useAuth } from '../../auth/AuthProvider';
 import { PERMISSIONS } from '../../lib/permissions';
 import { formatDateTime } from '../../utils/formatters';
-import type { Comment } from '../../types/investigations';
+import type { Comment, CommentListResponse } from '../../types/investigations';
 
 const PER_PAGE = 50;
 
-export function CommentsTab({ investigationId }: { investigationId: string }) {
+export interface CommentsApiLike {
+  listComments: (entityId: string, page?: number, perPage?: number) => Promise<CommentListResponse>;
+  createComment: (entityId: string, content: string, isInternal: boolean) => Promise<unknown>;
+}
+
+interface Props {
+  entityId: string;
+  api?: CommentsApiLike;
+}
+
+export function CommentsTab({ entityId, api = investigationsApi as unknown as CommentsApiLike }: Props) {
   const { hasPermission } = useAuth();
   const canUseInternal = hasPermission(PERMISSIONS.COMMENT_VIEW_INTERNAL_CONTENT);
 
@@ -29,7 +39,7 @@ export function CommentsTab({ investigationId }: { investigationId: string }) {
     setLoading(true);
     setError(null);
     try {
-      const res = await investigationsApi.listComments(investigationId, page, PER_PAGE);
+      const res = await api.listComments(entityId, page, PER_PAGE);
       setComments(res.items);
     } catch (err) {
       setError(parseInvestigationError(err).message);
@@ -37,7 +47,7 @@ export function CommentsTab({ investigationId }: { investigationId: string }) {
     } finally {
       setLoading(false);
     }
-  }, [investigationId, page]);
+  }, [entityId, page, api]);
 
   useEffect(() => { fetchComments(); }, [fetchComments]);
 
@@ -47,7 +57,7 @@ export function CommentsTab({ investigationId }: { investigationId: string }) {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      await investigationsApi.createComment(investigationId, content.trim(), canUseInternal && isInternal);
+      await api.createComment(entityId, content.trim(), canUseInternal && isInternal);
       setContent('');
       setIsInternal(false);
       setPage(1);

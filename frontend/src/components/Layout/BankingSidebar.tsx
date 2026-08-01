@@ -33,7 +33,8 @@ const NAV_ITEMS = [
   { to: '/risk',            icon: ShieldAlert,     label: 'Risk Monitor',   roles: ['analyst', 'manager', 'compliance', 'admin'] },
   { to: '/workbench/alerts', icon: BellRing,       label: 'Alert Queue',    roles: ['analyst', 'compliance', 'admin'] },
   { to: '/workbench/investigations', icon: FileSearch, label: 'Investigations', roles: ['analyst', 'compliance', 'admin'] },
-  { to: '/compliance',      icon: Scale,           label: 'Compliance',     roles: ['compliance', 'manager', 'admin'] },
+  { to: '/workbench/cases', icon: Scale,           label: 'Cases',          roles: ['analyst', 'compliance', 'admin'] },
+  { to: '/compliance',      icon: Shield,           label: 'Compliance',     roles: ['compliance', 'manager', 'admin'] },
   { to: '/reports',         icon: FileText,        label: 'Reports',        roles: ['manager', 'admin'] },
   { to: '/admin',           icon: Settings2,       label: 'Admin',          roles: ['admin'] },
 ];

@@ -420,8 +420,8 @@ export function InvestigationDetailPage() {
             </div>
           )}
 
-          {tab === 'comments' && <CommentsTab investigationId={investigation.investigation_id} />}
-          {tab === 'timeline' && <TimelineTab investigationId={investigation.investigation_id} />}
+          {tab === 'comments' && <CommentsTab entityId={investigation.investigation_id} />}
+          {tab === 'timeline' && <TimelineTab entityId={investigation.investigation_id} />}
         </div>
       </div>
 
