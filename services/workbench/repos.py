@@ -877,6 +877,36 @@ class OutboxRepo:
         r = await _fetch_one(self._db, "SELECT * FROM audit_outbox WHERE outbox_id = $1", [outbox_id], conn)
         return AuditOutboxEvent(**r) if r else None
 
+    async def list(self, status: Optional[str] = None,
+                   limit: int = 50, offset: int = 0,
+                   conn: asyncpg.Connection | None = None) -> list[AuditOutboxEvent]:
+        parts = ["SELECT * FROM audit_outbox"]
+        params: List[Any] = []
+        if status is not None:
+            parts.append(f"WHERE status=${len(params) + 1}")
+            params.append(status)
+        parts.append(f"ORDER BY created_at DESC LIMIT ${len(params) + 1} OFFSET ${len(params) + 2}")
+        params.extend([limit, offset])
+        rows = await _fetch_all(self._db, " ".join(parts), params, conn)
+        return [AuditOutboxEvent(**r) for r in rows]
+
+    async def count(self, status: Optional[str] = None,
+                    conn: asyncpg.Connection | None = None) -> int:
+        parts = ["SELECT COUNT(*) AS cnt FROM audit_outbox"]
+        params: List[Any] = []
+        if status is not None:
+            parts.append(f"WHERE status=${len(params) + 1}")
+            params.append(status)
+        r = await _fetch_one(self._db, " ".join(parts), params, conn)
+        return r["cnt"] if r else 0
+
+    async def retry(self, outbox_id: str, conn: asyncpg.Connection | None = None) -> None:
+        """AD2: reset a failed/poison record for the next worker cycle."""
+        await _execute(self._db, """
+            UPDATE audit_outbox SET status='pending', attempt_count=0, poison_reason=NULL
+            WHERE outbox_id=$1
+        """, [outbox_id], conn)
+
     async def reconcile_stuck(self, stale_minutes: int = 5,
                               conn: asyncpg.Connection | None = None) -> list[AuditOutboxEvent]:
         from datetime import timedelta
@@ -892,6 +922,57 @@ class OutboxRepo:
     async def count_poison(self, conn: asyncpg.Connection | None = None) -> int:
         r = await _fetch_one(self._db, "SELECT COUNT(*) AS cnt FROM audit_outbox WHERE status='poison'", [], conn)
         return r["cnt"] if r else 0
+
+
+# ── Admin Orphan Repository ────────────────────────────────────────────────────
+
+ORPHAN_ELIGIBLE_STATUSES = ("active", "active_pending")
+
+
+class OrphanRepo:
+    """Cross-entity orphan-assignment detection for AD3.
+
+    Runs the canonical contract query (increment-2B-api-contracts.md AD3):
+    an entity is orphaned when its assignee's status is not eligible
+    (NOT IN ('active','active_pending')) or the assignee holds no
+    user_scopes row for the entity's scope_id. Unassigned entities are
+    excluded by SQL NULL semantics, matching the contract.
+    """
+
+    def __init__(self, db: DatabaseConnector) -> None:
+        self._db = db
+
+    async def orphan_assignments(self, conn: asyncpg.Connection | None = None) -> list[dict[str, Any]]:
+        rows = await _fetch_all(self._db, """
+            SELECT 'alert' AS entity_type, a.alert_id AS entity_id, a.title, a.status,
+                   a.assigned_to AS assigned_user_id, u.status AS assigned_user_status
+            FROM alerts a
+            LEFT JOIN users u ON u.user_id = a.assigned_to
+            WHERE a.assigned_to IN (
+                    SELECT user_id FROM users WHERE status NOT IN ($1, $2))
+               OR a.assigned_to NOT IN (
+                    SELECT user_id FROM user_scopes WHERE scope_id = a.scope_id)
+            UNION ALL
+            SELECT 'investigation', i.investigation_id, i.title, i.status,
+                   i.assigned_to, u.status
+            FROM investigations i
+            LEFT JOIN users u ON u.user_id = i.assigned_to
+            WHERE i.assigned_to IN (
+                    SELECT user_id FROM users WHERE status NOT IN ($1, $2))
+               OR i.assigned_to NOT IN (
+                    SELECT user_id FROM user_scopes WHERE scope_id = i.scope_id)
+            UNION ALL
+            SELECT 'compliance_case', c.case_id, c.title, c.status,
+                   c.assigned_to, u.status
+            FROM compliance_cases c
+            LEFT JOIN users u ON u.user_id = c.assigned_to
+            WHERE c.assigned_to IN (
+                    SELECT user_id FROM users WHERE status NOT IN ($1, $2))
+               OR c.assigned_to NOT IN (
+                    SELECT user_id FROM user_scopes WHERE scope_id = c.scope_id)
+            ORDER BY entity_type, entity_id
+        """, [ORPHAN_ELIGIBLE_STATUSES[0], ORPHAN_ELIGIBLE_STATUSES[1]], conn)
+        return rows
 
 
 # ── API Idempotency Repository ─────────────────────────────────────────────────

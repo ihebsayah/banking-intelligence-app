@@ -24,7 +24,8 @@ COMPLIANCE = ApplicationUser(user_id="comp1", role="compliance", permissions=[
 ADMIN = ApplicationUser(user_id="admin1", role="admin", permissions=[
     "comment:read", "comment:redact", "comment:view_metadata",
     "timeline:read", "notification:read", "notification:update",
-    "case:read",
+    "case:read", "admin:outbox_monitor", "admin:outbox_retry",
+    "admin:orphan_monitor",
 ], scopes=["hq_main"])
 NO_COMMENT_PERM = ApplicationUser(user_id="none1", role="analyst", permissions=[
     "timeline:read", "alert:read_assigned",
@@ -135,3 +136,56 @@ class TestNotificationActions:
         res = Resource(id="x", status="unread", entity_type="notification")
         with pytest.raises(PermissionDeniedError):
             await authorise(user, "notification:read", res)
+
+
+class TestAdminOutboxActions:
+    def _resource(self) -> Resource:
+        return Resource(id="outbox", status="active", entity_type="audit_outbox")
+
+    @pytest.mark.asyncio
+    async def test_monitor_allowed_for_admin(self):
+        await authorise(ADMIN, "admin:outbox_monitor", self._resource())
+
+    @pytest.mark.asyncio
+    async def test_retry_allowed_for_admin(self):
+        await authorise(ADMIN, "admin:outbox_retry", self._resource())
+
+    @pytest.mark.asyncio
+    async def test_retry_denied_without_permission(self):
+        with pytest.raises(PermissionDeniedError):
+            await authorise(COMPLIANCE, "admin:outbox_retry", self._resource())
+
+
+class TestAdminOrphanActions:
+    def _resource(self) -> Resource:
+        return Resource(id="orphan-assignments", status="active",
+                        entity_type="orphan_assignment")
+
+    @pytest.mark.asyncio
+    async def test_monitor_allowed_for_admin(self):
+        await authorise(ADMIN, "admin:orphan_monitor", self._resource())
+
+    @pytest.mark.asyncio
+    async def test_monitor_denied_for_analyst(self):
+        with pytest.raises(PermissionDeniedError):
+            await authorise(ANALYST, "admin:orphan_monitor", self._resource())
+
+    @pytest.mark.asyncio
+    async def test_monitor_denied_for_compliance(self):
+        with pytest.raises(PermissionDeniedError):
+            await authorise(COMPLIANCE, "admin:orphan_monitor", self._resource())
+
+    @pytest.mark.asyncio
+    async def test_monitor_denied_for_manager(self):
+        manager = ApplicationUser(user_id="m1", role="manager", permissions=[
+            "read:branch_data",
+        ], scopes=["hq_main"])
+        with pytest.raises(PermissionDeniedError):
+            await authorise(manager, "admin:orphan_monitor", self._resource())
+
+    @pytest.mark.asyncio
+    async def test_monitor_denied_for_system(self):
+        system = ApplicationUser(user_id="system_001", role="system",
+                                 permissions=[], scopes=[])
+        with pytest.raises(PermissionDeniedError):
+            await authorise(system, "admin:orphan_monitor", self._resource())

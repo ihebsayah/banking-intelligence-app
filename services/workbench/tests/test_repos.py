@@ -15,7 +15,7 @@ from workbench.repos import (
     AlertRepo, InvestigationRepo, CaseRepo, DecisionRepo,
     InfoRequestRepo, ApprovalRepo, ApprovalDecisionRepo, CommentRepo,
     TimelineRepo, NotificationRepo, AssignmentHistoryRepo, OutboxRepo,
-    _fetch_one, _fetch_all, _execute,
+    OrphanRepo, _fetch_one, _fetch_all, _execute,
 )
 
 NOW = datetime.now(timezone.utc)
@@ -538,6 +538,72 @@ class TestOutboxRepo:
         with patch("workbench.repos._fetch_all", mock_fetch):
             stuck = await OutboxRepo(mock_db).reconcile_stuck(stale_minutes=5)
         assert isinstance(stuck, list)
+
+    @pytest.mark.asyncio
+    async def test_list_status_filter_and_order(self, mock_db):
+        mock_fetch = AsyncMock(return_value=[])
+        with patch("workbench.repos._fetch_all", mock_fetch):
+            await OutboxRepo(mock_db).list(status="poison", limit=25, offset=25)
+        sql = mock_fetch.call_args[0][1]
+        assert "WHERE status=$1" in sql
+        assert "ORDER BY created_at DESC" in sql
+        assert "LIMIT $2 OFFSET $3" in sql
+
+    @pytest.mark.asyncio
+    async def test_count_status_filter(self, mock_db):
+        mock_fetch = AsyncMock(return_value={"cnt": 4})
+        with patch("workbench.repos._fetch_one", mock_fetch):
+            cnt = await OutboxRepo(mock_db).count(status="poison")
+        assert cnt == 4
+        assert "WHERE status=$1" in mock_fetch.call_args[0][1]
+
+    @pytest.mark.asyncio
+    async def test_retry_resets_to_pending(self, mock_db):
+        mock_exec = AsyncMock(return_value="UPDATE 1")
+        with patch("workbench.repos._execute", mock_exec):
+            await OutboxRepo(mock_db).retry(UID())
+        sql = mock_exec.call_args[0][1]
+        assert "status='pending'" in sql
+        assert "attempt_count=0" in sql
+        assert "poison_reason=NULL" in sql
+
+
+# ── Admin Orphan Repository ────────────────────────────────────────────────────
+
+class TestOrphanRepo:
+    @pytest.mark.asyncio
+    async def test_sql_covers_three_entities_and_conditions(self, mock_db):
+        mock = AsyncMock(return_value=[])
+        with patch("workbench.repos._fetch_all", mock):
+            await OrphanRepo(mock_db).orphan_assignments()
+        sql = mock.call_args[0][1]
+        assert "UNION ALL" in sql
+        assert "FROM alerts a" in sql
+        assert "FROM investigations i" in sql
+        assert "FROM compliance_cases c" in sql
+        assert sql.count("status NOT IN ($1, $2)") == 3
+        assert "user_scopes WHERE scope_id = a.scope_id" in sql
+        assert "user_scopes WHERE scope_id = i.scope_id" in sql
+        assert "user_scopes WHERE scope_id = c.scope_id" in sql
+        assert "LEFT JOIN users u ON u.user_id = a.assigned_to" in sql
+        assert "ORDER BY entity_type, entity_id" in sql
+
+    @pytest.mark.asyncio
+    async def test_no_entity_status_filter_per_contract(self, mock_db):
+        mock = AsyncMock(return_value=[])
+        with patch("workbench.repos._fetch_all", mock):
+            await OrphanRepo(mock_db).orphan_assignments()
+        sql = mock.call_args[0][1]
+        for clause in ("a.status NOT IN", "i.status NOT IN", "c.status NOT IN",
+                       "WHERE a.status", "WHERE i.status", "WHERE c.status"):
+            assert clause not in sql
+
+    @pytest.mark.asyncio
+    async def test_eligible_statuses_parameterised(self, mock_db):
+        mock = AsyncMock(return_value=[])
+        with patch("workbench.repos._fetch_all", mock):
+            await OrphanRepo(mock_db).orphan_assignments()
+        assert mock.call_args[0][2] == ["active", "active_pending"]
 
 
 # ── Model Conversion Tests ────────────────────────────────────────────────────

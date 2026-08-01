@@ -134,6 +134,7 @@ ALL_PERMISSION_CODES: frozenset[str] = frozenset({
     "timeline:read",
     "notification:read", "notification:update",
     "admin:outbox_monitor", "admin:outbox_retry",
+    "admin:orphan_monitor",
 })
 
 PROHIBITED: frozenset[tuple[str, str]] = frozenset({
@@ -299,6 +300,20 @@ TIMELINE_TRANSITIONS: Dict[str, set] = {
     "active": {"timeline:read"},
 }
 
+# Admin outbox endpoints (AD1/AD2) are admin permissions with no workflow
+# status; a synthetic "active" state runs them through authorise()'s
+# permission gate without triggering a workflow 409.
+OUTBOX_TRANSITIONS: Dict[str, set] = {
+    "active": {"admin:outbox_monitor", "admin:outbox_retry"},
+}
+
+# Admin orphan-assignment endpoint (AD3) is a read-only admin permission with
+# no workflow status; a synthetic "active" state runs it through authorise()'s
+# permission gate without triggering a workflow 409.
+ORPHAN_TRANSITIONS: Dict[str, set] = {
+    "active": {"admin:orphan_monitor"},
+}
+
 ENTITY_TRANSITIONS: Dict[str, Dict[str, set]] = {
     "alert": ALERT_TRANSITIONS,
     "investigation": INVESTIGATION_TRANSITIONS,
@@ -307,6 +322,8 @@ ENTITY_TRANSITIONS: Dict[str, Dict[str, set]] = {
     "approval_request": APPROVAL_TRANSITIONS,
     "notification": NOTIFICATION_TRANSITIONS,
     "timeline": TIMELINE_TRANSITIONS,
+    "audit_outbox": OUTBOX_TRANSITIONS,
+    "orphan_assignment": ORPHAN_TRANSITIONS,
 }
 
 
