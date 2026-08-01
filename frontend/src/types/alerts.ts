@@ -116,3 +116,76 @@ export interface ApprovalRequestListResponse {
   page_size: number;
   items: ApprovalRequest[];
 }
+
+// ── Notification (N1-N3) ───────────────────────────────────────────────────
+// Wire shape mirrors services/workbench/schemas/notifications.py exactly.
+
+export interface Notification {
+  notification_id: string;
+  user_id: string;
+  notification_type: string;
+  title: string;
+  body: string;
+  entity_type?: string | null;
+  entity_id?: string | null;
+  is_read: boolean;
+  read_at?: string | null;
+  created_at: string;
+}
+
+export interface NotificationListResponse {
+  total: number;
+  page: number;
+  page_size: number;
+  unread_count: number;
+  items: Notification[];
+}
+
+export interface NotificationMutationResponse {
+  success: boolean;
+  notification: Notification;
+}
+
+export interface MarkAllReadResponse {
+  marked_read: number;
+}
+
+// ── Audit Outbox (AD1-AD2) ─────────────────────────────────────────────────
+// Wire shape mirrors services/workbench/schemas/admin_outbox.py + models.py.
+
+export type OutboxStatus = 'pending' | 'delivering' | 'delivered' | 'failed' | 'poison';
+
+export interface AuditOutboxEvent {
+  outbox_id: string;
+  idempotency_key: string;
+  event_type: string;
+  entity_type: string;
+  entity_id: string;
+  actor_id: string;
+  actor_role: string;
+  occurred_at: string;
+  payload: Record<string, unknown>;
+  payload_schema_ver: number;
+  status: string;
+  attempt_count: number;
+  last_attempt_at?: string | null;
+  next_attempt_at?: string | null;
+  last_error?: string | null;
+  locked_by?: string | null;
+  locked_at?: string | null;
+  delivered_at?: string | null;
+  poison_reason?: string | null;
+  created_at: string;
+}
+
+export interface OutboxListResponse {
+  total: number;
+  page: number;
+  page_size: number;
+  items: AuditOutboxEvent[];
+}
+
+export interface OutboxRetryResponse {
+  queued: boolean;
+  outbox_id: string;
+}

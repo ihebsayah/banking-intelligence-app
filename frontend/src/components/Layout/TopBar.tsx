@@ -8,6 +8,7 @@ import { useUIStore } from '../../stores/uiStore';
 import { Avatar } from '../ui/Avatar';
 import { RoleBadge } from '../ui/StatusBadge';
 import { env } from '../../config/env';
+import { NotificationBell } from '../notifications/NotificationBell';
 
 export function TopBar() {
   const isKeycloak = env.AUTH_PROVIDER === 'keycloak';
@@ -15,14 +16,14 @@ export function TopBar() {
 }
 
 function TopBarKeycloak() {
-  const { applicationUser, logout } = useAuth();
-  return <TopBarShell user={applicationUser} onLogout={logout} />;
+  const { applicationUser, permissions, logout } = useAuth();
+  return <TopBarShell user={applicationUser} permissions={permissions} onLogout={logout} />;
 }
 
 function TopBarLegacy() {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
-  return <TopBarShell user={user} onLogout={() => { logout(); navigate('/login', { replace: true }); }} />;
+  return <TopBarShell user={user} permissions={user?.permissions} onLogout={() => { logout(); navigate('/login', { replace: true }); }} />;
 }
 
 interface TopBarUser {
@@ -31,7 +32,7 @@ interface TopBarUser {
   role: string;
 }
 
-function TopBarShell({ user, onLogout }: { user: TopBarUser | null; onLogout: () => void }) {
+function TopBarShell({ user, permissions, onLogout }: { user: TopBarUser | null; permissions?: string[]; onLogout: () => void }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
@@ -76,6 +77,9 @@ function TopBarShell({ user, onLogout }: { user: TopBarUser | null; onLogout: ()
           <Command size={13} />
           <span className="hidden md:inline font-mono" style={{ color: 'var(--text-subtle)' }}>⌘K</span>
         </button>
+
+        {/* Notification bell */}
+        <NotificationBell permissions={permissions} />
 
         {/* Theme switch */}
         <button

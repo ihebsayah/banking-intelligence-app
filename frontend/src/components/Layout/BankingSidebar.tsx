@@ -38,6 +38,7 @@ const NAV_ITEMS = [
   { to: '/workbench/cases', icon: Scale,           label: 'Cases',          roles: ['analyst', 'compliance', 'admin'] },
   { to: '/workbench/information-requests', icon: MessageSquare, label: 'Information Requests', roles: ['analyst', 'compliance', 'admin'] },
   { to: '/workbench/approvals', icon: ClipboardCheck, label: 'Approvals', roles: ['analyst', 'compliance', 'admin'] },
+  { to: '/workbench/admin/outbox', icon: FileText, label: 'Outbox Monitor', roles: ['admin'] },
   { to: '/compliance',      icon: Shield,           label: 'Compliance',     roles: ['compliance', 'manager', 'admin'] },
   { to: '/reports',         icon: FileText,        label: 'Reports',        roles: ['manager', 'admin'] },
   { to: '/admin',           icon: Settings2,       label: 'Admin',          roles: ['admin'] },

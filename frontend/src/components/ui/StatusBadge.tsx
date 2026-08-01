@@ -1,12 +1,13 @@
 import { clsx } from 'clsx';
 
-type Variant = 'blue' | 'green' | 'red' | 'yellow' | 'purple' | 'gray';
+type Variant = 'blue' | 'green' | 'red' | 'yellow' | 'orange' | 'purple' | 'gray';
 
 const variantStyles: Record<Variant, { bg: string; color: string; border: string }> = {
   blue:   { bg: 'rgba(37,99,235,0.1)',   color: 'var(--accent-blue)',  border: 'rgba(37,99,235,0.2)' },
   green:  { bg: 'rgba(22,163,74,0.1)',   color: 'var(--accent-green)', border: 'rgba(22,163,74,0.2)' },
   red:    { bg: 'rgba(220,38,38,0.1)',   color: 'var(--accent-red)',   border: 'rgba(220,38,38,0.2)' },
   yellow: { bg: 'rgba(217,119,6,0.1)',   color: 'var(--accent-amber)', border: 'rgba(217,119,6,0.2)' },
+  orange: { bg: 'rgba(234,88,12,0.1)',   color: 'var(--accent-orange)',border: 'rgba(234,88,12,0.2)' },
   purple: { bg: 'rgba(124,58,237,0.1)',  color: 'var(--accent-purple)',border: 'rgba(124,58,237,0.2)' },
   gray:   { bg: 'var(--bg-tertiary)',     color: 'var(--text-muted)',   border: 'var(--bg-border)' },
 };
