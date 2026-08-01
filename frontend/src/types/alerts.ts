@@ -94,6 +94,25 @@ export interface ApprovalRequest {
 
 export interface ApprovalRequestMutationResponse {
   success: boolean;
-  approval_request: ApprovalRequest;
+  approval_request: ApprovalRequestDetail;
   version: number;
+}
+
+export interface ApprovalDecision {
+  approval_decision_id: string;
+  approver_id: string;
+  decision: string;
+  rationale?: string | null;
+  decided_at: string;
+}
+
+export interface ApprovalRequestDetail extends ApprovalRequest {
+  decisions: ApprovalDecision[];
+}
+
+export interface ApprovalRequestListResponse {
+  total: number;
+  page: number;
+  page_size: number;
+  items: ApprovalRequest[];
 }
