@@ -32,6 +32,7 @@ export const authApi = {
         bank_id: 'default',
         created_at: new Date().toISOString(),
         last_login: new Date().toISOString(),
+        permissions: [],
       },
     };
   },

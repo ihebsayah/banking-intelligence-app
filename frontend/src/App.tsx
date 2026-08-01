@@ -22,6 +22,8 @@ import { KpiPage } from './pages/KpiPage';
 import { KpiGovernancePage } from './pages/KpiGovernancePage';
 import { RiskPage } from './pages/RiskPage';
 import { CompliancePage } from './pages/CompliancePage';
+import { AlertQueuePage } from './components/alerts/AlertQueuePage';
+import { AlertDetailPage } from './components/alerts/AlertDetailPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { AdminPage } from './pages/AdminPage';
 import { ProfilePage } from './pages/ProfilePage';
@@ -88,6 +90,8 @@ function AppShell() {
             <Route path="/kpi"             element={<ProtectedRoute><KpiPage /></ProtectedRoute>} />
             <Route path="/kpi-governance"  element={<ProtectedRoute requiredRole={['analyst', 'manager', 'compliance', 'admin']} requiredPermission="workbench:access"><KpiGovernancePage /></ProtectedRoute>} />
             <Route path="/risk"            element={<ProtectedRoute requiredRole={['analyst', 'manager', 'compliance', 'admin']} requiredPermission="workbench:access"><RiskPage /></ProtectedRoute>} />
+            <Route path="/workbench/alerts"        element={<ProtectedRoute requiredRole={['analyst', 'compliance', 'admin']} requiredPermission="alert:read_assigned"><AlertQueuePage /></ProtectedRoute>} />
+            <Route path="/workbench/alerts/:alertId" element={<ProtectedRoute requiredRole={['analyst', 'compliance', 'admin']} requiredPermission="alert:read_assigned"><AlertDetailPage /></ProtectedRoute>} />
             <Route path="/compliance"      element={<ProtectedRoute requiredRole={['compliance', 'manager', 'admin']} requiredPermission="workbench:access"><CompliancePage /></ProtectedRoute>} />
             <Route path="/reports"         element={<ProtectedRoute requiredRole={['manager', 'admin']} requiredPermission="workbench:access"><ReportsPage /></ProtectedRoute>} />
             <Route path="/admin"           element={<ProtectedRoute requiredRole="admin"><AdminPage /></ProtectedRoute>} />
