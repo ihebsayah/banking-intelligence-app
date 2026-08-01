@@ -13,6 +13,7 @@ import {
   Settings2,
   Shield,
   BellRing,
+  FileSearch,
   ChevronsLeft,
   ChevronsRight,
 } from 'lucide-react';
@@ -31,6 +32,7 @@ const NAV_ITEMS = [
   { to: '/kpi-governance',  icon: Shield,          label: 'KPI Governance', roles: ['analyst', 'manager', 'compliance', 'admin'] },
   { to: '/risk',            icon: ShieldAlert,     label: 'Risk Monitor',   roles: ['analyst', 'manager', 'compliance', 'admin'] },
   { to: '/workbench/alerts', icon: BellRing,       label: 'Alert Queue',    roles: ['analyst', 'compliance', 'admin'] },
+  { to: '/workbench/investigations', icon: FileSearch, label: 'Investigations', roles: ['analyst', 'compliance', 'admin'] },
   { to: '/compliance',      icon: Scale,           label: 'Compliance',     roles: ['compliance', 'manager', 'admin'] },
   { to: '/reports',         icon: FileText,        label: 'Reports',        roles: ['manager', 'admin'] },
   { to: '/admin',           icon: Settings2,       label: 'Admin',          roles: ['admin'] },

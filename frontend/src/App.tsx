@@ -24,6 +24,8 @@ import { RiskPage } from './pages/RiskPage';
 import { CompliancePage } from './pages/CompliancePage';
 import { AlertQueuePage } from './components/alerts/AlertQueuePage';
 import { AlertDetailPage } from './components/alerts/AlertDetailPage';
+import { InvestigationQueuePage } from './components/investigations/InvestigationQueuePage';
+import { InvestigationDetailPage } from './components/investigations/InvestigationDetailPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { AdminPage } from './pages/AdminPage';
 import { ProfilePage } from './pages/ProfilePage';
@@ -92,6 +94,8 @@ function AppShell() {
             <Route path="/risk"            element={<ProtectedRoute requiredRole={['analyst', 'manager', 'compliance', 'admin']} requiredPermission="workbench:access"><RiskPage /></ProtectedRoute>} />
             <Route path="/workbench/alerts"        element={<ProtectedRoute requiredRole={['analyst', 'compliance', 'admin']} requiredPermission="alert:read_assigned"><AlertQueuePage /></ProtectedRoute>} />
             <Route path="/workbench/alerts/:alertId" element={<ProtectedRoute requiredRole={['analyst', 'compliance', 'admin']} requiredPermission="alert:read_assigned"><AlertDetailPage /></ProtectedRoute>} />
+            <Route path="/workbench/investigations" element={<ProtectedRoute requiredRole={['analyst', 'compliance', 'admin']} requiredPermission="investigation:read_own"><InvestigationQueuePage /></ProtectedRoute>} />
+            <Route path="/workbench/investigations/:investigationId" element={<ProtectedRoute requiredRole={['analyst', 'compliance', 'admin']} requiredPermission="investigation:read_own"><InvestigationDetailPage /></ProtectedRoute>} />
             <Route path="/compliance"      element={<ProtectedRoute requiredRole={['compliance', 'manager', 'admin']} requiredPermission="workbench:access"><CompliancePage /></ProtectedRoute>} />
             <Route path="/reports"         element={<ProtectedRoute requiredRole={['manager', 'admin']} requiredPermission="workbench:access"><ReportsPage /></ProtectedRoute>} />
             <Route path="/admin"           element={<ProtectedRoute requiredRole="admin"><AdminPage /></ProtectedRoute>} />
