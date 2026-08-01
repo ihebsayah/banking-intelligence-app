@@ -202,7 +202,7 @@ class CaseService:
     ) -> Tuple[List[CaseResponse], int]:
         await authorise(
             user, "case:read_assigned",
-            Resource(id="", status="", entity_type="compliance_case"),
+            Resource(id="assigned", status="active", entity_type="collection"),
             self._db, RequestContext())
         cases = await CaseRepo(self._db).list(
             scope_id=scope, status=status, assigned_to=user.user_id,

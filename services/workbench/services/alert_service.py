@@ -158,7 +158,8 @@ class AlertService:
         status: Optional[str] = None, severity: Optional[str] = None,
         page: int = 1, per_page: int = 50,
     ) -> Tuple[List[AlertResponse], int]:
-        await authorise(user, "alert:read_assigned", Resource(id="", status="", entity_type="alert"),
+        await authorise(user, "alert:read_assigned",
+                        Resource(id="assigned", status="active", entity_type="collection"),
                         self._db, RequestContext())
         alerts = await AlertRepo(self._db).list(
             scope_id=scope, status=status, assigned_to=user.user_id,

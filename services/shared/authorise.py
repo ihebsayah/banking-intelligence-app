@@ -314,6 +314,18 @@ ORPHAN_TRANSITIONS: Dict[str, set] = {
     "active": {"admin:orphan_monitor"},
 }
 
+# Assigned-list reads (L1-L4) filter a collection, so no single entity instance
+# exists to carry a workflow status. A synthetic "active" state runs the four
+# list/read permissions through authorise()'s permission gate without a
+# workflow 409. Only list/read actions are present, so instance mutations stay
+# gated by the real entity's status map (an empty status still 409s).
+COLLECTION_TRANSITIONS: Dict[str, set] = {
+    "active": {
+        "alert:read_assigned", "investigation:read_own",
+        "case:read_assigned", "info_request:read_assigned",
+    },
+}
+
 ENTITY_TRANSITIONS: Dict[str, Dict[str, set]] = {
     "alert": ALERT_TRANSITIONS,
     "investigation": INVESTIGATION_TRANSITIONS,
@@ -324,6 +336,7 @@ ENTITY_TRANSITIONS: Dict[str, Dict[str, set]] = {
     "timeline": TIMELINE_TRANSITIONS,
     "audit_outbox": OUTBOX_TRANSITIONS,
     "orphan_assignment": ORPHAN_TRANSITIONS,
+    "collection": COLLECTION_TRANSITIONS,
 }
 
 

@@ -356,7 +356,7 @@ class InformationRequestService:
     ) -> Tuple[List[InformationRequestResponse], int]:
         await authorise(
             user, "info_request:read_assigned",
-            Resource(id="", status="", entity_type="information_request"),
+            Resource(id="assigned", status="active", entity_type="collection"),
             self._db, RequestContext())
         limit = min(per_page, 100)
         scopes = user.scopes or [scope]

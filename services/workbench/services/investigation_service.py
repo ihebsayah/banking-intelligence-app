@@ -172,7 +172,7 @@ class InvestigationService:
     ) -> Tuple[List[InvestigationResponse], int]:
         await authorise(
             user, "investigation:read_own",
-            Resource(id="", status="", entity_type="investigation"),
+            Resource(id="assigned", status="active", entity_type="collection"),
             self._db, RequestContext())
         investigations = await InvestigationRepo(self._db).list(
             scope_id=scope, status=status, assigned_to=user.user_id,
