@@ -83,8 +83,13 @@ async def expire_due(db: DatabaseConnector, batch_size: int = DEFAULT_BATCH_SIZE
 
 async def main_loop(interval_seconds: int = DEFAULT_INTERVAL_SECONDS,
                     batch_size: int = DEFAULT_BATCH_SIZE) -> None:
-    settings = get_settings()
-    db = DatabaseConnector(settings.DATABASE_URL)
+    db_url = os.environ.get(
+        "INTEGRATION_DATABASE_URL",
+        os.environ.get("DATABASE_URL", ""),
+    )
+    if not db_url:
+        raise RuntimeError("INTEGRATION_DATABASE_URL or DATABASE_URL not set")
+    db = DatabaseConnector(db_url)
     await db.initialize()
     logger.info("Approval expiry worker starting", extra={
         "interval_seconds": interval_seconds, "batch_size": batch_size,

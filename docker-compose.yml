@@ -734,11 +734,113 @@ services:
       start_period: 60s
     command: serve
 
+  # ============================================================================
+  # INTEGRATION DATABASE (for Workbench)
+  # ============================================================================
+
+  postgres-integration:
+    container_name: banking_postgres_integration
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_INTEGRATION_DB:-banking_integration}
+      POSTGRES_USER: ${POSTGRES_INTEGRATION_USER:-integration_user}
+      POSTGRES_PASSWORD: ${POSTGRES_INTEGRATION_PASSWORD:-integrationpass123}
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres_integration_data:/var/lib/postgresql/data
+    networks:
+      - banking-network
+    healthcheck:
+      test:
+        ["CMD-SHELL", "pg_isready -U ${POSTGRES_INTEGRATION_USER:-integration_user} -d ${POSTGRES_INTEGRATION_DB:-banking_integration}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================================
+  # WORKBENCH SERVICE & BACKGROUND WORKERS
+  # ============================================================================
+
+  workbench:
+    container_name: banking_workbench
+    build:
+      context: ./services/workbench
+    working_dir: /app/services
+    restart: unless-stopped
+    volumes:
+      - ./services:/app/services
+    ports:
+      - "8014:8014"
+    environment:
+      - PYTHONPATH=/app/services
+      - INTEGRATION_DATABASE_URL=postgresql://${POSTGRES_INTEGRATION_USER:-integration_user}:${POSTGRES_INTEGRATION_PASSWORD:-integrationpass123}@postgres-integration:5432/${POSTGRES_INTEGRATION_DB:-banking_integration}
+      - AUDIT_AGENT_URL=http://audit-agent:8008
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    depends_on:
+      postgres-integration:
+        condition: service_healthy
+      audit-agent:
+        condition: service_healthy
+    networks:
+      - banking-network
+    healthcheck:
+      test:
+        ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8014/health')\" || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  expiry-worker:
+    container_name: banking_expiry_worker
+    build:
+      context: ./services/workbench
+    working_dir: /app/services
+    restart: unless-stopped
+    volumes:
+      - ./services:/app/services
+    environment:
+      - PYTHONPATH=/app/services
+      - INTEGRATION_DATABASE_URL=postgresql://${POSTGRES_INTEGRATION_USER:-integration_user}:${POSTGRES_INTEGRATION_PASSWORD:-integrationpass123}@postgres-integration:5432/${POSTGRES_INTEGRATION_DB:-banking_integration}
+      - AUDIT_AGENT_URL=http://audit-agent:8008
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    depends_on:
+      postgres-integration:
+        condition: service_healthy
+    networks:
+      - banking-network
+    command: ["python", "-m", "workbench.expiry_worker"]
+
+  outbox-worker:
+    container_name: banking_outbox_worker
+    build:
+      context: ./services/workbench
+    working_dir: /app/services
+    restart: unless-stopped
+    volumes:
+      - ./services:/app/services
+    environment:
+      - PYTHONPATH=/app/services
+      - INTEGRATION_DATABASE_URL=postgresql://${POSTGRES_INTEGRATION_USER:-integration_user}:${POSTGRES_INTEGRATION_PASSWORD:-integrationpass123}@postgres-integration:5432/${POSTGRES_INTEGRATION_DB:-banking_integration}
+      - AUDIT_AGENT_URL=http://audit-agent:8008
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    depends_on:
+      postgres-integration:
+        condition: service_healthy
+      audit-agent:
+        condition: service_healthy
+    networks:
+      - banking-network
+    command: ["python", "-m", "workbench.outbox_worker"]
+
 volumes:
   postgres_main_data:
   postgres_audit_data:
   postgres_embeddings_data:
   postgres_keycloak_data:
+  postgres_integration_data:
   redis_data:
   ollama_data:
   banking_secrets_volume:

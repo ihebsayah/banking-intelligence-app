@@ -93,8 +93,13 @@ async def run_cycle(repo: OutboxRepo, audit_url: str, max_attempts: int = _DEFAU
 async def main_loop(poll_interval: int = _DEFAULT_POLL_INTERVAL,
                     max_attempts: int = _DEFAULT_MAX_ATTEMPTS,
                     stale_minutes: int = _DEFAULT_STALE_MINUTES) -> None:
-    settings = get_settings()
-    db = DatabaseConnector(settings.DATABASE_URL)
+    db_url = os.environ.get(
+        "INTEGRATION_DATABASE_URL",
+        os.environ.get("DATABASE_URL", ""),
+    )
+    if not db_url:
+        raise RuntimeError("INTEGRATION_DATABASE_URL or DATABASE_URL not set")
+    db = DatabaseConnector(db_url)
     await db.initialize()
     repo = OutboxRepo(db)
 

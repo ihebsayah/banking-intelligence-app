@@ -50,12 +50,15 @@ def _assert_integration_database(url: str) -> None:
             "suite must run against the dedicated integration database."
         )
     parsed = urlparse(url)
-    port = parsed.port or 5432
-    if port == 5432:
+    # Accept any database URL that is NOT the main/dev database.
+    # The main dev DB is identified by its database name 'banking_dev'
+    # (not by port, since internal Docker ports differ from host ports).
+    db_name = parsed.path.lstrip("/")
+    if db_name in ("banking_dev", "banking"):
         raise RuntimeError(
             f"Refusing to serve the 2B.17b scenario suite against the "
             f"main/dev database ({url}). INTEGRATION_DATABASE_URL must point "
-            f"at the integration database (port 5435)."
+            f"at the integration database."
         )
 
 
