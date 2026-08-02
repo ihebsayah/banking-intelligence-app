@@ -34,6 +34,8 @@ def run_migrations_online() -> None:
     # alembic.ini uses ${DATABASE_URL}; alembic's Config does not expand env
     # vars, so expand them here (and in offline mode below via expandvars).
     url = os.path.expandvars(config.get_main_option("sqlalchemy.url"))
+    if not url:
+        raise ValueError("sqlalchemy.url is not set in alembic.ini or environment")
     connectable = create_engine(url, poolclass=pool.NullPool)
     with connectable.connect() as connection:
         context.configure(

@@ -1,0 +1,37 @@
+# docker-compose.integration.yml
+# Dedicated PostgreSQL service for integration tests.
+# Runs on port 5435 to avoid conflicts with development databases.
+
+version: "3.8"
+
+services:
+  postgres-integration:
+    container_name: banking_postgres_integration
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_INTEGRATION_DB:-banking_integration}
+      POSTGRES_USER: ${POSTGRES_INTEGRATION_USER:-integration_user}
+      POSTGRES_PASSWORD: ${POSTGRES_INTEGRATION_PASSWORD:-integrationpass123}
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres_integration_data:/var/lib/postgresql/data
+    networks:
+      - banking-network
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_INTEGRATION_USER:-integration_user} -d ${POSTGRES_INTEGRATION_DB:-banking_integration}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_integration_data:
+
+networks:
+  banking-network:
+    driver: bridge

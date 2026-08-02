@@ -135,7 +135,20 @@ async def seeded(db):
 
 async def test_orphan_detection_real_db(db, seeded):
     rows = await OrphanRepo(db).orphan_assignments()
-    got = {(r["entity_type"], str(r["entity_id"])) for r in rows}
+    # Scope the orphan assertions to this test's own seeded rows (by
+    # entity_type + entity_id), since the shared integration DB may contain
+    # orphan rows seeded by other tests.
+    seeded = set()
+    for eid, *_ in ALERTS:
+        seeded.add(("alert", eid))
+    for eid, *_ in INVESTIGATIONS:
+        seeded.add(("investigation", eid))
+    for eid, *_ in CASES:
+        seeded.add(("compliance_case", eid))
+    got = {
+        (r["entity_type"], str(r["entity_id"])) for r in rows
+        if (r["entity_type"], str(r["entity_id"])) in seeded
+    }
     expected = {
         ("alert", "22222222-2222-2222-2222-222222222222"),
         ("alert", "33333333-3333-3333-3333-333333333333"),
@@ -146,6 +159,7 @@ async def test_orphan_detection_real_db(db, seeded):
     assert got == expected, got
 
     valid = {(r["entity_type"], str(r["entity_id"])) for r in rows if
+             (r["entity_type"], str(r["entity_id"])) in seeded and
              r["entity_id"] in ("11111111-1111-1111-1111-111111111111",
                                 "77777777-7777-7777-7777-777777777777",
                                 "99999999-9999-9999-9999-999999999999")}
@@ -156,7 +170,8 @@ async def test_orphan_detection_real_db(db, seeded):
     assert by_id["66666666-6666-6666-6666-666666666666"]["assigned_user_status"] == "active"
     assert by_id["66666666-6666-6666-6666-666666666666"]["title"] == "scope orphan"
 
-    ids = [str(r["entity_id"]) for r in rows if r["entity_type"] == "alert"]
+    ids = [str(r["entity_id"]) for r in rows if r["entity_type"] == "alert"
+           and (r["entity_type"], str(r["entity_id"])) in seeded]
     assert ids == sorted(ids)
 
 
