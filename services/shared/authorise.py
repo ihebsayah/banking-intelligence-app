@@ -163,7 +163,7 @@ OWNERSHIP_ACTIONS: frozenset[str] = frozenset({
     "alert:acknowledge", "alert:dismiss", "alert:investigate",
     "investigation:update", "investigation:modify_findings",
     "investigation:transition",
-    "case:transition", "case:decision",
+    "case:transition", "case:decision", "case:close",
     "info_request:create", "info_request:respond",
 })
 
@@ -218,8 +218,8 @@ ALERT_TRANSITIONS: Dict[str, set] = {
     "assigned": {"alert:acknowledge", "alert:assign", "alert:read_assigned", "alert:read"} | COMMENT_ACTIONS,
     "acknowledged": {"alert:investigate", "alert:dismiss", "alert:assign", "alert:read_assigned", "alert:read", "approval:request"} | COMMENT_ACTIONS,
     "under_investigation": {"alert:transition", "alert:assign", "alert:read_assigned", "alert:read", "approval:request"} | COMMENT_ACTIONS,
-    "resolved": {"alert:read"} | COMMENT_ACTIONS,
-    "dismissed": {"alert:read"} | COMMENT_ACTIONS,
+    "resolved": {"alert:assign", "alert:read"} | COMMENT_ACTIONS,
+    "dismissed": {"alert:assign", "alert:read"} | COMMENT_ACTIONS,
 }
 
 INVESTIGATION_TRANSITIONS: Dict[str, set] = {
@@ -228,8 +228,8 @@ INVESTIGATION_TRANSITIONS: Dict[str, set] = {
     "active": {"investigation:update", "investigation:modify_findings",
                "investigation:transition", "investigation:assign",
                "investigation:read_own", "investigation:read"} | COMMENT_ACTIONS,
-    "awaiting_information": {"investigation:read_own", "investigation:read",
-                             "investigation:assign"} | COMMENT_ACTIONS,
+    "awaiting_information": {"investigation:transition", "investigation:read_own",
+                             "investigation:read", "investigation:assign"} | COMMENT_ACTIONS,
     "submitted": {"investigation:review", "investigation:assign",
                   "investigation:read_own", "investigation:read"} | COMMENT_ACTIONS,
     "returned": {"investigation:update", "investigation:modify_findings",
@@ -248,11 +248,11 @@ CASE_TRANSITIONS: Dict[str, set] = {
                      "info_request:create",
                      "case:read_assigned", "case:read",
                      "info_request:read_assigned", "info_request:read"} | COMMENT_ACTIONS,
-    "awaiting_information": {"case:read_assigned", "case:read",
+    "awaiting_information": {"case:transition", "case:read_assigned", "case:read",
                              "info_request:read_assigned", "info_request:read"} | COMMENT_ACTIONS,
-    "decision_pending": {"case:transition", "case:read_assigned", "case:read",
-                         "info_request:read_assigned", "info_request:read",
-                         "approval:request"} | COMMENT_ACTIONS,
+    "decision_pending": {"case:decision", "case:transition", "case:read_assigned", "case:read",
+                          "info_request:read_assigned", "info_request:read",
+                          "approval:request"} | COMMENT_ACTIONS,
     "awaiting_compliance_action": {"case:transition", "case:read_assigned", "case:read",
                                    "info_request:read_assigned", "info_request:read"} | COMMENT_ACTIONS,
     "resolved": {"case:transition", "case:close",

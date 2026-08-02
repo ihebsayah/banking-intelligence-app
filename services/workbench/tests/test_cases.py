@@ -914,14 +914,14 @@ class TestRouteRegistration:
         assert ("/api/v1/cases/{case_id}/transition", ("PATCH",)) in routes
         assert ("/api/v1/cases/{case_id}/decisions", ("GET",)) in routes
         assert ("/api/v1/cases/{case_id}/decisions", ("POST",)) in routes
+        assert ("/api/v1/cases/{case_id}/close", ("POST",)) in routes
+        assert ("/api/v1/cases/{case_id}/reopen", ("POST",)) in routes
 
     def test_obsolete_routes_absent(self):
         from workbench.routers.cases import router
         paths = {r.path for r in router.routes}
         assert "/api/v1/cases/{case_id}/status" not in paths
-        assert "/api/v1/cases/{case_id}/close" not in paths
-        assert "/api/v1/cases/{case_id}/reopen" not in paths
 
-    def test_exact_count_six(self):
+    def test_exact_count_eight(self):
         from workbench.routers.cases import router
-        assert len(router.routes) == 6
+        assert len(router.routes) == 8

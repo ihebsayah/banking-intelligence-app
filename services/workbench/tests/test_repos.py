@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from shared.errors import DatabaseError
+from workbench.exceptions import VersionConflict
 from workbench.models import (
     Alert, Investigation, ComplianceCase, Decision, ApprovalRequest,
     ApprovalDecision, Comment, ActivityTimelineEntry, Notification,
@@ -146,7 +147,7 @@ class TestAlertRepo:
         ))
         with patch("workbench.repos._execute", mock_exec), \
              patch("workbench.repos._fetch_one", mock_fetch):
-            with pytest.raises(DatabaseError, match="version mismatch"):
+            with pytest.raises(VersionConflict):
                 await AlertRepo(mock_db).update(a, expected_version=1)
 
     @pytest.mark.asyncio
@@ -200,7 +201,7 @@ class TestInvestigationRepo:
         ))
         with patch("workbench.repos._execute", mock_exec), \
              patch("workbench.repos._fetch_one", mock_fetch):
-            with pytest.raises(DatabaseError, match="version mismatch"):
+            with pytest.raises(VersionConflict):
                 await InvestigationRepo(mock_db).update(inv, expected_version=1)
 
 

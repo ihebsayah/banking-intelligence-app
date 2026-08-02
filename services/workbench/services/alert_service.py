@@ -182,7 +182,7 @@ class AlertService:
             await authorise(user, "alert:read_assigned", _resource_from_alert(alert),
                             self._db, RequestContext())
             return AlertResponse(**alert.model_dump())
-        except (AuthOwnershipDenied, AuthScopeDenied):
+        except (AuthOwnershipDenied, AuthScopeDenied, AuthPermissionDenied):
             pass
 
         try:
@@ -299,11 +299,11 @@ class AlertService:
             if alert is None:
                 raise ResourceNotFound("Alert", alert_id)
 
-            await authorise(user, "alert:acknowledge", _resource_from_alert(alert),
-                            self._db, RequestContext(request_id=request_id))
-
             if alert.status == "acknowledged":
                 return MutationResponse(alert=AlertResponse(**alert.model_dump()), version=alert.version)
+
+            await authorise(user, "alert:acknowledge", _resource_from_alert(alert),
+                            self._db, RequestContext(request_id=request_id))
 
             if alert.status != "assigned":
                 raise InvalidTransition(alert.status, "acknowledge")

@@ -5,12 +5,13 @@ a UnitOfWork. Without a connection, methods auto-acquire from the pool.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple, TypeVar
 
 import asyncpg
 from shared.database import DatabaseConnector
 from shared.errors import DatabaseError
+from workbench.exceptions import VersionConflict
 
 from .models import (
     ActivityTimelineEntry, Alert, ApprovalDecision, ApprovalRequest,
@@ -112,7 +113,7 @@ class AlertRepo:
 
     async def update(self, alert: Alert, expected_version: int, conn: asyncpg.Connection | None = None) -> Alert | None:
         if alert.version != expected_version + 1:
-            raise DatabaseError("Optimistic lock: version mismatch")
+            raise VersionConflict()
         r = await _execute(self._db, """
             UPDATE alerts SET alert_type=$1, severity=$2, title=$3, description=$4,
                 source_rule_type=$5, source_rule_id=$6, related_entity_type=$7,
@@ -134,7 +135,7 @@ class AlertRepo:
             existing = await self.fetch_by_id(alert.alert_id, conn)
             if existing is None:
                 return None  # not found
-            raise DatabaseError("Optimistic lock: stale version")
+            raise VersionConflict()
         return alert
 
 
@@ -185,7 +186,7 @@ class InvestigationRepo:
 
     async def update(self, inv: Investigation, expected_version: int, conn: asyncpg.Connection | None = None) -> Investigation | None:
         if inv.version != expected_version + 1:
-            raise DatabaseError("Optimistic lock: version mismatch")
+            raise VersionConflict()
         r = await _execute(self._db, """
             UPDATE investigations SET title=$1, description=$2, alert_id=$3, scope_id=$4,
                 status=$5, priority=$6, assigned_to=$7, findings_text=$8, findings_refs=$9::jsonb,
@@ -203,7 +204,7 @@ class InvestigationRepo:
             existing = await self.fetch_by_id(inv.investigation_id, conn)
             if existing is None:
                 return None
-            raise DatabaseError("Optimistic lock: stale version")
+            raise VersionConflict()
         return inv
 
 
@@ -257,7 +258,7 @@ class CaseRepo:
 
     async def update(self, case: ComplianceCase, expected_version: int, conn: asyncpg.Connection | None = None) -> ComplianceCase | None:
         if case.version != expected_version + 1:
-            raise DatabaseError("Optimistic lock: version mismatch")
+            raise VersionConflict()
         r = await _execute(self._db, """
             UPDATE compliance_cases SET title=$1, description=$2, alert_id=$3,
                 investigation_id=$4, scope_id=$5, status=$6, priority=$7, risk_level=$8,
@@ -279,7 +280,7 @@ class CaseRepo:
             existing = await self.fetch_by_id(case.case_id, conn)
             if existing is None:
                 return None
-            raise DatabaseError("Optimistic lock: stale version")
+            raise VersionConflict()
         return case
 
 
@@ -312,7 +313,7 @@ class DecisionRepo:
 
     async def update(self, d: Decision, expected_version: int, conn: asyncpg.Connection | None = None) -> Decision | None:
         if d.version != expected_version + 1:
-            raise DatabaseError("Optimistic lock: version mismatch")
+            raise VersionConflict()
         r = await _execute(self._db, """
             UPDATE decisions SET decision_type=$1, rationale=$2, decided_by=$3,
                 decided_at=$4, is_final=$5, supersedes_decision_id=$6,
@@ -327,7 +328,7 @@ class DecisionRepo:
             existing = await self.fetch_by_id(d.decision_id, conn)
             if existing is None:
                 return None
-            raise DatabaseError("Optimistic lock: stale version")
+            raise VersionConflict()
         return d
 
 
@@ -414,7 +415,7 @@ class InfoRequestRepo:
 
     async def update(self, ir: InformationRequest, expected_version: int, conn: asyncpg.Connection | None = None) -> InformationRequest | None:
         if ir.version != expected_version + 1:
-            raise DatabaseError("Optimistic lock: version mismatch")
+            raise VersionConflict()
         r = await _execute(self._db, """
             UPDATE information_requests SET case_id=$1, investigation_id=$2,
                 created_by=$3, assigned_to=$4, question=$5, due_date=$6, status=$7,
@@ -435,7 +436,7 @@ class InfoRequestRepo:
             existing = await self.fetch_by_id(ir.ir_id, conn)
             if existing is None:
                 return None
-            raise DatabaseError("Optimistic lock: stale version")
+            raise VersionConflict()
         return ir
 
 
@@ -646,7 +647,7 @@ class CommentRepo:
 
     async def update(self, c: Comment, expected_version: int, conn: asyncpg.Connection | None = None) -> Comment | None:
         if c.version != expected_version + 1:
-            raise DatabaseError("Optimistic lock: version mismatch")
+            raise VersionConflict()
         r = await _execute(self._db, """
             UPDATE comments SET content=$1, is_internal=$2, is_redacted=$3,
                 redacted_at=$4, redacted_by=$5, original_content_hash=$6,
@@ -661,7 +662,7 @@ class CommentRepo:
             existing = await self.fetch_by_id(c.comment_id, conn)
             if existing is None:
                 return None
-            raise DatabaseError("Optimistic lock: stale version")
+            raise VersionConflict()
         return c
 
 
@@ -893,7 +894,7 @@ class OutboxRepo:
         if attempt >= max_attempts:
             await _execute(self._db, """
                 UPDATE audit_outbox SET status='poison', last_error=$1,
-                    poison_reason=$2, next_attempt_at=NULL
+                    poison_reason=$2
                 WHERE outbox_id=$3
             """, [error, f"Failed after {attempt} attempts", outbox_id], conn)
         else:
@@ -901,7 +902,7 @@ class OutboxRepo:
                 UPDATE audit_outbox SET last_error=$1, status='failed',
                     next_attempt_at=$2
                 WHERE outbox_id=$3
-            """, [error, _now().replace(second=delay), outbox_id], conn)
+            """, [error, _now() + timedelta(seconds=delay), outbox_id], conn)
 
     async def fetch_by_id(self, outbox_id: str, conn: asyncpg.Connection | None = None) -> AuditOutboxEvent | None:
         r = await _fetch_one(self._db, "SELECT * FROM audit_outbox WHERE outbox_id = $1", [outbox_id], conn)

@@ -54,6 +54,19 @@ class RecordDecisionRequest(BaseModel):
     expected_version: int = Field(ge=1)
 
 
+class CloseCaseRequest(BaseModel):
+    closure_reason: Optional[str] = None
+    resolution: Optional[str] = None
+    expected_version: int = Field(ge=1)
+    approval_request_id: Optional[str] = None
+
+
+class ReopenCaseRequest(BaseModel):
+    reopen_reason: str = Field(min_length=1)
+    expected_version: int = Field(ge=1)
+    approval_request_id: Optional[str] = Field(...)
+
+
 class CaseResponse(BaseModel):
     case_id: str
     title: str
@@ -114,6 +127,21 @@ class CaseAdminView(BaseModel):
     closed_at: Optional[datetime] = None
     closed_by: Optional[str] = None
     reopen_reason: Optional[str] = None
+    version: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class CaseAdminReadResponse(BaseModel):
+    """Metadata-only case view for cross-scope admin reads (XA05)."""
+    case_id: str
+    title: str
+    scope_id: str
+    status: str
+    priority: str
+    risk_level: Optional[str] = None
+    assigned_to: Optional[str] = None
+    created_by: str
     version: int
     created_at: datetime
     updated_at: datetime

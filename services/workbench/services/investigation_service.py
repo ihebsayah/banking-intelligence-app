@@ -17,7 +17,7 @@ from shared.database import DatabaseConnector
 
 from workbench.exceptions import (
     IdempotencyMismatch, InvalidAssignee, InvalidTransition,
-    ResourceNotFound, VersionConflict,
+    ResourceNotFound, VersionConflict, WorkbenchError,
 )
 from workbench.models import (
     ActivityTimelineEntry, AssignmentHistoryEntry, AuditOutboxEvent,
@@ -192,8 +192,10 @@ class InvestigationService:
         try:
             await authorise(user, "investigation:read_own",
                             _resource_from_inv(inv), self._db, RequestContext())
+            if inv.assigned_to != user.user_id:
+                raise AuthOwnershipDenied()
             return InvestigationResponse(**inv.model_dump())
-        except (AuthOwnershipDenied, AuthScopeDenied):
+        except (AuthOwnershipDenied, AuthScopeDenied, AuthPermissionDenied):
             pass
 
         try:
@@ -300,6 +302,13 @@ class InvestigationService:
             action = TRANSITION_REQUIRED_ACTION.get((inv.status, target))
             if action is None:
                 raise InvalidTransition(inv.status, target)
+
+            if target == "submitted" and not (inv.findings_text or inv.findings_refs):
+                raise WorkbenchError(
+                    "FINDINGS_REQUIRED",
+                    "findings must be recorded before submitting the investigation",
+                    400,
+                )
 
             await authorise(user, action, _resource_from_inv(inv),
                             self._db, RequestContext(request_id=request_id))

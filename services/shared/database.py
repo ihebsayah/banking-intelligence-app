@@ -130,6 +130,7 @@ class DatabaseConnector:
         self,
         sql: str,
         params: Optional[List[Any]] = None,
+        conn: Optional["asyncpg.Connection"] = None,
     ) -> List[Dict[str, Any]]:
         """
         Execute a SELECT query and return ALL rows as dicts.
@@ -137,6 +138,8 @@ class DatabaseConnector:
         Args:
             sql:    Parameterized SQL (use $1, $2, ... placeholders).
             params: List of values to bind to placeholders.
+            conn:   Optional existing connection to run the query on (inside a
+                    transaction). A pooled connection is used when omitted.
 
         Returns:
             List of row dicts. Empty list if no rows found.
@@ -145,6 +148,9 @@ class DatabaseConnector:
         params = params or []
 
         try:
+            if conn is not None:
+                rows = await conn.fetch(sql, *params)
+                return [dict(row) for row in rows]
             async with pool.acquire() as conn:
                 rows = await conn.fetch(sql, *params)
                 return [dict(row) for row in rows]
@@ -159,6 +165,7 @@ class DatabaseConnector:
         self,
         sql: str,
         params: Optional[List[Any]] = None,
+        conn: Optional["asyncpg.Connection"] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         Execute a SELECT query and return ONE row (or None).
@@ -166,6 +173,8 @@ class DatabaseConnector:
         Args:
             sql:    Parameterized SQL.
             params: Bound values.
+            conn:   Optional existing connection to run the query on (inside a
+                    transaction). A pooled connection is used when omitted.
 
         Returns:
             Single row dict or None.
@@ -174,6 +183,9 @@ class DatabaseConnector:
         params = params or []
 
         try:
+            if conn is not None:
+                row = await conn.fetchrow(sql, *params)
+                return dict(row) if row else None
             async with pool.acquire() as conn:
                 row = await conn.fetchrow(sql, *params)
                 return dict(row) if row else None

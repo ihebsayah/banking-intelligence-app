@@ -200,7 +200,8 @@ class TestTransition:
 
     @pytest.mark.asyncio
     async def test_active_to_submitted(self, mock_db):
-        inv = make_inv(status="active", assigned_to="user1", version=2)
+        inv = make_inv(status="active", assigned_to="user1", version=2,
+                       findings_text="evidence found")
         req = TransitionInvestigationRequest(target_status="submitted", expected_version=2)
         uow_mock = make_uow_mock()
         with patch(UOW_TARGET, return_value=uow_mock), \

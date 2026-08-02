@@ -11,7 +11,8 @@ from shared.database import DatabaseConnector
 from workbench.schemas.cases import (
     AssignCaseRequest, CaseAdminResponse, CaseDecisionListResponse,
     CaseDecisionResponse, CaseListResponse, CaseResponse,
-    RecordDecisionRequest, TransitionCaseRequest,
+    CloseCaseRequest, RecordDecisionRequest, ReopenCaseRequest,
+    TransitionCaseRequest,
 )
 from workbench.services.case_service import CaseService
 
@@ -86,6 +87,30 @@ async def transition_case(
     u = _get_user(request)
     svc = _service(request)
     result = await svc.transition(u, case_id, req, x_idempotency_key, x_request_id or "")
+    return JSONResponse(content=result.model_dump(), headers={"X-Version": str(result.version)})
+
+
+@router.post("/{case_id}/close", response_model=CaseAdminResponse)
+async def close_case(
+    case_id: str, req: CloseCaseRequest, request: Request,
+    x_idempotency_key: Optional[str] = Header(None, alias="X-Idempotency-Key"),
+    x_request_id: Optional[str] = Header(None, alias="X-Request-ID"),
+):
+    u = _get_user(request)
+    svc = _service(request)
+    result = await svc.close(u, case_id, req, x_idempotency_key, x_request_id or "")
+    return JSONResponse(content=result.model_dump(), headers={"X-Version": str(result.version)})
+
+
+@router.post("/{case_id}/reopen", response_model=CaseAdminResponse)
+async def reopen_case(
+    case_id: str, req: ReopenCaseRequest, request: Request,
+    x_idempotency_key: Optional[str] = Header(None, alias="X-Idempotency-Key"),
+    x_request_id: Optional[str] = Header(None, alias="X-Request-ID"),
+):
+    u = _get_user(request)
+    svc = _service(request)
+    result = await svc.reopen(u, case_id, req, x_idempotency_key, x_request_id or "")
     return JSONResponse(content=result.model_dump(), headers={"X-Version": str(result.version)})
 
 

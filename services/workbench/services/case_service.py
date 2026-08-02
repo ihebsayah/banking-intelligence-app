@@ -17,20 +17,21 @@ from shared.database import DatabaseConnector
 from workbench.exceptions import (
     ApprovalConsumed, ApprovalRequired, IdempotencyMismatch,
     InvalidAssignee, InvalidTransition, ResourceNotFound, VersionConflict,
+    WorkbenchError,
 )
 from workbench.models import (
-    ActivityTimelineEntry, ApprovalRequest, AssignmentHistoryEntry,
+    ActivityTimelineEntry, Alert, ApprovalRequest, AssignmentHistoryEntry,
     AuditOutboxEvent, ComplianceCase, Decision, IdempotencyRecord,
     Notification,
 )
 from workbench.repos import (
-    ApprovalRepo, AssignmentHistoryRepo, CaseRepo, DecisionRepo,
-    IdempotencyRepo, NotificationRepo, OutboxRepo, TimelineRepo,
+    AlertRepo, ApprovalRepo, AssignmentHistoryRepo, CaseRepo, DecisionRepo,
+    IdempotencyRepo, InvestigationRepo, NotificationRepo, OutboxRepo, TimelineRepo,
 )
 from workbench.schemas.cases import (
-    AssignCaseRequest, CaseAdminResponse, CaseAdminView,
-    CaseDecisionResponse, CaseResponse,
-    RecordDecisionRequest, TransitionCaseRequest,
+    AssignCaseRequest, CaseAdminReadResponse, CaseAdminResponse,
+    CaseAdminView, CaseDecisionResponse, CaseResponse, CloseCaseRequest,
+    RecordDecisionRequest, ReopenCaseRequest, TransitionCaseRequest,
 )
 from workbench.uow import UnitOfWork
 
@@ -38,6 +39,7 @@ from workbench.uow import UnitOfWork
 ALLOWED_TRANSITIONS: Dict[str, List[str]] = {
     "assigned": ["under_review"],
     "under_review": ["decision_pending"],
+    "awaiting_information": ["under_review"],
     "decision_pending": [],
     "awaiting_compliance_action": ["resolved"],
     "resolved": [],
@@ -222,6 +224,8 @@ class CaseService:
         try:
             await authorise(user, "case:read_assigned",
                             _resource_from_case(c), self._db, RequestContext())
+            if c.assigned_to != user.user_id:
+                raise AuthOwnershipDenied()
             return CaseResponse(**c.model_dump())
         except (AuthOwnershipDenied, AuthScopeDenied, AuthPermissionDenied):
             pass
@@ -229,7 +233,13 @@ class CaseService:
         try:
             await authorise(user, "case:read",
                             _resource_from_case(c), self._db, RequestContext())
-            return CaseResponse(**c.model_dump())
+            return CaseAdminReadResponse(
+                case_id=c.case_id, title=c.title, scope_id=c.scope_id,
+                status=c.status, priority=c.priority, risk_level=c.risk_level,
+                assigned_to=c.assigned_to, created_by=c.created_by,
+                version=c.version, created_at=c.created_at,
+                updated_at=c.updated_at,
+            )
         except AuthPermissionDenied:
             raise ResourceNotFound("Case", case_id)
 
@@ -362,14 +372,18 @@ class CaseService:
             if updated is None:
                 raise VersionConflict()
 
+            resumed = old_status == "awaiting_information" and target == "under_review"
+            timeline_event = "under_review_resumed" if resumed else f"case.{target}"
+            audit_event = "case.resumed" if resumed else f"case.{target}"
+
             await TimelineRepo(self._db).insert(
                 _make_timeline("compliance_case", case_id,
-                              f"case.{target}", user.user_id,
+                              timeline_event, user.user_id,
                               {"status": old_status}, {"status": target}),
                 uow.conn)
 
             await OutboxRepo(self._db).insert(
-                _make_outbox(f"case.{target}", "compliance_case",
+                _make_outbox(audit_event, "compliance_case",
                             case_id, user.user_id, user.role,
                             {"case_id": case_id,
                              "old_status": old_status, "new_status": target}),
@@ -380,6 +394,229 @@ class CaseService:
                 version=c.version)
             await _store_idempotency(
                 IdempotencyRepo(self._db), idempotency_key, "PATCH", path,
+                req.model_dump(), 200, resp.model_dump_json(), uow.conn)
+            return resp
+
+    # ── C5 — POST /cases/{case_id}/close ──────────────────────────────────────
+
+    async def close(
+        self, user: ApplicationUser, case_id: str, req: CloseCaseRequest,
+        idempotency_key: Optional[str] = None,
+        request_id: str = "",
+    ) -> CaseAdminResponse:
+        path = f"/api/v1/cases/{case_id}/close"
+        async with UnitOfWork(self._db) as uow:
+            idem = await _check_idempotency(
+                IdempotencyRepo(self._db), idempotency_key, "POST", path,
+                req.model_dump(), uow.conn)
+            if idem:
+                return CaseAdminResponse.model_validate_json(idem[1])
+
+            c = await CaseRepo(self._db).fetch_by_id(case_id, uow.conn)
+            if c is None:
+                raise ResourceNotFound("Case", case_id)
+
+            await authorise(user, "case:close", _resource_from_case(c),
+                            self._db, RequestContext(request_id=request_id))
+
+            if c.status != "resolved":
+                raise InvalidTransition(c.status, "close")
+
+            resolution = req.resolution or c.resolution
+            if not resolution:
+                raise WorkbenchError(
+                    "RESOLUTION_REQUIRED",
+                    "resolution is required before closing the case", 400)
+
+            approval_id = None
+            if c.risk_level in ("critical", "high"):
+                if not req.approval_request_id:
+                    raise ApprovalRequired("case:close")
+                approval = await ApprovalRepo(self._db).fetch_by_id(
+                    req.approval_request_id, uow.conn)
+                if approval is None:
+                    raise ResourceNotFound("ApprovalRequest", req.approval_request_id)
+                if (approval.entity_type != "compliance_case"
+                        or approval.entity_id != case_id
+                        or approval.action_type != "case_closure_critical_high"):
+                    raise InvalidTransition(c.status, "close_approval_mismatch")
+                if approval.status != "approved":
+                    raise ApprovalRequired("case:close")
+                if approval.executed_at is not None:
+                    raise ApprovalConsumed()
+                consumed = await ApprovalRepo(self._db).consume(
+                    approval.approval_request_id, uow.conn)
+                if consumed is None:
+                    raise ApprovalConsumed()
+                approval_id = approval.approval_request_id
+
+            old_status = c.status
+            c.status = "closed"
+            c.resolution = resolution
+            c.closed_at = _now()
+            c.closed_by = user.user_id
+            c.closure_approval_id = approval_id
+            c.version += 1
+            c.updated_at = _now()
+
+            updated = await CaseRepo(self._db).update(c, req.expected_version, uow.conn)
+            if updated is None:
+                raise VersionConflict()
+
+            if c.alert_id:
+                alert = await AlertRepo(self._db).fetch_by_id(c.alert_id, uow.conn)
+                if alert is not None and alert.status == "under_investigation":
+                    old_alert_status = alert.status
+                    alert.status = "resolved"
+                    alert.resolved_at = _now()
+                    alert.resolved_by = user.user_id
+                    alert.version += 1
+                    alert.updated_at = _now()
+                    await AlertRepo(self._db).update(alert, alert.version - 1, uow.conn)
+                    await TimelineRepo(self._db).insert(
+                        _make_timeline("alert", alert.alert_id, "alert.resolved",
+                                       user.user_id,
+                                       {"status": old_alert_status},
+                                       {"status": "resolved", "case_id": case_id}),
+                        uow.conn)
+                    await OutboxRepo(self._db).insert(
+                        _make_outbox("alert.resolved", "alert", alert.alert_id,
+                                     user.user_id, user.role,
+                                     {"alert_id": alert.alert_id, "case_id": case_id}),
+                        uow.conn)
+
+            await TimelineRepo(self._db).insert(
+                _make_timeline("compliance_case", case_id, "case.closed", user.user_id,
+                               {"status": old_status}, {"status": "closed"}),
+                uow.conn)
+
+            admin_user = await _fetch_admin_for_scope(self._db, c.scope_id, uow.conn)
+            if admin_user is not None:
+                await NotificationRepo(self._db).insert(
+                    _make_notification(admin_user, "case_closed",
+                                       f"Case closed", c.title,
+                                       "compliance_case", case_id),
+                    uow.conn)
+            if c.investigation_id:
+                inv = await InvestigationRepo(self._db).fetch_by_id(
+                    c.investigation_id, uow.conn)
+                if inv is not None and inv.assigned_to:
+                    await NotificationRepo(self._db).insert(
+                        _make_notification(inv.assigned_to, "case_closed",
+                                           f"Case closed", c.title,
+                                           "compliance_case", case_id),
+                        uow.conn)
+
+            await OutboxRepo(self._db).insert(
+                _make_outbox("case.closed", "compliance_case",
+                            case_id, user.user_id, user.role,
+                            _audit_payload(
+                                "case.closed", "compliance_case", case_id,
+                                user.user_id, user.role,
+                                before={"status": old_status,
+                                        "version": req.expected_version},
+                                after={"status": "closed", "version": c.version,
+                                       "closed_by": c.closed_by,
+                                       "closure_approval_id": approval_id,
+                                       "resolution_sha256": _sha256(resolution)},
+                                request_id=request_id,
+                                metadata={"case_id": case_id})),
+                uow.conn)
+
+            resp = CaseAdminResponse(
+                case=CaseAdminView(**c.model_dump()), version=c.version)
+            await _store_idempotency(
+                IdempotencyRepo(self._db), idempotency_key, "POST", path,
+                req.model_dump(), 200, resp.model_dump_json(), uow.conn)
+            return resp
+
+    # ── C6 — POST /cases/{case_id}/reopen ─────────────────────────────────────
+
+    async def reopen(
+        self, user: ApplicationUser, case_id: str, req: ReopenCaseRequest,
+        idempotency_key: Optional[str] = None,
+        request_id: str = "",
+    ) -> CaseAdminResponse:
+        path = f"/api/v1/cases/{case_id}/reopen"
+        async with UnitOfWork(self._db) as uow:
+            idem = await _check_idempotency(
+                IdempotencyRepo(self._db), idempotency_key, "POST", path,
+                req.model_dump(), uow.conn)
+            if idem:
+                return CaseAdminResponse.model_validate_json(idem[1])
+
+            c = await CaseRepo(self._db).fetch_by_id(case_id, uow.conn)
+            if c is None:
+                raise ResourceNotFound("Case", case_id)
+
+            await authorise(user, "case:reopen", _resource_from_case(c),
+                            self._db, RequestContext(request_id=request_id))
+
+            if c.status != "closed":
+                raise InvalidTransition(c.status, "reopen")
+
+            if not req.approval_request_id:
+                raise ApprovalRequired("case:reopen")
+            approval = await ApprovalRepo(self._db).fetch_by_id(
+                req.approval_request_id, uow.conn)
+            if approval is None:
+                raise ResourceNotFound("ApprovalRequest", req.approval_request_id)
+            if (approval.entity_type != "compliance_case"
+                    or approval.entity_id != case_id
+                    or approval.action_type != "case_reopen"):
+                raise InvalidTransition(c.status, "reopen_approval_mismatch")
+            if approval.status != "approved":
+                raise ApprovalRequired("case:reopen")
+            if approval.executed_at is not None:
+                raise ApprovalConsumed()
+            consumed = await ApprovalRepo(self._db).consume(
+                approval.approval_request_id, uow.conn)
+            if consumed is None:
+                raise ApprovalConsumed()
+
+            old_status = c.status
+            c.status = "open"
+            c.closed_at = None
+            c.closed_by = None
+            c.closure_approval_id = None
+            c.reopen_reason = req.reopen_reason
+            c.version += 1
+            c.updated_at = _now()
+
+            updated = await CaseRepo(self._db).update(c, req.expected_version, uow.conn)
+            if updated is None:
+                raise VersionConflict()
+
+            await TimelineRepo(self._db).insert(
+                _make_timeline("compliance_case", case_id, "case.reopened", user.user_id,
+                               {"status": old_status}, {"status": "open"}),
+                uow.conn)
+
+            if c.assigned_to:
+                await NotificationRepo(self._db).insert(
+                    _make_notification(c.assigned_to, "case_reopened",
+                                       f"Case reopened", c.title,
+                                       "compliance_case", case_id),
+                    uow.conn)
+
+            await OutboxRepo(self._db).insert(
+                _make_outbox("case.reopened", "compliance_case",
+                            case_id, user.user_id, user.role,
+                            _audit_payload(
+                                "case.reopened", "compliance_case", case_id,
+                                user.user_id, user.role,
+                                before={"status": old_status,
+                                        "version": req.expected_version},
+                                after={"status": "open", "version": c.version,
+                                       "reopen_reason_sha256": _sha256(req.reopen_reason)},
+                                request_id=request_id,
+                                metadata={"case_id": case_id})),
+                uow.conn)
+
+            resp = CaseAdminResponse(
+                case=CaseAdminView(**c.model_dump()), version=c.version)
+            await _store_idempotency(
+                IdempotencyRepo(self._db), idempotency_key, "POST", path,
                 req.model_dump(), 200, resp.model_dump_json(), uow.conn)
             return resp
 
