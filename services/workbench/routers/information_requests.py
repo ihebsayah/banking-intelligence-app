@@ -56,7 +56,7 @@ async def create_information_request(
     u = _get_user(request)
     svc = _service(request)
     result = await svc.create(u, case_id, req, x_idempotency_key, x_request_id or "")
-    return JSONResponse(content=result.model_dump(), status_code=201,
+    return JSONResponse(content=result.model_dump(mode="json"), status_code=201,
                         headers={"X-Version": str(result.version)})
 
 
@@ -117,7 +117,7 @@ async def acknowledge_information_request(
     u = _get_user(request)
     svc = _service(request)
     result = await svc.acknowledge(u, ir_id, req, x_idempotency_key, x_request_id or "")
-    return JSONResponse(content=result.model_dump(), headers={"X-Version": str(result.version)})
+    return JSONResponse(content=result.model_dump(mode="json"), headers={"X-Version": str(result.version)})
 
 
 # ── IR5 — PATCH /information-requests/{ir_id}/respond ─────────────────────────
@@ -132,7 +132,7 @@ async def respond_information_request(
     u = _get_user(request)
     svc = _service(request)
     result = await svc.respond(u, ir_id, req, x_idempotency_key, x_request_id or "")
-    return JSONResponse(content=result.model_dump(), headers={"X-Version": str(result.version)})
+    return JSONResponse(content=result.model_dump(mode="json"), headers={"X-Version": str(result.version)})
 
 
 # ── IR6 — PATCH /information-requests/{ir_id}/accept ──────────────────────────
@@ -147,7 +147,7 @@ async def accept_information_request(
     u = _get_user(request)
     svc = _service(request)
     result = await svc.accept(u, ir_id, req, x_idempotency_key, x_request_id or "")
-    return JSONResponse(content=result.model_dump(), headers={"X-Version": str(result.version)})
+    return JSONResponse(content=result.model_dump(mode="json"), headers={"X-Version": str(result.version)})
 
 
 # ── IR7 — PATCH /information-requests/{ir_id}/return ──────────────────────────
@@ -162,7 +162,7 @@ async def return_information_request(
     u = _get_user(request)
     svc = _service(request)
     result = await svc.return_(u, ir_id, req, x_idempotency_key, x_request_id or "")
-    return JSONResponse(content=result.model_dump(), headers={"X-Version": str(result.version)})
+    return JSONResponse(content=result.model_dump(mode="json"), headers={"X-Version": str(result.version)})
 
 
 # ── IR8 — POST /information-requests/{ir_id}/cancel ───────────────────────────
@@ -177,4 +177,4 @@ async def cancel_information_request(
     u = _get_user(request)
     svc = _service(request)
     result = await svc.cancel(u, ir_id, req, x_idempotency_key, x_request_id or "")
-    return JSONResponse(content=result.model_dump(), headers={"X-Version": str(result.version)})
+    return JSONResponse(content=result.model_dump(mode="json"), headers={"X-Version": str(result.version)})

@@ -51,6 +51,7 @@ services:
       - KEYCLOAK_REALM=${KEYCLOAK_REALM:-banking-intelligence}
       - KEYCLOAK_API_CLIENT_ID=${KEYCLOAK_API_CLIENT_ID:-banking-portal-api}
       - KEYCLOAK_EXPECTED_AUDIENCE=${KEYCLOAK_EXPECTED_AUDIENCE:-banking-portal-api}
+      - WORKBENCH_URL=${WORKBENCH_URL:-http://workbench:8014}
     depends_on:
       postgres-main:
         condition: service_healthy

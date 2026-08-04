@@ -74,7 +74,7 @@ async def update_investigation(
     u = _get_user(request)
     svc = _service(request)
     result = await svc.update(u, investigation_id, req, x_idempotency_key, x_request_id or "")
-    return JSONResponse(content=result.model_dump(), headers={"X-Version": str(result.version)})
+    return JSONResponse(content=result.model_dump(mode="json"), headers={"X-Version": str(result.version)})
 
 
 @router.patch("/{investigation_id}/transition", response_model=InvestigationMutationResponse)
@@ -86,7 +86,7 @@ async def transition_investigation(
     u = _get_user(request)
     svc = _service(request)
     result = await svc.transition(u, investigation_id, req, x_idempotency_key, x_request_id or "")
-    return JSONResponse(content=result.model_dump(), headers={"X-Version": str(result.version)})
+    return JSONResponse(content=result.model_dump(mode="json"), headers={"X-Version": str(result.version)})
 
 
 @router.post("/{investigation_id}/cancel", response_model=InvestigationMutationResponse)
@@ -98,4 +98,4 @@ async def cancel_investigation(
     u = _get_user(request)
     svc = _service(request)
     result = await svc.cancel(u, investigation_id, req, x_idempotency_key, x_request_id or "")
-    return JSONResponse(content=result.model_dump(), headers={"X-Version": str(result.version)})
+    return JSONResponse(content=result.model_dump(mode="json"), headers={"X-Version": str(result.version)})

@@ -10,15 +10,23 @@ export const apiClient = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+// Lazily load the Keycloak module exactly once (promise-cached so concurrent
+// callers share a single in-flight import instead of re-evaluating the module).
+let keycloakModule: Promise<typeof import('../auth/keycloak')> | null = null;
+function loadKeycloakModule() {
+  keycloakModule ??= import('../auth/keycloak');
+  return keycloakModule;
+}
+
 // Attach stored token to every request
 apiClient.interceptors.request.use(async (config) => {
   if (env.AUTH_PROVIDER === 'keycloak') {
     // Keycloak mode: get fresh token from keycloak-js
     try {
-      const { getKeycloak } = await import('../auth/keycloak');
+      const { getKeycloak } = await loadKeycloakModule();
       const kc = getKeycloak();
       if (kc.token) {
-        await kc.updateToken(30);
+        await kc.updateToken(60);
         config.headers.Authorization = `Bearer ${kc.token}`;
       }
     } catch {
@@ -61,9 +69,12 @@ apiClient.interceptors.response.use(
     if (!refreshPromise) {
       refreshPromise = (async () => {
         try {
-          const { getKeycloak } = await import('../auth/keycloak');
+          const { getKeycloak } = await loadKeycloakModule();
           const kc = getKeycloak();
-          return await kc.updateToken(30);
+          // `updateToken(-1)` forces a real refresh attempt. It resolves `true` after a
+          // successful refresh and REJECTS when the refresh fails (e.g. SSO session
+          // expired). Resolving `false` (token still valid) is not possible here.
+          return await kc.updateToken(-1);
         } catch {
           return false;
         } finally {
@@ -75,7 +86,7 @@ apiClient.interceptors.response.use(
     const refreshed = await refreshPromise;
 
     if (refreshed) {
-      const { getKeycloak } = await import('../auth/keycloak');
+      const { getKeycloak } = await loadKeycloakModule();
       const kc = getKeycloak();
       originalRequest.headers.Authorization = `Bearer ${kc.token}`;
       return apiClient(originalRequest);

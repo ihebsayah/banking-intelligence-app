@@ -23,6 +23,7 @@ RBAC:
   - compliance      : compliance, audit
   - admin           : admin endpoints + all others
 """
+import json
 import time
 import uuid
 from datetime import datetime, date
@@ -32,6 +33,7 @@ import httpx
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
+from starlette.responses import Response
 
 from shared.config import get_settings
 from shared.database import DatabaseConnector
@@ -243,6 +245,15 @@ class PaginatedAuditLogs(BaseModel):
     page: int
     page_size: int
     items: List[AuditLogRow]
+
+
+class QueryHistoryItem(BaseModel):
+    query_id: str
+    query_text: str
+    row_count: Optional[int] = None
+    execution_time_ms: int = 0
+    status: str = ""
+    created_at: str = ""
 
 
 class Report(BaseModel):
@@ -802,7 +813,9 @@ async def submit_query(
     await _send_audit_log(AuditLogEntry(user_id=user.user_id, user_role=user.user_role,
         action="nl_query", status=audit_status, ip_address=ip_address,
         endpoint="/query", http_method="POST", execution_time_ms=elapsed_ms,
-        metadata={"query": body.query[:200], "format": body.format, "pipeline_status": pipeline_status}))
+        rows_accessed=len(pipeline_result.get("results") or []),
+        metadata={"query": body.query[:200], "format": body.format, "pipeline_status": pipeline_status,
+                  "rows_returned": len(pipeline_result.get("results") or [])}))
 
     pipeline = pipeline_result.get("pipeline", {})
     pipeline_steps = []
@@ -835,6 +848,54 @@ async def submit_query(
         if "Query must not be empty" in err_msg or "Query is null" in err_msg:
             raise HTTPException(status_code=422, detail=body_dict)
     return body_dict
+
+
+@router.get(
+    "/queries/history",
+    response_model=List[QueryHistoryItem],
+    summary="Current user's query history from the audit log",
+    tags=["query"],
+)
+async def query_history(
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=200),
+    user: User = Depends(get_current_user),
+) -> List[QueryHistoryItem]:
+    """Return the authenticated user's own NL query history (action=nl_query)."""
+    audit_db = _require_audit_db(request)
+    rows = await audit_db.fetch_all(
+        """
+        SELECT audit_id, timestamp, user_id, user_role, action,
+               status, execution_time_ms, error_message, metadata
+        FROM audit_log
+        WHERE user_id = $1 AND action = 'nl_query'
+        ORDER BY timestamp DESC
+        LIMIT $2
+        """,
+        [user.user_id, limit],
+    )
+    items: List[QueryHistoryItem] = []
+    for row in rows:
+        meta = row.get("metadata") or {}
+        if isinstance(meta, str):
+            try:
+                meta = json.loads(meta)
+            except (TypeError, ValueError):
+                meta = {}
+        query_text = meta.get("query")
+        if not query_text:
+            continue
+        items.append(
+            QueryHistoryItem(
+                query_id=row.get("audit_id", ""),
+                query_text=str(query_text),
+                row_count=meta.get("rows_returned"),
+                execution_time_ms=int(row.get("execution_time_ms", 0) or 0),
+                status=row.get("status", ""),
+                created_at=str(row.get("timestamp", "")),
+            )
+        )
+    return items
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1217,7 +1278,7 @@ async def kpi_trends(
         WHERE transaction_date >= NOW() - ($1 || ' months')::INTERVAL
         GROUP BY DATE_TRUNC('month', transaction_date)
         ORDER BY DATE_TRUNC('month', transaction_date)
-    """, [months])
+    """, [str(months)])
     return {"months": months, "trends": [dict(r) for r in rows], "last_updated": _now_iso()}
 
 
@@ -1787,12 +1848,12 @@ async def _fetch_user_permissions(user_id: str, db) -> list:
     """Load permission codes for a user via role_permissions."""
     try:
         rows = await db.fetch_all("""
-            SELECT DISTINCT rp.permission_code
+            SELECT DISTINCT rp.permission_key
             FROM role_permissions rp
-            JOIN users u ON u.role = rp.role_name
+            JOIN users u ON u.role = rp.role_id
             WHERE u.user_id = $1
         """, [user_id])
-        return [r["permission_code"] for r in rows]
+        return [r["permission_key"] for r in rows]
     except Exception:
         return []
 
@@ -1856,6 +1917,45 @@ async def get_user_me(request: Request, user: User = Depends(get_current_user)) 
 async def get_auth_me(request: Request, user: User = Depends(get_current_user)) -> dict:
     return await _fetch_user_profile(user.user_id, _get_db(request))
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ─── WORKBENCH PROXY ──────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Path prefix mapping: frontend call path → workbench API path prefix
+_WORKBENCH_PREFIX_MAP = {
+    "alerts": "api/v1/alerts",
+    "cases": "api/v1/cases",
+    "investigations": "api/v1/investigations",
+    "information-requests": "api/v1/information-requests",
+    "approval-requests": "api/v1/approval-requests",
+    "notifications": "api/v1/notifications",
+    "admin/outbox": "api/v1/admin/outbox",
+    "admin/orphan-assignments": "api/v1/admin/orphan-assignments",
+}
+
+
+def _rewrite_workbench_path(path: str) -> Optional[str]:
+    """Map a frontend path to the corresponding workbench API path."""
+    stripped = path.lstrip("/")
+    for prefix, wb_prefix in _WORKBENCH_PREFIX_MAP.items():
+        if stripped == prefix or stripped.startswith(prefix + "/"):
+            remainder = stripped[len(prefix):]
+            return f"/{wb_prefix}{remainder}"
+    return None
+
+
+
+
+# Register workbench proxy routes
+for path_template, wb_prefix in _WORKBENCH_PREFIX_MAP.items():
+    # Build a pattern that matches the frontend path and its sub-paths
+    # e.g. "alerts" matches /alerts, /alerts/assigned, /alerts/{id}, etc.
+    route_path = f"/{path_template}"
+    if "{" not in route_path and "*" not in route_path:
+        # Use a catch-all approach: register the exact path and let the proxy handle sub-paths
+        # FastAPI doesn't support wildcard paths natively, so we use a single route with path capture
+        pass
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # ─── ADMIN CENTER ─────────────────────────────────────────════════════════════
@@ -2636,3 +2736,52 @@ async def admin_activity_log(
             for r in rows
         ],
     }
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# Workbench proxy catch-all — MUST be registered last so concrete routes above
+# take precedence. FastAPI matches routes in registration order; a "/{path:path}"
+# catch-all registered earlier would shadow every concrete route that follows it.
+# ───────────────────────────────────────────────────────────────────────────────
+
+@router.api_route(
+    "/{path:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    summary="Proxy to workbench service",
+    tags=["workbench-proxy"],
+)
+async def workbench_proxy(request: Request, path: str, user: User = Depends(get_current_user)) -> Response:
+    """Proxy workbench operational endpoints through the API gateway."""
+    full_path = f"/{path}"
+    wb_path = _rewrite_workbench_path(full_path)
+    if wb_path is None:
+        raise HTTPException(status_code=404, detail={"error": "NOT_FOUND", "message": f"No workbench route for {full_path}"})
+
+    wb_url = settings.WORKBENCH_URL.rstrip("/")
+    target_url = f"{wb_url}{wb_path}"
+    if request.url.query:
+        target_url += f"?{request.url.query}"
+
+    headers = {
+        "X-Test-User": user.user_id,
+        "Host": "workbench",
+    }
+    for key, value in request.headers.items():
+        if key.lower() not in ("host", "authorization", "cookie", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailers", "transfer-encoding", "upgrade"):
+            headers[key] = value
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.request(
+            method=request.method,
+            url=target_url,
+            headers=headers,
+            content=await request.body() if request.method != "GET" else None,
+            params=dict(request.query_params),
+        )
+
+    return Response(
+        content=resp.content,
+        status_code=resp.status_code,
+        headers=dict(resp.headers),
+        media_type=resp.headers.get("content-type"),
+    )

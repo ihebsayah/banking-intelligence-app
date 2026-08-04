@@ -37,6 +37,16 @@ export interface QueryResult {
   request_id?: string;
   debug_url?: string;
   pipeline_steps?: PipelineStep[];
+  // Clarification flow (branch resolution, ambiguity, etc.)
+  requires_clarification?: boolean;
+  clarification?: {
+    requires_clarification: boolean;
+    clarification_type: string;
+    message: string;
+    candidates?: string[];
+    raw_value?: string;
+  };
+  error?: string;
 }
 
 export interface BankingQueryHistoryItem {

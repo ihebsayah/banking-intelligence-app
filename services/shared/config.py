@@ -76,6 +76,10 @@ class Settings(BaseSettings):
     INSIGHTS_AGENT_URL: str = Field(default="http://localhost:8013")
     COMPLIANCE_AGENT_URL: str = Field(default="http://localhost:8011")
     AUDIT_ENHANCEMENT_URL: str = Field(default="http://localhost:8012")
+    WORKBENCH_URL: str = Field(
+        default="http://workbench:8014",
+        description="Workbench service base URL for proxying operational endpoints",
+    )
 
     # ─── Logging ──────────────────────────────────────────────────────────────
     LOG_LEVEL: str = Field(default="INFO")
@@ -147,7 +151,7 @@ class Settings(BaseSettings):
     MAX_SQL_REPAIR_ATTEMPTS: int = Field(default=2)
     EXPLAIN_COST_CHECK_ENABLED: bool = Field(default=False)
     BENCHMARK_MODE: bool = Field(default=False)
-    INTENT_CONFIDENCE_THRESHOLD: float = Field(default=0.31, description="Below this confidence, intent gate rejects query")
+    INTENT_CONFIDENCE_THRESHOLD: float = Field(default=0.2, description="Below this confidence, intent gate rejects query")
 
     class Config:
         env_file = ".env"

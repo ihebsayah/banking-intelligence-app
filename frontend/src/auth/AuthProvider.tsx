@@ -133,18 +133,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // ── Token refresh ───────────────────────────────────────────────────────
+  // keycloak-js `updateToken(minValidity)` resolves `true` ONLY when it actually
+  // refreshed the token. It resolves `false` when the token is still valid beyond
+  // `minValidity` (no refresh performed) and it REJECTS when a refresh is attempted
+  // but fails (e.g. the SSO session has expired). `false` must never be treated as
+  // a failure — doing so logged users out ~60s before a 300s token would expire.
+  const TOKEN_REFRESH_MIN_VALIDITY = 90; // refresh when the token has ≤90s of life left
+  const TOKEN_REFRESH_LEAD_MS = 60_000;  // arm the timer 60s before expiry
+  const TOKEN_REFRESH_MIN_DELAY_MS = 5_000;
+
+  function expireSession() {
+    setPhase('expired');
+    setError('Your session has expired. Please sign in again.');
+  }
+
   async function refreshKeycloakToken(): Promise<boolean> {
     if (inflightRefresh.current) return inflightRefresh.current;
 
     inflightRefresh.current = (async () => {
       try {
         const kc = getKeycloak();
-        const refreshed = await kc.updateToken(30);
-        if (refreshed) {
-          scheduleRefresh();
-        }
-        return refreshed;
+        await kc.updateToken(TOKEN_REFRESH_MIN_VALIDITY);
+        // Re-arm against the (possibly refreshed) expiry. `false` from updateToken
+        // simply means "token still valid" — the refresh chain must continue.
+        scheduleRefresh();
+        return true;
       } catch {
+        // Genuine refresh failure (rejected updateToken) — e.g. expired SSO session.
         return false;
       } finally {
         inflightRefresh.current = null;
@@ -159,18 +174,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const kc = getKeycloak();
     if (!kc.tokenParsed?.exp) return;
 
-    // Refresh 60 seconds before expiry
+    // Refresh approximately 60 seconds before expiry.
     const expiresAt = kc.tokenParsed.exp * 1000;
     const now = Date.now();
-    const delay = Math.max(expiresAt - now - 60_000, 5_000);
+    const delay = Math.max(expiresAt - now - TOKEN_REFRESH_LEAD_MS, TOKEN_REFRESH_MIN_DELAY_MS);
 
     refreshTimerRef.current = setTimeout(async () => {
       const ok = await refreshKeycloakToken();
       if (!ok) {
-        setPhase('expired');
-        setError('Your session has expired. Please sign in again.');
+        expireSession();
       }
     }, delay);
+  }
+
+  // Browsers throttle setTimeout in background tabs, so re-check the token whenever
+  // the tab regains focus or becomes visible again.
+  function refreshIfNearExpiry() {
+    const kc = getKeycloak();
+    try {
+      if (!kc.isTokenExpired(60)) return;
+    } catch {
+      return; // not authenticated / no refresh token yet
+    }
+    refreshKeycloakToken().then((ok) => {
+      if (!ok) expireSession();
+    });
   }
 
   // ── Bootstrap ───────────────────────────────────────────────────────────
@@ -181,6 +209,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     let cancelled = false;
+    let handleFocus: (() => void) | null = null;
+    let handleVisibility: (() => void) | null = null;
 
     (async () => {
       try {
@@ -198,11 +228,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         kc.onTokenExpired = () => {
           refreshKeycloakToken().then((ok) => {
             if (!ok) {
-              setPhase('expired');
-              setError('Your session has expired. Please sign in again.');
+              expireSession();
             }
           });
         };
+
+        // Refresh again on window focus / when the tab becomes visible.
+        handleFocus = () => refreshIfNearExpiry();
+        handleVisibility = () => {
+          if (document.visibilityState === 'visible') refreshIfNearExpiry();
+        };
+        window.addEventListener('focus', handleFocus);
+        document.addEventListener('visibilitychange', handleVisibility);
 
         const resolved = await resolveApplicationUser();
         if (!cancelled && resolved) {
@@ -218,6 +255,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       cancelled = true;
+      if (handleFocus) window.removeEventListener('focus', handleFocus);
+      if (handleVisibility) document.removeEventListener('visibilitychange', handleVisibility);
       if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
     };
   }, [isKeycloak, resolveApplicationUser]);
@@ -246,12 +285,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const getAccessToken = useCallback(async (): Promise<string | undefined> => {
     if (!isKeycloak) return undefined;
     const kc = getKeycloak();
-    const ok = await kc.updateToken(30);
-    if (!ok) {
-      setPhase('expired');
+    try {
+      await kc.updateToken(60);
+      return kc.token;
+    } catch {
+      expireSession();
       return undefined;
     }
-    return kc.token;
   }, [isKeycloak]);
 
   const hasRole = useCallback((role: string): boolean => {

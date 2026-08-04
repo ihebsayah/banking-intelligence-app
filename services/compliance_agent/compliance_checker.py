@@ -19,6 +19,18 @@ _PCI_ALLOWED_ROLES = {"compliance", "admin"}
 # Tables that must be SOX-audited
 _SOX_SENSITIVE_TABLES = {"accounts", "transactions", "risk_flags"}
 
+# Regulation → protected data scope for DB-driven access_control rules.
+# An access_control rule is only evaluated when the query actually touches
+# data within its regulation's scope (columns or tables). Regulations not
+# listed here are treated as global (evaluated for every query).
+_ACCESS_SCOPE = {
+    "PCI-DSS": ("columns", _PCI_CARD_COLUMNS),
+    "GDPR": ("columns", _GDPR_PII_COLUMNS),
+    "SOX": ("tables", _SOX_SENSITIVE_TABLES),
+    "AML": ("tables", {"transactions", "aml_alerts", "suspicious_activity_reports", "fee_income"}),
+    "KYC": ("tables", {"kyc_cases", "customers"}),
+}
+
 
 class ComplianceChecker:
     """Evaluate queries against GDPR, PCI-DSS, SOX, AML, KYC rule sets."""
@@ -180,15 +192,16 @@ class ComplianceChecker:
                             )
 
                 elif rule_type == "access_control":
-                    if not self._role_allowed(user_role, condition):
-                        violations.append(
-                            Violation(
-                                rule=rule["rule_name"],
-                                severity="critical",
-                                reason=f"Role '{user_role}' blocked by rule: {rule['rule_name']}",
-                                regulation=rule["regulation"],
+                    if self._scope_intersects(rule["regulation"], columns, tables):
+                        if not self._role_allowed(user_role, condition):
+                            violations.append(
+                                Violation(
+                                    rule=rule["rule_name"],
+                                    severity="critical",
+                                    reason=f"Role '{user_role}' blocked by rule: {rule['rule_name']}",
+                                    regulation=rule["regulation"],
+                                )
                             )
-                        )
 
         except Exception as exc:
             logger.warning(f"DB rule check skipped: {exc}")
@@ -219,9 +232,10 @@ class ComplianceChecker:
     def _role_allowed(user_role: str, condition: str) -> bool:
         """
         Return False if the condition denies this role.
-        Condition example: "user_role NOT IN (compliance, admin)"
-        means: deny roles that are NOT in the list — i.e., only
-        compliance and admin are allowed.
+        - "user_role NOT IN (compliance, admin)" is an allow-list: only the
+          listed roles are allowed.
+        - "user_role IN (maker_checker)" is a deny-list: the listed roles are
+          blocked, all others are allowed.
         """
         role = user_role.lower()
         if "NOT IN" in condition or "not in" in condition:
@@ -231,4 +245,22 @@ class ComplianceChecker:
                 return role in allowed_roles
             except IndexError:
                 pass
+        elif "IN" in condition or "in" in condition:
+            try:
+                inner = condition.split("(")[1].split(")")[0]
+                denied_roles = [r.strip().lower() for r in inner.split(",")]
+                return role not in denied_roles
+            except IndexError:
+                pass
         return True
+
+    @staticmethod
+    def _scope_intersects(regulation: str, columns: List[str], tables: List[str]) -> bool:
+        """Return True if the query touches data within the rule's scope."""
+        scope = _ACCESS_SCOPE.get((regulation or "").upper())
+        if scope is None:
+            return True  # unknown scope — keep conservative, always evaluate
+        kind, data = scope
+        if kind == "columns":
+            return any(c.lower() in data for c in columns)
+        return any(t.lower() in data for t in tables)

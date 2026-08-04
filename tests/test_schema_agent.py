@@ -37,10 +37,11 @@ def test_risk_analysis_returns_risk_tables(matcher):
 
 # ── TC-03: revenue_analysis → revenue tables ───────────────────────────────────
 def test_revenue_analysis_returns_revenue_tables(matcher):
-    """revenue_analysis intent → revenue-related tables."""
+    """revenue_analysis intent → transaction-based revenue tables."""
     domains = matcher.match_domains(["revenue_analysis"])
     tables = matcher.get_tables(domains)
-    assert any(t in tables for t in ["fees", "commissions", "interest_income", "products"])
+    revenue_tables = {"customers", "accounts", "transactions", "branches"}
+    assert revenue_tables & set(tables), f"No revenue tables in {tables}"
 
 
 # ── TC-04: transaction_analysis → transactions table ──────────────────────────

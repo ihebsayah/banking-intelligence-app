@@ -169,3 +169,105 @@ def test_risk_flags_columns_validation(builder):
     assert "risk_flags.id" in result.sql
     assert "risk_flags.risk_id" not in result.sql
 
+
+# ── TC-13: revenue aggregate expression accepted ─────────────────────────────
+def test_revenue_aggregate_expression_accepted(builder):
+    """Computed aggregate with FILTER over whitelisted columns must be kept."""
+    result = builder.build(_req(
+        tables=["customers", "accounts", "transactions", "branches"],
+        join_paths=[
+            JoinPathInput(from_table="customers", to_table="accounts", join_key="customer_id",
+                          join_type="LEFT JOIN", condition="accounts.customer_id = customers.customer_id"),
+            JoinPathInput(from_table="accounts", to_table="transactions", join_key="account_id",
+                          join_type="LEFT JOIN", condition="transactions.account_id = accounts.account_id"),
+            JoinPathInput(from_table="accounts", to_table="branches", join_key="branch_id",
+                          join_type="LEFT JOIN", condition="branches.branch_id = accounts.branch_id"),
+        ],
+        columns=[
+            "customers.customer_id",
+            "customers.name",
+            "branches.name AS branch_name",
+            "COALESCE(SUM(-1 * transactions.amount) FILTER (WHERE transactions.transaction_type = 'frais compte'), 0) AS total_revenue",
+        ],
+        group_by=["customers.customer_id", "customers.name", "branches.name"],
+        order_by="total_revenue DESC, customers.customer_id ASC",
+        filters={"branches.name": "Tunis Main Branch"},
+        limit=10,
+    ))
+    assert "COALESCE(SUM(-1 * transactions.amount)" in result.sql
+    assert "FILTER (WHERE transactions.transaction_type = 'frais compte')" in result.sql
+    assert "AS total_revenue" in result.sql
+    assert "branches.name AS branch_name" in result.sql
+    assert "ORDER BY total_revenue DESC, customers.customer_id ASC" in result.sql
+    assert "WHERE branches.name = ?" in result.sql
+    assert len(result.parameters) == 1 and result.parameters[0].value == "Tunis Main Branch"
+
+
+# ── TC-14: expression referencing non-whitelisted column is dropped ──────────
+def test_revenue_expression_with_bad_column_dropped(builder):
+    """An aggregate referencing a non-whitelisted column must be rejected."""
+    result = builder.build(_req(
+        tables=["customers", "accounts"],
+        join_paths=[
+            JoinPathInput(from_table="customers", to_table="accounts", join_key="customer_id",
+                          join_type="LEFT JOIN", condition="accounts.customer_id = customers.customer_id"),
+        ],
+        columns=[
+            "customers.customer_id",
+            "SUM(accounts.bogus_column) AS total",
+        ],
+        limit=5,
+    ))
+    assert "bogus_column" not in result.sql
+    assert "customers.customer_id" in result.sql
+
+
+# ── TC-15: multi-column ORDER BY preserved ──────────────────────────────────
+def test_multi_column_order_by(builder):
+    result = builder.build(_req(
+        tables=["customers"],
+        order_by="customers.name DESC, customers.customer_id ASC",
+    ))
+    assert "ORDER BY customers.name DESC, customers.customer_id ASC" in result.sql
+
+
+# ── TC-16: branches filter auto-completes the join path ─────────────────────
+def test_branch_filter_auto_completes_join_path(builder):
+    """A `branches.name` filter must never be silently dropped: the canonical
+    customers→accounts→branches path is auto-added when missing."""
+    result = builder.build(_req(
+        tables=["customers"],
+        filters={"branches.name": "Tunis Main Branch"},
+    ))
+    assert "branches.name" in result.sql
+    assert "JOIN" in result.sql.upper()
+    assert "branches.branch_id = accounts.branch_id" in result.sql
+    assert any(p.value == "Tunis Main Branch" for p in result.parameters)
+
+
+# ── TC-17: branches filter from accounts primary table ──────────────────────
+def test_branch_filter_from_accounts_primary(builder):
+    """primary_table=accounts needs only the accounts→branches hop."""
+    result = builder.build(_req(
+        tables=["accounts"],
+        primary_table="accounts",
+        primary_entity="account",
+        filters={"branches.name": "Tunis Main Branch"},
+    ))
+    assert "WHERE branches.name = ?" in result.sql
+    assert "accounts.customer_id = customers.customer_id" not in result.sql
+    assert "branches.branch_id = accounts.branch_id" in result.sql
+
+
+# ── TC-18: branches filter with no safe path fails closed ───────────────────
+def test_branch_filter_no_path_fails_closed(builder):
+    """primary_table=transactions has no canonical path to branches — the
+    builder must raise instead of emitting SQL that drops the constraint."""
+    with pytest.raises(ValueError, match="no safe join path"):
+        builder.build(_req(
+            tables=["transactions"],
+            primary_table="transactions",
+            primary_entity="transaction",
+            filters={"branches.name": "Tunis Main Branch"},
+        ))
+

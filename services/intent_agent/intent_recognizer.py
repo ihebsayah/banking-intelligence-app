@@ -30,7 +30,8 @@ ORIGINAL_CATEGORY_KEYWORDS: Dict[str, List[str]] = {
     "revenue_analysis": [
         "revenue", "income", "profit", "fee", "commission", "earning",
         "sale", "performance", "margin", "gross", "yield", "return",
-        "interest", "net",
+        "interest", "net", "revenu", "revenus", "commissions", "frais",
+        "bénéfice", "bénéfices", "pnb",
     ],
     "operational_analysis": [
         "volume", "count", "speed", "efficiency", "throughput",
@@ -87,7 +88,8 @@ SEMANTIC_CATEGORY_KEYWORDS: Dict[str, List[str]] = {
         "sale", "performance", "margin", "gross", "yield", "return",
         "interest", "net", "pnb", "net banking income", "roe", "roa",
         "rentabilité", "rendement", "bénéfice", "produit net bancaire",
-        "coefficient d'exploitation", "cir", "charges d'exploitation"
+        "coefficient d'exploitation", "cir", "charges d'exploitation",
+        "revenu", "revenus", "commissions", "frais", "bénéfices",
     ],
     "liquidity_analysis": [
         "liquidity", "liquidité", "lcr", "nsfr", "deposit", "dépôt", "epargne",

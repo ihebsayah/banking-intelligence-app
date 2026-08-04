@@ -289,6 +289,76 @@ def _validate_column(table: str, column: str) -> bool:
     return column in ALLOWED_COLUMNS.get(table, []) or column == "*"
 
 
+def _referenced_columns(expr: str) -> List[Tuple[str, str]]:
+    """Extract (table, column) references from a SQL expression."""
+    return re.findall(r"\b([A-Za-z_]\w*)\.([A-Za-z_]\w*)\b", expr)
+
+
+def _validate_expression(expr: str, tables: List[str]) -> bool:
+    """Allow an expression iff every table.column reference it contains is
+    whitelisted (aggregate/arithmetic expressions, metric formulas, aliases)."""
+    refs = _referenced_columns(expr)
+    if refs:
+        return all(tbl in tables and _validate_column(tbl, col) for tbl, col in refs)
+    return False
+
+
+def _is_column_expression(col: str) -> bool:
+    """True if a column entry is a computed expression rather than a plain column."""
+    return "(" in col or bool(re.search(r"[+\-*/]", col))
+
+
+def _column_entry_valid(entry: str, tables: List[str]) -> bool:
+    """Validate a SELECT entry: plain whitelisted column or safe expression."""
+    expr = re.sub(r"\s+AS\s+\w+", "", entry, flags=re.IGNORECASE).strip()
+    if _is_column_expression(expr):
+        return _validate_expression(expr, tables)
+    return False
+
+
+def _select_aliases(columns: Optional[List[str]]) -> Set[str]:
+    """Collect output aliases declared as '... AS alias' in the SELECT columns."""
+    aliases: Set[str] = set()
+    for col in columns or []:
+        m = re.search(r"\s+AS\s+(\w+)\s*$", col, re.IGNORECASE)
+        if m:
+            aliases.add(m.group(1))
+    return aliases
+
+
+def _split_order_clauses(order_by: str) -> List[str]:
+    """Split ORDER BY into comma-separated clauses, respecting parentheses."""
+    clauses: List[str] = []
+    buf: List[str] = []
+    depth = 0
+    for ch in order_by:
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+        if ch == "," and depth == 0:
+            clauses.append("".join(buf))
+            buf = []
+            continue
+        buf.append(ch)
+    if "".join(buf).strip():
+        clauses.append("".join(buf))
+    return clauses
+
+
+def _order_col_valid(col: str, tables: List[str], aliases: Set[str]) -> bool:
+    """Allow ordering by a whitelisted column, a declared output alias, or a
+    safe aggregate expression."""
+    tbl, colname = _extract_table_and_column(col)
+    if tbl:
+        return tbl in tables and _validate_column(tbl, colname)
+    if any(_validate_column(t, colname) for t in tables):
+        return True
+    if colname in aliases:
+        return True
+    return _validate_expression(col, tables)
+
+
 def _safe_columns(tables: List[str], requested: Optional[List[str]], primary_table: Optional[str] = None) -> str:
     """
     Build SELECT column list — validated against whitelist.
@@ -306,11 +376,13 @@ def _safe_columns(tables: List[str], requested: Optional[List[str]], primary_tab
         if tbl:
             if tbl in tables and _validate_column(tbl, colname):
                 valid_cols.append(col)
+            elif _column_entry_valid(col, tables):
+                valid_cols.append(col)
             else:
                 logger.warning("Column not whitelisted: %s (table %s, col %s) — skipped", col, tbl, colname)
         else:
             found = any(_validate_column(t, colname) for t in tables)
-            if found or colname.upper() in ("*", "1"):
+            if found or colname.upper() in ("*", "1") or _column_entry_valid(col, tables):
                 valid_cols.append(col)
             else:
                 logger.warning("Column not whitelisted: %s (col %s) — skipped", col, colname)
@@ -462,10 +534,58 @@ def _inject_metric_formulas(
     return updated if updated else columns, notes
 
 
+# Canonical customers→accounts→branches path used to complete branch filters.
+_CANONICAL_BRANCH_PATH = [
+    JoinPathInput(
+        from_table="customers", to_table="accounts", join_type="LEFT JOIN",
+        join_key="customer_id", condition="accounts.customer_id = customers.customer_id",
+    ),
+    JoinPathInput(
+        from_table="accounts", to_table="branches", join_type="LEFT JOIN",
+        join_key="branch_id", condition="branches.branch_id = accounts.branch_id",
+    ),
+]
+
+
+def _complete_branch_path(
+    primary_table: str,
+    tables: List[str],
+    join_paths: List[JoinPathInput],
+) -> Tuple[Optional[List[JoinPathInput]], List[str]]:
+    """Complete the join path from `primary_table` to `branches` using only the
+    canonical customers→accounts→branches chain. Returns (extra_joins,
+    extra_tables), or (None, []) when no safe path exists — the caller must then
+    fail closed instead of emitting SQL whose branch constraint would be dropped.
+    """
+    p = (primary_table or "customers").lower()
+    if p == "branches":
+        chain = []
+    elif p == "accounts":
+        chain = _CANONICAL_BRANCH_PATH[1:]
+    elif p == "customers":
+        chain = _CANONICAL_BRANCH_PATH
+    else:
+        return None, []
+
+    existing = set()
+    for jp in join_paths or []:
+        existing.add((jp.from_table.lower(), jp.to_table.lower()))
+        existing.add((jp.to_table.lower(), jp.from_table.lower()))
+
+    extra_joins: List[JoinPathInput] = []
+    extra_tables: List[str] = []
+    for jp in chain:
+        if (jp.from_table, jp.to_table) in existing:
+            continue
+        extra_joins.append(jp)
+        for t in (jp.from_table, jp.to_table):
+            if t.lower() not in {x.lower() for x in tables} and t not in extra_tables:
+                extra_tables.append(t)
+    return extra_joins, extra_tables
+
+
 def _build_joins(join_paths: List[JoinPathInput]) -> str:
     """Build JOIN clauses from resolved join paths. Deduplicates identical joins."""
-    if not join_paths:
-        return ""
     parts = []
     seen: Set[str] = set()
     for jp in join_paths:
@@ -571,23 +691,20 @@ def _build_group_by(group_by: Optional[List[str]], tables: List[str]) -> str:
     return f"GROUP BY {', '.join(valid)}" if valid else ""
 
 
-def _build_order_by(order_by: Optional[str], tables: List[str]) -> str:
+def _build_order_by(order_by: Optional[str], tables: List[str], aliases: Optional[Set[str]] = None) -> str:
     if not order_by:
         return ""
-    parts = order_by.strip().split()
-    col = parts[0]
-    direction = parts[1].upper() if len(parts) > 1 else "ASC"
-    if direction not in ALLOWED_ORDER_DIRS:
-        direction = "ASC"
-
-    tbl, colname = _extract_table_and_column(col)
-    if tbl:
-        if tbl not in tables or not _validate_column(tbl, colname):
-            return ""
-    else:
-        if not any(_validate_column(t, colname) for t in tables):
-            return ""
-    return f"ORDER BY {col} {direction}"
+    aliases = aliases or set()
+    out: List[str] = []
+    for clause in _split_order_clauses(order_by):
+        parts = clause.strip().split()
+        col = parts[0]
+        direction = parts[1].upper() if len(parts) > 1 else "ASC"
+        if direction not in ALLOWED_ORDER_DIRS:
+            direction = "ASC"
+        if _order_col_valid(col, tables, aliases):
+            out.append(f"{col} {direction}")
+    return f"ORDER BY {', '.join(out)}" if out else ""
 
 
 class SQLBuilder:
@@ -635,6 +752,30 @@ class SQLBuilder:
             columns, metric_notes = _inject_metric_formulas(columns, detected_kpis, tables)
             semantic_trace.extend(metric_notes)
 
+        # Phase 4: branch-filter join completion (fail closed). A `branches.<col>`
+        # filter must never be silently dropped — complete the canonical path, or
+        # refuse to build the query.
+        filter_tables = {
+            col.split(".")[0].lower()
+            for col in (request.filters or {}).keys()
+            if "." in col
+        }
+        if "branches" in filter_tables and "branches" not in tables:
+            extra_joins, extra_tables = _complete_branch_path(
+                primary_table, tables, validated_joins
+            )
+            if extra_joins is None:
+                raise ValueError(
+                    f"Branch filter cannot be applied: no safe join path from "
+                    f"'{primary_table}' to 'branches' — refusing to build query"
+                )
+            validated_joins = list(validated_joins) + extra_joins
+            tables = list(tables) + extra_tables
+            semantic_trace.append(
+                f"branch_join_completion: added {len(extra_joins)} join(s) "
+                f"({', '.join(extra_tables)}) for branches filter"
+            )
+
         # SELECT columns
         select_cols = _safe_columns(tables, columns, primary_table)
 
@@ -648,7 +789,7 @@ class SQLBuilder:
         group_sql = _build_group_by(request.group_by, tables)
 
         # ORDER BY
-        order_sql = _build_order_by(request.order_by, tables)
+        order_sql = _build_order_by(request.order_by, tables, _select_aliases(columns))
 
         # LIMIT (always enforced)
         limit_val = min(int(request.limit or DEFAULT_LIMIT), MAX_LIMIT)
@@ -668,6 +809,28 @@ class SQLBuilder:
         parts.append(limit_sql)
 
         sql = "\n".join(parts)
+
+        # Columns actually touched (for downstream compliance scoping)
+        columns_used: Set[str] = set()
+        for col_expr in (columns or []):
+            _, colname = _extract_table_and_column(col_expr)
+            if colname and re.match(r"^[a-z_]+$", colname.lower()):
+                columns_used.add(colname.lower())
+            for _, ref_col in _referenced_columns(col_expr):
+                columns_used.add(ref_col.lower())
+        for col_expr in (request.filters or {}).keys():
+            _, colname = _extract_table_and_column(col_expr)
+            if colname:
+                columns_used.add(colname.lower())
+        for col_expr in (request.group_by or []):
+            _, colname = _extract_table_and_column(col_expr)
+            if colname:
+                columns_used.add(colname.lower())
+        if request.order_by:
+            order_col = request.order_by.strip().split()[0]
+            _, colname = _extract_table_and_column(order_col)
+            if colname:
+                columns_used.add(colname.lower())
 
         # Build Parameter objects
         parameters = [
@@ -699,6 +862,7 @@ class SQLBuilder:
             estimated_rows=estimated_rows,
             estimated_time_ms=estimated_time_ms,
             tables_used=tables,
+            columns_used=sorted(columns_used),
             is_parameterized=True,
             semantic_warnings=semantic_warnings,
             semantic_trace=semantic_trace,

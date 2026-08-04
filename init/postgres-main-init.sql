@@ -368,7 +368,7 @@ INSERT INTO compliance_rules (rule_name, regulation, rule_type, condition, actio
     ('Restrict Card Data Access - PCI-DSS',   'PCI-DSS', 'access_control', 'user_role NOT IN (compliance, admin)',      'DENY_ACCESS',      true),
     ('Tokenize Card Data - PCI-DSS',          'PCI-DSS', 'data_handling',  'column = credit_card',                      'TOKENIZE',         true),
     ('Log All Sensitive Access - SOX',        'SOX',     'audit',          'table IN (accounts, transactions, risk_flags)', 'LOG_ACCESS',   true),
-    ('Segregation of Duties - SOX',           'SOX',     'access_control', 'user_role NOT IN (maker_checker)',          'DENY_ACCESS',      true),
+    ('Segregation of Duties - SOX',           'SOX',     'access_control', 'user_role IN (maker_checker)',           'DENY_ACCESS',      true),
     ('Change Management Approval - SOX',      'SOX',     'change_control', 'schema_change = true',                      'REQUIRE_APPROVAL', true),
     ('Monitor Large Transactions - AML',      'AML',     'monitoring',     'amount > 10000',                            'FLAG_TRANSACTION', true),
     ('Sanctions Screening - AML',             'AML',     'screening',      'new_customer = true',                       'SCREEN_NAMES',     true),

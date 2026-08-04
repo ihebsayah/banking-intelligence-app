@@ -65,7 +65,7 @@ async def create_comment(
     svc = _service(request)
     result = await svc.create(u, entity_type, entity_id, req,
                               x_idempotency_key, x_request_id or "")
-    return JSONResponse(content=result.model_dump(), status_code=201,
+    return JSONResponse(content=result.model_dump(mode="json"), status_code=201,
                         headers={"X-Version": str(result.version)})
 
 
@@ -81,5 +81,5 @@ async def redact_comment(
     u = _get_user(request)
     svc = _service(request)
     result = await svc.redact(u, comment_id, req, x_idempotency_key, x_request_id or "")
-    return JSONResponse(content=result.model_dump(),
+    return JSONResponse(content=result.model_dump(mode="json"),
                         headers={"X-Version": str(result.version)})

@@ -84,6 +84,44 @@ class TestStatisticalAnalyzer:
 # InsightsGenerator (mocked)
 # ─────────────────────────────────────────────────────────────────────────────
 
+class TestInsightsGeneratorRevenue:
+    """Unit checks for the revenue-metric insights changes (no LLM/DB)."""
+
+    def test_total_revenue_is_known_numeric(self):
+        from insights_generator import _KNOWN_NUMERIC, _NUMERIC_PRIORITY
+        assert "total_revenue" in _KNOWN_NUMERIC
+        assert "total_revenue" in _NUMERIC_PRIORITY
+
+    def test_total_revenue_detected_as_primary_metric(self):
+        from insights_generator import InsightsGenerator
+        from statistical_analyzer import StatisticalAnalyzer
+        rows = [
+            {"customer_id": "C1", "name": "Alice", "branch_name": "Agence X", "total_revenue": 274.5},
+            {"customer_id": "C2", "name": "Bob", "branch_name": "Agence X", "total_revenue": 150.25},
+        ]
+        stats = StatisticalAnalyzer().analyze(rows, InsightsGenerator._detect_numeric_columns(InsightsGenerator, rows))
+        assert stats.total_sum == pytest.approx(424.75)
+        assert stats.average == pytest.approx(212.375)
+
+    def test_no_hardcoded_yoy_trend(self):
+        from insights_generator import InsightsGenerator
+
+        class FakeStats:
+            primary_metric_col = "total_revenue"
+            total_sum = 424.75
+            average = 212.375
+
+        class FakeContext:
+            system_totals = {"total_fee_revenue": 636938.06}
+            regional_breakdown = {"Tunis": 5, "Sfax": 2}
+            segment_breakdown = {"standard": 7}
+
+        trends = InsightsGenerator._identify_trends(
+            InsightsGenerator, "revenue_analysis", FakeStats(), FakeContext()
+        )
+        assert all(t.metric != "yoy_growth" for t in trends)
+
+
 class TestInsightsGenerator:
     """Integration-lite tests with DB and Mistral mocked out."""
 
@@ -118,14 +156,14 @@ class TestInsightsGenerator:
         ))
 
         # Mock Mistral
-        gen.mistral.generate_summary = MagicMock(
-            return_value="The top 10 customers hold 27.5% of total deposits, led by premium segment."
-        )
-        gen.mistral.generate_recommendations = MagicMock(return_value=[
-            "1. Offer exclusive products to top-balance customers.",
-            "2. Improve KYC for high-risk segment.",
-            "3. Expand premium services in NY.",
-        ])
+        gen.mistral.generate_summary_and_recommendations = MagicMock(return_value=(
+            "The top 10 customers hold 27.5% of total deposits, led by premium segment.",
+            [
+                "1. Offer exclusive products to top-balance customers.",
+                "2. Improve KYC for high-risk segment.",
+                "3. Expand premium services in NY.",
+            ],
+        ))
 
         req = InsightsRequest(
             query_intent="customer_analysis",
@@ -147,8 +185,9 @@ class TestInsightsGenerator:
 
         gen = InsightsGenerator(mock_config)
         gen.context_gatherer.gather_context = AsyncMock(return_value=ContextData())
-        gen.mistral.generate_summary = MagicMock(return_value="No data returned.")
-        gen.mistral.generate_recommendations = MagicMock(return_value=[])
+        gen.mistral.generate_summary_and_recommendations = MagicMock(
+            return_value=("No data returned.", [])
+        )
 
         req = InsightsRequest(
             query_intent="customer_analysis",
@@ -157,8 +196,9 @@ class TestInsightsGenerator:
             metadata={},
         )
         resp = await gen.generate(req)
-        assert resp.status == "success"
+        assert resp.status == "no_data"
         assert resp.key_metrics["total_count"] == 0
+        assert resp.recommendations == []
 
     @pytest.mark.asyncio
     async def test_generate_error_returns_error_status(self, mock_config):

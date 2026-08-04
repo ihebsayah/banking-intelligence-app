@@ -14,11 +14,12 @@ _KNOWN_NUMERIC = {
     "balance", "amount", "fee", "revenue", "count", "score",
     "rate", "available_balance", "risk_score", "avg", "sum",
     "min", "max", "average", "total_balance", "total_amount",
+    "total_revenue",
 }
 
 # Priority ordering of numeric fields (monetary and volumes first, ratios and rates last)
 _NUMERIC_PRIORITY = [
-    "balance", "total_balance", "total_amount", "sum", "avg", "average",
+    "balance", "total_balance", "total_amount", "total_revenue", "sum", "avg", "average",
     "available_balance", "amount", "fee", "revenue", 
     "count", "score", "risk_score", "rate"
 ]
@@ -40,6 +41,22 @@ class InsightsGenerator:
     async def generate(self, request: InsightsRequest) -> InsightsResponse:
         try:
             logger.info(f"Generating insights for intent={request.query_intent}")
+
+            # No-data guard: never fabricate insights from empty results
+            if not request.results:
+                return InsightsResponse(
+                    status="no_data",
+                    summary=(
+                        "Aucun résultat n'a été retourné pour cette requête. "
+                        "Vérifiez les filtres (nom d'agence, période, type de transaction) "
+                        "et réessayez."
+                    ),
+                    key_metrics={"total_count": 0},
+                    trends=[],
+                    anomalies=[],
+                    recommendations=[],
+                    confidence=0.0,
+                )
 
             # Step 1 — statistics
             numeric_cols = self._detect_numeric_columns(request.results)
@@ -137,16 +154,6 @@ class InsightsGenerator:
                     confidence=0.95,
                 )
             )
-
-        # Synthetic YoY growth indicator (real impl would query historical data)
-        trends.append(
-            Trend(
-                metric="yoy_growth",
-                value=12.5,
-                direction="up",
-                confidence=0.70,
-            )
-        )
 
         # Risk flag spike for risk intents
         if "risk" in intent:

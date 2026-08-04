@@ -18,8 +18,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException
 import uvicorn
 
-from models import SQLGenerationRequest, SQLGenerationResponse, JoinPathInput
+from models import (
+    SQLGenerationRequest,
+    SQLGenerationResponse,
+    JoinPathInput,
+    BranchResolveRequest,
+    BranchResolveResponse,
+)
 from sql_builder import SQLBuilder, initialize_sql_semantic_cache, SEMANTIC_LAYER_ENABLED
+from branch_resolver import BranchResolver
 import sql_builder as _sb_module
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -78,6 +85,7 @@ app.add_middleware(
 )
 
 builder = SQLBuilder()
+resolver = BranchResolver()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -161,6 +169,28 @@ def _assert_parameterized(sql: str) -> None:
     sql_upper = sql.upper()
     if "LIMIT" not in sql_upper:
         raise ValueError("LIMIT clause missing from generated SQL — rejecting")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# RESOLVE BRANCH
+# ──────────────────────────────────────────────────────────────────────────────
+@app.post("/resolve_branch", response_model=BranchResolveResponse)
+async def resolve_branch(request: BranchResolveRequest):
+    """
+    Resolve a raw branch name to a canonical branch (branch_id + canonical name).
+
+    Policy: exact case-insensitive match, then a unique contains-match, else
+    fail closed with candidate suggestions (no fabrication of branch names).
+    """
+    logger.info("Resolving branch name: %r", request.name)
+    try:
+        result = resolver.resolve(request.name)
+    except Exception as exc:
+        logger.error("Branch resolution failed: %s", exc, exc_info=True)
+        return BranchResolveResponse(
+            resolved=False, reason="database_error", matches=[]
+        )
+    return BranchResolveResponse(**result)
 
 
 # ──────────────────────────────────────────────────────────────────────────────

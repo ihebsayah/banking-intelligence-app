@@ -18,7 +18,8 @@ FRENCH_KEYWORDS = {
     "créances", "douteuses", "impayés", "encours", "dépôts", "agence", "gouvernorat",
     "client", "clientèle", "conformité", "alertes", "rentabilité", "liquidité",
     "provisions", "garanties", "taux", "prêt", "prêts", "crédit", "crédits", "virement", "virements",
-    "bénéficiaire", "bénéficiaires", "tous", "chaque", "par", "selon", "mouvement", "mouvements"
+    "bénéficiaire", "bénéficiaires", "tous", "chaque", "par", "selon", "mouvement", "mouvements",
+    "revenu", "revenus", "commissions", "frais", "bénéfice", "bénéfices", "pnb",
 }
 
 # Domain vocabulary (English & French)
@@ -165,6 +166,7 @@ REQUESTED_FIELDS_VOCAB = {
     "amount": ["amount", "montant"],
     "transaction_date": ["date", "transaction date", "date de transaction"],
     "branch_id": ["branch", "agence", "branch id", "nom d'agence"],
+    "branch_name": ["branch name", "nom de l'agence", "branch_name"],
     "governorate": ["governorate", "gouvernorat"],
     "region": ["region", "région"],
     "days_past_due": ["days past due", "dpd", "jours de retard", "retard", "days_past_due"],
@@ -299,6 +301,44 @@ def extract_requested_fields(query: str) -> List[str]:
                 fields.append(canonical)
                 break
     return list(set(fields))
+
+# Words that end a branch-name phrase (connectors between branch scope and rest of query)
+_BRANCH_CONNECTOR_WORDS = (
+    "par by pour with in at for de en dans sur selon of across from under to "
+    "and et or ou around within"
+).split()
+
+
+def _capture_branch_name(text: str) -> str:
+    """Capture a short branch-name token run, stopping at connector words."""
+    tokens = []
+    for tok in re.findall(r"[A-Za-zÀ-ÿ0-9'.-]+", text):
+        if tok.lower() in _BRANCH_CONNECTOR_WORDS:
+            break
+        tokens.append(tok)
+        if len(tokens) >= 4:
+            break
+    return " ".join(tokens)
+
+
+def extract_branch_filter(query: str) -> Optional[Dict[str, Any]]:
+    """Extract an explicit branch-scope filter.
+
+    Recognises English 'in|at|for|within <name> Branch' and French
+    '<prep> l'agence <name>' phrases. Returns a structured filter on
+    branches.name; the raw name is resolved to a canonical branch downstream.
+    """
+    m_en = re.search(r"\b(?:in|at|for|within)\s+(.+?)\s+[Bb]ranch\b", query)
+    if m_en:
+        name = _capture_branch_name(m_en.group(1))
+        if name:
+            return {"column": "branches.name", "operator": "=", "value": f"{name} Branch"}
+    m_fr = re.search(r"\b(?:à|a|dans|de|en)\s+l['’]?\s*agence\s+(.+)", query, re.IGNORECASE)
+    if m_fr:
+        name = _capture_branch_name(m_fr.group(1))
+        if name:
+            return {"column": "branches.name", "operator": "=", "value": name}
+    return None
 
 def extract_time_range(query: str) -> Dict[str, Any]:
     """Extract relative time ranges."""
@@ -444,11 +484,17 @@ def build_structured_intent(query: str) -> Dict[str, Any]:
         filters.append({"column": "loan_contracts.status", "operator": "=", "value": "overdue"})
     if any(w in q_lower for w in ["clôturés", "cloturés", "closed", "fermés"]):
         filters.append({"column": "accounts.status", "operator": "=", "value": "closed"})
-        
+
+    branch_filter = extract_branch_filter(query)
+    if branch_filter:
+        filters.append(branch_filter)
+
     ambiguities = detect_ambiguities_structured(query, domain)
-    # Exempt queries with explicit task verbs or domain keywords from requiring clarification
+    # Exempt queries with explicit task verbs, domain keywords, or explicit branch
+    # scope from requiring clarification
     has_explicit_intent = (
-        "kyc_verified = false" in q_lower
+        branch_filter is not None
+        or "kyc_verified = false" in q_lower
         or "average balance" in q_lower
         or "top 10" in q_lower
         or "how many" in q_lower

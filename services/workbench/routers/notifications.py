@@ -64,7 +64,7 @@ async def mark_notification_read(
     u = _get_user(request)
     svc = _service(request)
     result = await svc.mark_read(u, notification_id, x_idempotency_key, x_request_id or "")
-    return JSONResponse(content=result.model_dump())
+    return JSONResponse(content=result.model_dump(mode="json"))
 
 
 # ── N3 — PATCH /notifications/read-all ────────────────────────────────────────
@@ -78,4 +78,4 @@ async def mark_all_notifications_read(
     u = _get_user(request)
     svc = _service(request)
     result = await svc.mark_all_read(u, x_idempotency_key, x_request_id or "")
-    return JSONResponse(content=result.model_dump())
+    return JSONResponse(content=result.model_dump(mode="json"))

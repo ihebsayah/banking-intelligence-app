@@ -201,3 +201,24 @@ class TestIntentRecognition:
         r = classify(recognizer, "How many branches in the Northeast region?")
         assert r["primary_category"] == "geographic_analysis"
         assert r["explicit_constraints"]["geography"] == "Northeast"
+
+    # 21
+    def test_branch_filter_top_10_customers_by_revenue(self, recognizer):
+        r = classify(recognizer, "Show me the top 10 customers in Sfax Main Branch by revenue")
+        assert {"column": "branches.name", "operator": "=", "value": "Sfax Main Branch"} in r["filters_structured"]
+
+    # 22
+    def test_branch_filter_tunis_variant(self, recognizer):
+        r = classify(recognizer, "Show me top 10 customers in Tunis Main Branch by revenue")
+        assert {"column": "branches.name", "operator": "=", "value": "Tunis Main Branch"} in r["filters_structured"]
+        assert r["requires_clarification"] is False
+
+    # 23
+    def test_branch_filter_french_agence(self, recognizer):
+        r = classify(recognizer, "Top 10 clients a l'agence Lac 2 16 par revenu")
+        assert {"column": "branches.name", "operator": "=", "value": "Lac 2 16"} in r["filters_structured"]
+
+    # 24
+    def test_no_branch_filter_keeps_filters_empty(self, recognizer):
+        r = classify(recognizer, "Show me the top 10 customers by revenue")
+        assert r["filters_structured"] == []

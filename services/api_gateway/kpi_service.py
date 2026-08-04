@@ -434,7 +434,7 @@ class KPIService:
             kpi_ids = ["total_deposits", "monthly_revenue", "active_customers", "avg_risk_score", "kyc_compliance_rate", "total_risk_flags"]
             tasks = [cls.compute_kpi(db, kpi_id) for kpi_id in kpi_ids]
         else:
-            tasks = [cls.compute_kpi(db, dict(row)["kpi_id"], dict(row)) for row in kpi_rows]
+            tasks = [cls.compute_kpi(db, dict(row)["kpi_id"]) for row in kpi_rows]
 
         return await asyncio.gather(*tasks)
 
@@ -465,7 +465,7 @@ class KPIService:
                     WHERE transaction_date >= NOW() - ($1 || ' months')::INTERVAL
                     GROUP BY DATE_TRUNC('month', transaction_date)
                     ORDER BY DATE_TRUNC('month', transaction_date)
-                """, [months])
+                """, [str(months)])
                 return [dict(r) for r in rows]
 
             elif kpi_id == "transaction_volume":
@@ -476,7 +476,7 @@ class KPIService:
                     WHERE transaction_date >= NOW() - ($1 || ' months')::INTERVAL
                     GROUP BY DATE_TRUNC('month', transaction_date)
                     ORDER BY DATE_TRUNC('month', transaction_date)
-                """, [months])
+                """, [str(months)])
                 return [dict(r) for r in rows]
 
             elif kpi_id == "avg_transaction_amount":
@@ -487,7 +487,7 @@ class KPIService:
                     WHERE transaction_date >= NOW() - ($1 || ' months')::INTERVAL
                     GROUP BY DATE_TRUNC('month', transaction_date)
                     ORDER BY DATE_TRUNC('month', transaction_date)
-                """, [months])
+                """, [str(months)])
                 return [dict(r) for r in rows]
 
             elif kpi_id == "total_deposits":
@@ -502,7 +502,7 @@ class KPIService:
                     LEFT JOIN accounts a ON a.created_at <= m.month + INTERVAL '1 month' - INTERVAL '1 second'
                     GROUP BY m.month
                     ORDER BY m.month
-                """, [months])
+                """, [str(months)])
                 return [dict(r) for r in rows]
 
             elif kpi_id == "active_customers":
@@ -517,7 +517,7 @@ class KPIService:
                     LEFT JOIN accounts a ON a.created_at <= m.month + INTERVAL '1 month' - INTERVAL '1 second' AND a.status = 'active'
                     GROUP BY m.month
                     ORDER BY m.month
-                """, [months])
+                """, [str(months)])
                 return [dict(r) for r in rows]
 
             elif kpi_id == "kyc_compliance_rate":
@@ -533,7 +533,7 @@ class KPIService:
                     CROSS JOIN customers c
                     GROUP BY m.month
                     ORDER BY m.month
-                """, [months])
+                """, [str(months)])
                 return [dict(r) for r in rows]
             else:
                 return []

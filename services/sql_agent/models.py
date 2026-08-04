@@ -44,7 +44,26 @@ class SQLGenerationResponse(BaseModel):
     estimated_rows: int
     estimated_time_ms: int
     tables_used: List[str]
+    columns_used: List[str] = []    # bare column names actually touched (SELECT/WHERE/GROUP BY/ORDER BY)
     is_parameterized: bool = True   # always True from this service
     # Phase 6B: non-blocking semantic notes (never cause errors)
     semantic_warnings: List[str] = []   # join paths skipped (not in registry), etc.
     semantic_trace: List[str] = []      # metric formulas injected, path resolutions
+
+
+class BranchResolveRequest(BaseModel):
+    name: str
+
+
+class BranchMatch(BaseModel):
+    branch_id: str
+    name: str
+
+
+class BranchResolveResponse(BaseModel):
+    resolved: bool
+    reason: Optional[str] = None
+    branch_id: Optional[str] = None
+    name: Optional[str] = None
+    match_type: Optional[str] = None
+    matches: List[BranchMatch] = []

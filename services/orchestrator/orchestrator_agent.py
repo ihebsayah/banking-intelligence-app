@@ -86,9 +86,9 @@ class OrchestratorAgent:
                 gate_reason = intent_data.get("rejection_reason", "Unsupported query")
             elif intent_data.get("risk_level") in ("adversarial", "suspicious"):
                 gate_reason = intent_data.get("rejection_reason", "Query flagged by risk assessment")
-            elif intent_data.get("requires_clarification") and (intent_data.get("intent_confidence") or intent_data.get("confidence", 1.0)) < self.config.INTENT_CONFIDENCE_THRESHOLD:
+            elif intent_data.get("requires_clarification") and (intent_data.get("confidence") or intent_data.get("intent_confidence", 1.0)) < self.config.INTENT_CONFIDENCE_THRESHOLD:
                 gate_reason = intent_data.get("clarification_question") or "Insufficient confidence to proceed"
-            elif (intent_data.get("intent_confidence") or intent_data.get("confidence", 1.0)) < self.config.INTENT_CONFIDENCE_THRESHOLD:
+            elif (intent_data.get("confidence") or intent_data.get("intent_confidence", 1.0)) < self.config.INTENT_CONFIDENCE_THRESHOLD:
                 gate_reason = "Query confidence below threshold"
 
             if gate_reason:
@@ -159,6 +159,14 @@ class OrchestratorAgent:
                 sql_response = await self._call_sql_agent(intent_data, schema_data, entity_data, user_query, _detected_kpis)
             
             if not sql_response["success"]:
+                if sql_response.get("clarification"):
+                    clarification = sql_response["clarification"]
+                    message = clarification.get("message", "Clarification needed")
+                    await self._log("sql", f"Clarification requested: {message}", "warning")
+                    resp = self._error_response(message)
+                    resp["requires_clarification"] = True
+                    resp["clarification"] = clarification
+                    return resp
                 err = f"SQL generation failed: {sql_response.get('error')}"
                 await self._log("sql", err, "error")
                 return self._error_response(err)
@@ -210,7 +218,8 @@ class OrchestratorAgent:
             compliance_input = {
                 "user_role": user_role,
                 "query_intent": intent_data.get("primary_category", ""),
-                "tables": schema_data.get("tables", [])
+                "tables": sql_data.get("tables_used", []),
+                "columns": sql_data.get("columns_used", []),
             }
             if has_debugging:
                 @trace_compliance_agent
@@ -219,8 +228,8 @@ class OrchestratorAgent:
                         user_id="unknown",
                         user_role=user_role,
                         query_intent=intent_data.get("primary_category", ""),
-                        tables=schema_data.get("tables", []),
-                        columns=[],
+                        tables=sql_data.get("tables_used", []),
+                        columns=sql_data.get("columns_used", []),
                     )
                 compliance_response = await run_compliance(request_id=request_id, input_data=compliance_input)
             else:
@@ -228,8 +237,8 @@ class OrchestratorAgent:
                     user_id="unknown",
                     user_role=user_role,
                     query_intent=intent_data.get("primary_category", ""),
-                    tables=schema_data.get("tables", []),
-                    columns=[],
+                    tables=sql_data.get("tables_used", []),
+                    columns=sql_data.get("columns_used", []),
                 )
                 
             if not compliance_response.get("compliant", True):
@@ -495,11 +504,25 @@ class OrchestratorAgent:
             columns = []
             tables = []
             join_paths = []
+            is_revenue_request = False
             # Phase 6B: detected_kpis passed from orchestrator (from intent agent response)
             detected_kpis = detected_kpis or intent_data.get("detected_kpis", [])
             
             q = user_query.strip().lower()
-            
+
+            # --- Phase 2: branch-scope filter (from structured intent) ---
+            branch_filter = self._extract_branch_filter(intent_data)
+            resolved_branch = None
+            if branch_filter is not None:
+                resolution = await self._resolve_branch(branch_filter.get("value", ""))
+                if not resolution.get("success"):
+                    if "clarification" in resolution:
+                        return {"success": False, "clarification": resolution["clarification"]}
+                    return {"success": False, "error": resolution.get("error", "Branch could not be resolved")}
+                resolved_branch = resolution["branch"]
+                logger.info("[ORCHESTRATOR] Branch resolved: %s -> %s (%s)",
+                            branch_filter.get("value"), resolved_branch.get("name"), resolved_branch.get("branch_id"))
+
             # --- Hardcoded Preset Query Handling ---
             if "top 10 customers by balance" in q:
                 limit = 10
@@ -578,22 +601,74 @@ class OrchestratorAgent:
                 # Generic fallback if not a preset
                 constraints = intent_data.get("explicit_constraints", {})
                 threshold = constraints.get("threshold")
-                
-                if threshold and threshold.startswith("top_"):
+                intent_cat = intent_data.get("primary_category", "")
+
+                # Phase 2: revenue metric assembly (transactions-based fee
+                # revenue, optionally scoped to a resolved branch) — replaces
+                # the old revenue → balance fallback.
+                is_revenue_request = (
+                    intent_cat == "revenue_analysis"
+                    and (branch_filter is not None or (threshold and threshold.startswith("top_")))
+                )
+                if is_revenue_request:
+                    top_n = None
+                    if threshold and threshold.startswith("top_"):
+                        try:
+                            top_n = int(threshold.split("_")[1])
+                        except (ValueError, IndexError):
+                            top_n = None
+                    rev = self._revenue_metric_request(top_n or limit, resolved_branch)
+                    tables = rev["tables"]
+                    join_paths = rev["join_paths"]
+                    columns = rev["columns"]
+                    group_by = rev["group_by"]
+                    order_by = rev["order_by"]
+                    filters = rev["filters"]
+                    limit = rev["limit"]
+                elif threshold and threshold.startswith("top_"):
                     try:
                         limit = int(threshold.split("_")[1])
-                        intent_cat = intent_data.get("primary_category", "")
-                        if intent_cat == "revenue_analysis":
-                            order_by = "balance DESC"
-                        elif intent_cat == "risk_analysis":
+                        if intent_cat == "risk_analysis":
                             order_by = "severity DESC"
                         elif intent_cat == "transaction_analysis":
                             order_by = "amount DESC"
                         else:
                             order_by = "created_at DESC" # generic fallback
-                            
+
                     except (ValueError, IndexError):
                         pass
+
+            # --- Phase 2: propagate the resolved branch filter to ALL intents ---
+            # Revenue builds its own branch-scoped SQL above; every other intent
+            # gets the canonical branch filter plus a complete join path to
+            # `branches` (never a silently-dropped constraint).
+            if resolved_branch is not None and not is_revenue_request:
+                if not tables:
+                    tables = list(schema_data.get("tables", ["customers"]))
+                if not join_paths:
+                    join_paths = list(entity_data.get("join_structure", []) or [])
+                primary = (
+                    join_paths[0].get("from_table")
+                    if join_paths and join_paths[0].get("from_table")
+                    else (tables[0] if tables else "customers")
+                )
+                completion = self._complete_branch_join(primary, tables, join_paths)
+                if completion is None:
+                    return {
+                        "success": False,
+                        "error": (
+                            f"Branch filter cannot be applied to this query: no safe "
+                            f"join path from '{primary}' to 'branches'."
+                        ),
+                    }
+                extra_joins, extra_tables = completion
+                tables = list(tables)
+                join_paths = list(join_paths)
+                for t in extra_tables:
+                    if t not in [x.lower() for x in tables]:
+                        tables.append(t)
+                join_paths.extend(extra_joins)
+                filters["branches.name"] = resolved_branch.get("name")
 
             is_preset = any(p[0].lower() in q for p in [
                 ("top 10 customers by balance",), ("kyc_verified = false",), ("average balance by customer segment",),
@@ -626,7 +701,10 @@ class OrchestratorAgent:
                 if columns: payload["columns"] = columns
             else:
                 payload["order_by"] = order_by if order_by else intent_data.get("order_by")
-                payload["filters"] = filters if filters else intent_data.get("filters")
+                # Merge: orchestrator-built filters (e.g. resolved branches.name)
+                # win, but never silently drop other structured intent filters.
+                merged_filters = {**(intent_data.get("filters") or {}), **filters}
+                payload["filters"] = merged_filters or None
                 payload["group_by"] = group_by if group_by else intent_data.get("group_by")
                 payload["columns"] = columns
 
@@ -637,7 +715,16 @@ class OrchestratorAgent:
                     timeout=10
                 )
             if response.status_code == 200:
-                return {"success": True, "data": response.json()}
+                data = response.json()
+                if resolved_branch is not None:
+                    # Carry resolved-branch context downstream (insights no-data
+                    # messaging, audit, tracing). Not injected into SQL text.
+                    data["branch_context"] = {
+                        "raw_value": branch_filter.get("value", ""),
+                        "branch_id": resolved_branch.get("branch_id"),
+                        "name": resolved_branch.get("name"),
+                    }
+                return {"success": True, "data": data}
             else:
                 return {"success": False, "error": response.text}
         except Exception as e:
@@ -739,6 +826,134 @@ class OrchestratorAgent:
             "transaction_analysis": "transaction",
         }
         return mapping.get(category, "customer")
+
+    @staticmethod
+    def _extract_branch_filter(intent_data: dict) -> dict | None:
+        """Return the branches.name filter from structured intent filters, if any."""
+        for f in intent_data.get("filters_structured", []) or []:
+            if isinstance(f, dict) and f.get("column") == "branches.name":
+                return f
+        return None
+
+    async def _resolve_branch(self, raw_name: str) -> dict:
+        """Resolve a raw branch name to a canonical branch via the SQL agent.
+
+        Returns {"success": True, "branch": {...}} or, on failure, a fail-closed
+        structured clarification {"success": False, "clarification": {...}} that
+        never fabricates a branch and never leaks internal branch IDs to the user.
+        """
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{self.sql_agent_url}/resolve_branch",
+                    json={"name": raw_name},
+                    timeout=10,
+                )
+        except Exception as exc:
+            return {"success": False, "error": f"Branch resolution unavailable: {exc}"}
+        if response.status_code != 200:
+            return {"success": False, "error": f"Branch resolution failed (HTTP {response.status_code})"}
+        data = response.json()
+        if data.get("resolved"):
+            return {"success": True, "branch": data}
+        reason = data.get("reason", "unknown")
+        matches = data.get("matches", [])
+        if reason == "ambiguous":
+            candidates = [m.get("name") for m in matches if m.get("name")]
+            message = (
+                f"Branch '{raw_name}' is ambiguous — did you mean one of: "
+                + ", ".join(candidates)
+            )
+        elif reason == "not_found":
+            candidates = []
+            message = f"Branch '{raw_name}' was not found in the branch directory"
+        else:
+            candidates = []
+            message = f"Branch '{raw_name}' could not be resolved"
+        return {
+            "success": False,
+            "clarification": {
+                "requires_clarification": True,
+                "clarification_type": "branch_resolution",
+                "message": message,
+                "candidates": candidates,
+                "raw_value": raw_name,
+            },
+        }
+
+    @staticmethod
+    def _complete_branch_join(primary: str, tables: list, join_paths: list):
+        """Return (extra_joins, extra_tables) to connect `primary` to `branches`
+        using only the canonical customers→accounts→branches path (direction-
+        insensitive against already-registered joins).
+
+        Returns None when no safe path exists — the caller must fail closed
+        rather than emit a query whose branch constraint would be dropped.
+        """
+        canonical = [
+            {"from_table": "customers", "to_table": "accounts", "join_type": "LEFT JOIN",
+             "join_key": "customer_id", "condition": "accounts.customer_id = customers.customer_id"},
+            {"from_table": "accounts", "to_table": "branches", "join_type": "LEFT JOIN",
+             "join_key": "branch_id", "condition": "branches.branch_id = accounts.branch_id"},
+        ]
+        p = (primary or "customers").lower()
+        if p == "branches":
+            chain = []
+        elif p == "accounts":
+            chain = canonical[1:]
+        elif p == "customers":
+            chain = canonical
+        else:
+            return None
+
+        existing = set()
+        for j in join_paths or []:
+            f = j.get("from_table")
+            t = j.get("to_table")
+            if f and t:
+                existing.add((f.lower(), t.lower()))
+                existing.add((t.lower(), f.lower()))
+
+        extra_joins = []
+        extra_tables = []
+        for j in chain:
+            if (j["from_table"], j["to_table"]) in existing:
+                continue
+            extra_joins.append(j)
+            for t in (j["from_table"], j["to_table"]):
+                if t.lower() not in {x.lower() for x in tables} and t not in extra_tables:
+                    extra_tables.append(t)
+        return extra_joins, extra_tables
+
+    @staticmethod
+    def _revenue_metric_request(limit: int, resolved_branch: dict | None) -> dict:
+        """Build the revenue-metric SQL request: per-customer fee revenue from
+        transactions ('frais compte'), optionally scoped to one branch.
+
+        Metric: total_revenue = COALESCE(SUM(-1 * transactions.amount)
+                FILTER (WHERE transaction_type = 'frais compte'), 0)
+        """
+        return {
+            "tables": ["customers", "accounts", "transactions", "branches"],
+            "join_paths": [
+                {"from_table": "customers", "to_table": "accounts", "join_key": "customer_id",
+                 "join_type": "LEFT JOIN", "condition": "accounts.customer_id = customers.customer_id"},
+                {"from_table": "accounts", "to_table": "transactions", "join_key": "account_id",
+                 "join_type": "LEFT JOIN", "condition": "transactions.account_id = accounts.account_id"},
+                {"from_table": "accounts", "to_table": "branches", "join_key": "branch_id",
+                 "join_type": "LEFT JOIN", "condition": "branches.branch_id = accounts.branch_id"},
+            ],
+            "columns": [
+                "customers.customer_id",
+                "customers.name",
+                "branches.name AS branch_name",
+                "COALESCE(SUM(-1 * transactions.amount) FILTER (WHERE transactions.transaction_type = 'frais compte'), 0) AS total_revenue",
+            ],
+            "group_by": ["customers.customer_id", "customers.name", "branches.name"],
+            "order_by": "total_revenue DESC, customers.customer_id ASC",
+            "filters": {"branches.name": resolved_branch["name"]} if resolved_branch else {},
+            "limit": limit,
+        }
 
     async def _call_insights_agent(
         self,

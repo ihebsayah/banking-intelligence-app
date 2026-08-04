@@ -75,7 +75,7 @@ async def assign_case(
     u = _get_user(request)
     svc = _service(request)
     result = await svc.assign(u, case_id, req, x_idempotency_key, x_request_id or "")
-    return JSONResponse(content=result.model_dump(), headers={"X-Version": str(result.version)})
+    return JSONResponse(content=result.model_dump(mode="json"), headers={"X-Version": str(result.version)})
 
 
 @router.patch("/{case_id}/transition", response_model=CaseAdminResponse)
@@ -87,7 +87,7 @@ async def transition_case(
     u = _get_user(request)
     svc = _service(request)
     result = await svc.transition(u, case_id, req, x_idempotency_key, x_request_id or "")
-    return JSONResponse(content=result.model_dump(), headers={"X-Version": str(result.version)})
+    return JSONResponse(content=result.model_dump(mode="json"), headers={"X-Version": str(result.version)})
 
 
 @router.post("/{case_id}/close", response_model=CaseAdminResponse)
@@ -99,7 +99,7 @@ async def close_case(
     u = _get_user(request)
     svc = _service(request)
     result = await svc.close(u, case_id, req, x_idempotency_key, x_request_id or "")
-    return JSONResponse(content=result.model_dump(), headers={"X-Version": str(result.version)})
+    return JSONResponse(content=result.model_dump(mode="json"), headers={"X-Version": str(result.version)})
 
 
 @router.post("/{case_id}/reopen", response_model=CaseAdminResponse)
@@ -111,7 +111,7 @@ async def reopen_case(
     u = _get_user(request)
     svc = _service(request)
     result = await svc.reopen(u, case_id, req, x_idempotency_key, x_request_id or "")
-    return JSONResponse(content=result.model_dump(), headers={"X-Version": str(result.version)})
+    return JSONResponse(content=result.model_dump(mode="json"), headers={"X-Version": str(result.version)})
 
 
 @router.post("/{case_id}/decisions", response_model=CaseDecisionResponse,
@@ -124,7 +124,7 @@ async def record_decision(
     u = _get_user(request)
     svc = _service(request)
     result = await svc.record_decision(u, case_id, req, x_idempotency_key, x_request_id or "")
-    return JSONResponse(content=result.model_dump(), headers={"X-Version": str(result.version)})
+    return JSONResponse(content=result.model_dump(mode="json"), headers={"X-Version": str(result.version)})
 
 
 @router.get("/{case_id}/decisions", response_model=CaseDecisionListResponse)

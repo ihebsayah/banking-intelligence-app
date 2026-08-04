@@ -43,6 +43,9 @@ export const queryApi = {
       request_id: raw.request_id,
       debug_url: raw.debug_url,
       pipeline_steps: raw.pipeline_steps,
+      requires_clarification: raw.requires_clarification ?? false,
+      clarification: raw.clarification ?? undefined,
+      error: raw.status !== 'success' ? (raw.error ?? raw.message ?? undefined) : undefined,
     };
   },
 

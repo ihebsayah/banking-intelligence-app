@@ -4,7 +4,7 @@ All mutations use a single transaction (UoW) and emit timeline + audit_outbox ev
 """
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, Union
 
 from fastapi import APIRouter, Depends, Header, Query, Request, status
 from fastapi.responses import JSONResponse
@@ -14,7 +14,7 @@ from shared.database import DatabaseConnector
 
 from workbench.exceptions import WorkbenchError
 from workbench.schemas.alerts import (
-    AcknowledgeAlertRequest, AlertListResponse, AlertResponse,
+    AcknowledgeAlertRequest, AlertAdminResponse, AlertListResponse, AlertResponse,
     AssignAlertRequest, DismissAlertRequest, EscalateAlertRequest,
     EscalateResponse, InvestigateAlertRequest, InvestigateResponse,
     MutationResponse,
@@ -67,7 +67,7 @@ async def list_assigned(
 
 # ── GET /alerts/{alert_id} ───────────────────────────────────────────────────
 
-@router.get("/{alert_id}", response_model=AlertResponse)
+@router.get("/{alert_id}", response_model=Union[AlertResponse, AlertAdminResponse])
 async def get_alert(alert_id: str, request: Request):
     u = _get_user(request)
     svc = _service(request)
@@ -86,7 +86,7 @@ async def assign_alert(
     u = _get_user(request)
     svc = _service(request)
     result = await svc.assign(u, alert_id, req, x_idempotency_key, x_request_id or "")
-    return JSONResponse(content=result.model_dump(), headers={"X-Version": str(result.version)})
+    return JSONResponse(content=result.model_dump(mode="json"), headers={"X-Version": str(result.version)})
 
 
 # ── PATCH /alerts/{alert_id}/acknowledge ─────────────────────────────────────
@@ -100,7 +100,7 @@ async def acknowledge_alert(
     u = _get_user(request)
     svc = _service(request)
     result = await svc.acknowledge(u, alert_id, req.expected_version, x_idempotency_key, x_request_id or "")
-    return JSONResponse(content=result.model_dump(), headers={"X-Version": str(result.version)})
+    return JSONResponse(content=result.model_dump(mode="json"), headers={"X-Version": str(result.version)})
 
 
 # ── PATCH /alerts/{alert_id}/dismiss ─────────────────────────────────────────
@@ -114,7 +114,7 @@ async def dismiss_alert(
     u = _get_user(request)
     svc = _service(request)
     result = await svc.dismiss(u, alert_id, req, x_idempotency_key, x_request_id or "")
-    return JSONResponse(content=result.model_dump(), headers={"X-Version": str(result.version)})
+    return JSONResponse(content=result.model_dump(mode="json"), headers={"X-Version": str(result.version)})
 
 
 # ── POST /alerts/{alert_id}/investigate ──────────────────────────────────────
@@ -128,7 +128,7 @@ async def investigate_alert(
     u = _get_user(request)
     svc = _service(request)
     result = await svc.investigate(u, alert_id, req, x_idempotency_key, x_request_id or "")
-    return JSONResponse(content=result.model_dump(), headers={"X-Version": str(result.version)})
+    return JSONResponse(content=result.model_dump(mode="json"), headers={"X-Version": str(result.version)})
 
 
 # ── POST /alerts/{alert_id}/escalate ─────────────────────────────────────────
@@ -142,7 +142,7 @@ async def escalate_alert(
     u = _get_user(request)
     svc = _service(request)
     result = await svc.escalate(u, alert_id, req, x_idempotency_key, x_request_id or "")
-    return JSONResponse(content=result.model_dump(), headers={"X-Version": str(result.version)})
+    return JSONResponse(content=result.model_dump(mode="json"), headers={"X-Version": str(result.version)})
 
 
 

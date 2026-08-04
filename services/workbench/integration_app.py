@@ -27,6 +27,7 @@ from shared.database import DatabaseConnector
 
 from workbench.exceptions import WorkbenchError
 from workbench.routers import (
+    admin_orphans,
     admin_outbox,
     alerts,
     approvals,
@@ -196,6 +197,7 @@ def build_integration_app(db: Optional[DatabaseConnector] = None) -> FastAPI:
         notifications.router,
         timeline.router,
         admin_outbox.router,
+        admin_orphans.router,
     ):
         app.include_router(router)
 
