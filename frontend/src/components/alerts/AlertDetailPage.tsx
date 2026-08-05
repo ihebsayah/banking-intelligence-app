@@ -1,6 +1,6 @@
 // src/components/alerts/AlertDetailPage.tsx
 import React, { useCallback, useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, Link } from 'react-router-dom';
 import {
   ArrowLeft, RefreshCw, AlertTriangle, CheckCircle2,
   Eye, FileSearch, XCircle, TrendingUp, UserPlus,
@@ -247,7 +247,14 @@ export function AlertDetailPage() {
             <span className="font-mono text-xs" style={{ color: 'var(--text-secondary)' }}>
               {alert.related_entity_type} · {alert.related_entity_id}
             </span>
-            <span className="text-[10px]" style={{ color: 'var(--text-subtle)' }}>(linkable in 2C)</span>
+            {alert.related_entity_type === 'customer' && (
+              <Link
+                to={`/workbench/customers/${alert.related_entity_id}`}
+                className="text-[10px] font-semibold underline decoration-dotted hover:brightness-125"
+                style={{ color: 'var(--accent-blue)' }}>
+                Open Customer 360
+              </Link>
+            )}
           </div>
         )}
 

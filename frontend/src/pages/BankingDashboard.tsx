@@ -1,5 +1,6 @@
 // src/pages/BankingDashboard.tsx
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useDashboardStore } from '../stores/dashboardStore';
 import { KPICard } from '../components/dashboard/KPICard';
 import {
@@ -216,7 +217,10 @@ export function BankingDashboard() {
                               {tx.transaction_id.slice(0, 8)}...
                             </td>
                             <td className="py-3 font-mono text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>
-                              {tx.customer_id.slice(0, 8)}...
+                              <Link to={`/workbench/customers/${tx.customer_id}`}
+                                className="underline decoration-dotted hover:brightness-125" style={{ color: 'var(--accent-blue)' }}>
+                                {tx.customer_id.slice(0, 8)}...
+                              </Link>
                             </td>
                             <td className="py-3" style={{ color: 'var(--text-secondary)' }}>{tx.description}</td>
                             <td className="py-3">

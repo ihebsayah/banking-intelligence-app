@@ -33,6 +33,7 @@ import { ApprovalQueuePage } from './components/approvals/ApprovalQueuePage';
 import { NotificationsPanel } from './components/notifications/NotificationsPanel';
 import { OutboxMonitor } from './components/admin/OutboxMonitor';
 import { ReportsPage } from './pages/ReportsPage';
+import { Customer360Page } from './components/customers/Customer360Page';
 import { AdminPage } from './pages/AdminPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { UnauthorizedPage } from './pages/UnauthorizedPage';
@@ -106,6 +107,7 @@ function AppShell() {
             <Route path="/workbench/cases/:caseId" element={<ProtectedRoute requiredRole={['analyst', 'compliance', 'admin']} requiredPermission="case:read_assigned"><CaseDetailPage /></ProtectedRoute>} />
             <Route path="/workbench/information-requests" element={<ProtectedRoute requiredRole={['analyst', 'compliance', 'admin']} requiredPermission="info_request:read_assigned"><IRInboxPage /></ProtectedRoute>} />
             <Route path="/workbench/approvals" element={<ProtectedRoute requiredRole={['analyst', 'compliance', 'admin']} requiredPermission="approval:read"><ApprovalQueuePage /></ProtectedRoute>} />
+            <Route path="/workbench/customers/:customerId" element={<ProtectedRoute requiredPermission="customer:read_basic"><Customer360Page /></ProtectedRoute>} />
             <Route path="/notifications" element={<ProtectedRoute requiredRole={['analyst', 'compliance', 'admin']} requiredPermission="notification:read"><NotificationsPanel /></ProtectedRoute>} />
             <Route path="/workbench/admin/outbox" element={<ProtectedRoute requiredRole="admin" requiredPermission="admin:outbox_monitor"><OutboxMonitor /></ProtectedRoute>} />
             <Route path="/compliance"      element={<ProtectedRoute requiredRole={['compliance', 'manager', 'admin']} requiredPermission="workbench:access"><CompliancePage /></ProtectedRoute>} />

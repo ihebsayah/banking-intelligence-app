@@ -46,6 +46,15 @@ export const PERMISSIONS = {
   NOTIFICATION_UPDATE: 'notification:update',
   ADMIN_OUTBOX_MONITOR: 'admin:outbox_monitor',
   ADMIN_OUTBOX_RETRY: 'admin:outbox_retry',
+  CUSTOMER_READ: 'customer:read',
+  CUSTOMER_READ_BASIC: 'customer:read_basic',
+  CUSTOMER_READ_FINANCIAL: 'customer:read_financial',
+  CUSTOMER_READ_TRANSACTIONS: 'customer:read_transactions',
+  CUSTOMER_READ_KYC: 'customer:read_kyc',
+  CUSTOMER_READ_RISK: 'customer:read_risk',
+  CUSTOMER_READ_COMPLIANCE_HISTORY: 'customer:read_compliance_history',
+  CUSTOMER_READ_OPERATIONAL_METADATA: 'customer:read_operational_metadata',
+  CUSTOMER_READ_PII: 'customer:read_pii',
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

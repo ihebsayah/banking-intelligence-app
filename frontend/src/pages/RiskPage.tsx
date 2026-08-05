@@ -1,5 +1,6 @@
 // src/pages/RiskPage.tsx
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { riskApi } from '../api/riskApi';
 import { ServiceUnavailable } from '../components/ui/ServiceUnavailable';
 import { BankingHeader } from '../components/Layout/BankingHeader';
@@ -345,7 +346,12 @@ export function RiskPage() {
                         {flags.map((flag) => (
                           <tr key={flag.flag_id} className="hover:bg-white/5 transition-all">
                             <td className="py-4 font-mono text-[10px] font-semibold select-all" style={{ color: 'var(--text-muted)' }}>#{flag.flag_id.slice(0, 8)}...</td>
-                            <td className="py-4 font-mono text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>{flag.customer_id.slice(0, 8)}...</td>
+                            <td className="py-4 font-mono text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>
+                              <Link to={`/workbench/customers/${flag.customer_id}`}
+                                className="underline decoration-dotted hover:brightness-125" style={{ color: 'var(--accent-blue)' }}>
+                                {flag.customer_id.slice(0, 8)}...
+                              </Link>
+                            </td>
                             <td className="py-4">
                               <span className="font-mono text-[10px] font-semibold px-1.5 py-0.5 rounded border uppercase" style={{ color: 'var(--text-secondary)', background: 'var(--bg-card)', borderColor: 'var(--bg-border)' }}>
                                 {flag.flag_type.replace('_', ' ')}
