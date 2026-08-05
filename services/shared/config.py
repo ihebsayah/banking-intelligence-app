@@ -20,6 +20,10 @@ class Settings(BaseSettings):
         default="postgresql://banking_user:securepass123@localhost:5432/banking_dev",
         description="Main banking PostgreSQL connection string",
     )
+    INTEGRATION_DATABASE_URL: str = Field(
+        default="postgresql://integration_user:integrationpass123@localhost:5435/banking_integration",
+        description="Workbench operational PostgreSQL connection string (Customer 360 read bridge)",
+    )
     AUDIT_DATABASE_URL: str = Field(
         default="postgresql://audit_user:securepass123@localhost:5433/audit_logs",
         description="Audit-only PostgreSQL connection string",

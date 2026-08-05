@@ -122,6 +122,16 @@ try:
             logger.warning("Audit Database not available at startup", extra={"error": str(exc)})
             app.state.audit_db = None
 
+        # Store Integration (workbench) DB connector in app state — used by the
+        # Customer 360 read bridge for organisation scopes and explicit links.
+        try:
+            app.state.integration_db = DatabaseConnector(settings.INTEGRATION_DATABASE_URL)
+            await app.state.integration_db.initialize()
+            logger.info("Integration Database connection pool ready")
+        except Exception as exc:
+            logger.warning("Integration Database not available at startup", extra={"error": str(exc)})
+            app.state.integration_db = None
+
         yield
 
         # Shutdown
@@ -130,6 +140,8 @@ try:
             await app.state.db.close()
         if getattr(app.state, "audit_db", None):
             await app.state.audit_db.close()
+        if getattr(app.state, "integration_db", None):
+            await app.state.integration_db.close()
 
 
     # ─── Application ──────────────────────────────────────────────────────────────

@@ -17,6 +17,9 @@ Portal Endpoints (new):
   Reports:     GET /reports, POST /reports/generate
   Profile:     GET /users/me, GET /auth/me
   Admin:       GET /admin/users, /admin/roles, /admin/permissions
+  Customer 360 (Phase 3A.2):
+               GET /api/v1/customers/{customer_id}/overview
+               GET /api/v1/customers/{customer_id}/transactions
 
 RBAC:
   - analyst/manager : dashboard, kpi, risk, reports
@@ -56,6 +59,17 @@ try:
 except ImportError:
     KPIService = None
 
+try:
+    from customer360.models import Customer360Overview, DataQuality, TransactionRow, TransactionSummary
+    from customer360.service import Customer360Service, Customer360SourceUnavailable
+except ImportError:
+    Customer360Overview = None
+    DataQuality = None
+    TransactionRow = None
+    TransactionSummary = None
+    Customer360Service = None
+    Customer360SourceUnavailable = None
+
 logger = get_logger(__name__, "api-gateway")
 settings = get_settings()
 router = APIRouter()
@@ -72,6 +86,10 @@ def _get_db(request: Request) -> Optional[DatabaseConnector]:
 
 def _get_audit_db(request: Request) -> Optional[DatabaseConnector]:
     return getattr(request.app.state, "audit_db", None)
+
+
+def _get_integration_db(request: Request) -> Optional[DatabaseConnector]:
+    return getattr(request.app.state, "integration_db", None)
 
 
 def _require_db(request: Request) -> DatabaseConnector:
@@ -359,6 +377,18 @@ class AdminActivityLog(BaseModel):
     detail: Optional[Dict[str, Any]] = None
     ip_address: Optional[str] = None
     created_at: str
+
+
+class CustomerTransactionsResponse(BaseModel):
+    """Dedicated customer transactions view (Phase 3A.2)."""
+
+    transaction_summary: Optional[TransactionSummary] = None
+    recent_transactions: List[TransactionRow] = Field(default_factory=list)
+    total_count: int = 0
+    limit: int = 20
+    offset: int = 0
+    data_quality: Optional[DataQuality] = None
+    generated_at: str = ""
 
 
 
@@ -695,6 +725,44 @@ async def _send_audit_log(entry: AuditLogEntry) -> None:
 
 def _now_iso() -> str:
     return datetime.utcnow().isoformat() + "Z"
+
+
+def _get_customer360_service(request: Request) -> Optional[Customer360Service]:
+    """Build the Customer 360 service from the app-state DB pools (or None)."""
+    if Customer360Service is None:
+        return None
+    db = _get_db(request)
+    if db is None:
+        return None
+    return Customer360Service(db, _get_integration_db(request))
+
+
+def _customer_audit_entry(
+    user: User,
+    action: str,
+    customer_id: str,
+    status: AuditStatus,
+    metadata: Optional[dict] = None,
+    execution_ms: int = 0,
+) -> AuditLogEntry:
+    """Audit entry for Customer 360 accesses (rich metadata for traceability)."""
+    role = user.user_role
+    if hasattr(role, "value"):
+        role = role.value
+    error_message = None
+    if status != AuditStatus.SUCCESS:
+        error_message = str((metadata or {}).get("reason") or (metadata or {}).get("error") or status.value)
+    return AuditLogEntry(
+        user_id=user.user_id,
+        user_role=role,
+        action=action,
+        status=status,
+        endpoint=f"/api/v1/customers/{customer_id}",
+        http_method="GET",
+        execution_time_ms=execution_ms,
+        error_message=error_message,
+        metadata=metadata,
+    )
 
 
 def _row_str(row: dict, key: str, default: Any = None) -> Optional[str]:
@@ -2736,6 +2804,146 @@ async def admin_activity_log(
             for r in rows
         ],
     }
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# ─── CUSTOMER 360 (Phase 3A.2) ─────────────────────────────────────────────────
+# Read-only aggregate over banking_dev (authoritative) + banking_integration
+# (explicit workbench links / org scopes). Object-level security follows the
+# workbench contract: any customer:read_* permission grants endpoint access,
+# sections the caller cannot read are omitted, and out-of-scope customers 404.
+# ───────────────────────────────────────────────────────────────────────────────
+
+_CUSTOMER_READ_PERMISSIONS = (
+    "customer:read_basic",
+    "customer:read_financial",
+    "customer:read_transactions",
+    "customer:read_kyc",
+    "customer:read_risk",
+    "customer:read_compliance_history",
+)
+
+
+@router.get(
+    "/api/v1/customers/{customer_id}/overview",
+    response_model=Customer360Overview,
+    summary="Customer 360 overview — permission-scoped aggregate of one customer",
+    tags=["customer360"],
+)
+async def customer360_overview(
+    customer_id: str,
+    request: Request,
+    user: User = Depends(require_any_permission(*_CUSTOMER_READ_PERMISSIONS)),
+):
+    service = _get_customer360_service(request)
+    if service is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"error": "CUSTOMER360_UNAVAILABLE",
+                    "message": "Customer 360 service is unavailable (no database connection)"},
+        )
+
+    start_time = time.monotonic()
+    request_id = str(getattr(request.state, "request_id", "") or "")
+    try:
+        result = await service.get_overview(user, customer_id, request_id)
+    except Customer360SourceUnavailable as exc:
+        await _send_audit_log(_customer_audit_entry(
+            user, "customer_360_access", customer_id, AuditStatus.ERROR,
+            metadata={"error": str(exc), "request_id": request_id},
+            execution_ms=int((time.monotonic() - start_time) * 1000),
+        ))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"error": "CUSTOMER360_SOURCE_UNAVAILABLE",
+                    "message": "Customer data source is temporarily unavailable"},
+        )
+
+    if result is None:
+        await _send_audit_log(_customer_audit_entry(
+            user, "customer_360_access", customer_id, AuditStatus.REJECTED,
+            metadata={"reason": "customer_not_found_or_out_of_scope", "request_id": request_id},
+            execution_ms=int((time.monotonic() - start_time) * 1000),
+        ))
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "CUSTOMER_NOT_FOUND",
+                    "message": "Customer not found or not within your organisation scope"},
+        )
+
+    overview, audit = result
+    await _send_audit_log(_customer_audit_entry(
+        user, "customer_360_access", customer_id, AuditStatus.SUCCESS,
+        metadata=audit,
+        execution_ms=int((time.monotonic() - start_time) * 1000),
+    ))
+    return overview
+
+
+@router.get(
+    "/api/v1/customers/{customer_id}/transactions",
+    response_model=CustomerTransactionsResponse,
+    summary="Recent transactions + lifetime summary for one customer",
+    tags=["customer360"],
+)
+async def customer360_transactions(
+    customer_id: str,
+    request: Request,
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    user: User = Depends(require_permission("customer:read_transactions")),
+):
+    service = _get_customer360_service(request)
+    if service is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"error": "CUSTOMER360_UNAVAILABLE",
+                    "message": "Customer 360 service is unavailable (no database connection)"},
+        )
+
+    start_time = time.monotonic()
+    request_id = str(getattr(request.state, "request_id", "") or "")
+    try:
+        result = await service.get_transactions(user, customer_id, request_id, limit, offset)
+    except Customer360SourceUnavailable as exc:
+        await _send_audit_log(_customer_audit_entry(
+            user, "customer_transactions_access", customer_id, AuditStatus.ERROR,
+            metadata={"error": str(exc), "request_id": request_id},
+            execution_ms=int((time.monotonic() - start_time) * 1000),
+        ))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"error": "CUSTOMER360_SOURCE_UNAVAILABLE",
+                    "message": "Customer data source is temporarily unavailable"},
+        )
+
+    if result is None:
+        await _send_audit_log(_customer_audit_entry(
+            user, "customer_transactions_access", customer_id, AuditStatus.REJECTED,
+            metadata={"reason": "customer_not_found_or_out_of_scope", "request_id": request_id},
+            execution_ms=int((time.monotonic() - start_time) * 1000),
+        ))
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"error": "CUSTOMER_NOT_FOUND",
+                    "message": "Customer not found or not within your organisation scope"},
+        )
+
+    summary, rows, total, data_quality, audit = result
+    await _send_audit_log(_customer_audit_entry(
+        user, "customer_transactions_access", customer_id, AuditStatus.SUCCESS,
+        metadata=audit,
+        execution_ms=int((time.monotonic() - start_time) * 1000),
+    ))
+    return CustomerTransactionsResponse(
+        transaction_summary=summary,
+        recent_transactions=rows,
+        total_count=total,
+        limit=limit,
+        offset=offset,
+        data_quality=data_quality,
+        generated_at=datetime.utcnow().isoformat() + "Z",
+    )
 
 
 # ───────────────────────────────────────────────────────────────────────────────

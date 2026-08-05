@@ -53,7 +53,7 @@ _FALLBACK_COLUMNS: Dict[str, List[str]] = {
     "collateral":             ["collateral_id", "loan_id", "collateral_value", "type"],
     "guarantees":             ["guarantee_id", "loan_id", "guarantor_id", "amount"],
     "provisions":             ["provision_id", "loan_id", "provision_amount", "period"],
-    "risk_flags":             ["flag_id", "customer_id", "flag_type", "severity", "created_at"],
+    "risk_flags":             ["id", "customer_id", "flag_type", "severity", "created_at"],
     "customer_risk_scores":   ["score_id", "customer_id", "risk_score", "calculated_at"],
     "kyc_cases":              ["kyc_case_id", "customer_id", "status", "created_at"],
     "kyc_documents":          ["doc_id", "kyc_case_id", "document_type", "uploaded_at"],

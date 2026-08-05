@@ -327,7 +327,7 @@ APPROVED_METRICS: Dict[str, Dict[str, Any]] = {
         "grains": {"branch", "governorate", "time"},
     },
     "total_risk_exposure": {
-        "formula": "COUNT(rf.flag_id)",
+        "formula": "COUNT(rf.id)",
         "alias": "total_risk_exposure",
         "source_tables": ["risk_flags"],
         "grains": {"branch", "governorate", "time"},
@@ -378,7 +378,6 @@ ENTITY_IDENTITIES: Dict[str, Dict[str, Any]] = {
     "transactions": {"identity": "transaction_id", "source_table": "transactions"},
     "branches": {"identity": "branch_id", "source_table": "branches"},
     "employees": {"identity": "employee_id", "source_table": "employees"},
-    "cards": {"identity": "card_id", "source_table": "cards"},
     "products": {"identity": "product_id", "source_table": "products"},
     "risk_flags": {"identity": "id", "source_table": "risk_flags"},
     "kyc_cases": {"identity": "kyc_case_id", "source_table": "kyc_cases"},
@@ -411,7 +410,6 @@ _ENTITY_KEYWORDS: Dict[str, str] = {
     "transaction": "transactions", "virement": "transactions",
     "branch": "branches", "agence": "branches", "succursale": "branches",
     "employee": "employees", "employé": "employees",
-    "card": "cards", "carte": "cards",
     "fee": "fee_income", "commission": "fee_income", "frais": "fee_income",
     "kyc": "kyc_cases",
     "aml": "aml_alerts", "suspicious": "suspicious_activity_reports",
@@ -486,11 +484,6 @@ _VALID_COLUMNS: Dict[str, Set[str]] = {
         "employee_id", "branch_id", "department_id", "first_name", "last_name",
         "title", "role", "hire_date", "is_active", "email",
         "supervisor_id", "created_at",
-    },
-    "cards": {
-        "card_id", "account_id", "customer_id", "card_type",
-        "card_number_masked", "expiry_date", "status",
-        "daily_limit", "monthly_limit", "issued_date",
     },
     "products": {
         "product_id", "name", "category", "description",
