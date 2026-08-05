@@ -9,7 +9,9 @@ import { clsx } from 'clsx';
 import {
   ArrowLeft, RefreshCw, ShieldX, ShieldAlert, AlertTriangle, AlertCircle,
   UserX, Landmark, Building2, Wallet, Scale, FileClock, Inbox, CheckCircle2,
+  BellRing, Search, FileQuestion, CheckCheck,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { BankingHeader } from '../Layout/BankingHeader';
 import { customer360Api, parseCustomer360Error } from '../../api/customer360Api';
 import type { Customer360ApiError } from '../../api/customer360Api';
@@ -25,11 +27,10 @@ import type {
   DataQuality,
   LoanSummary,
   TransactionRow,
-  WorkbenchEntityType,
   WorkbenchLink,
 } from '../../types/customer360';
 
-type TabId = 'overview' | 'accounts' | 'transactions' | 'risk' | 'alerts';
+type TabId = 'overview' | 'accounts' | 'transactions' | 'risk' | 'alerts' | 'workbench';
 
 // ── formatting helpers ──────────────────────────────────────────────────────
 
@@ -168,25 +169,43 @@ function dataQualityWarnings(dq: DataQuality): { message: string; warn: boolean 
   return out;
 }
 
-const ENTITY_LABELS: Record<WorkbenchEntityType, string> = {
+const ENTITY_LABELS: Record<string, string> = {
   alert: 'Workbench alert',
   investigation: 'Investigation',
   case: 'Compliance case',
   information_request: 'Information request',
+  approval: 'Approval request',
 };
 
-const ENTITY_ROUTES: Record<WorkbenchEntityType, string> = {
+const ENTITY_ICONS: Record<string, LucideIcon> = {
+  alert: BellRing,
+  investigation: Search,
+  case: Scale,
+  information_request: FileQuestion,
+  approval: CheckCheck,
+};
+
+// Only entity types with a real detail route navigate; everything else
+// (information_request, approval, unknown) renders as a plain non-link row
+// so no invented routes are exposed.
+const ENTITY_DETAIL_ROUTES: Record<string, string> = {
   alert: '/workbench/alerts',
   investigation: '/workbench/investigations',
   case: '/workbench/cases',
-  information_request: '/workbench/information-requests',
 };
 
-function entityVariant(type: WorkbenchEntityType) {
+function entityHref(type: string, id: string | null | undefined): string | null {
+  const base = ENTITY_DETAIL_ROUTES[type];
+  return base && id ? `${base}/${encodeURIComponent(id)}` : null;
+}
+
+function entityVariant(type: string) {
   switch (type) {
     case 'alert': return 'blue' as const;
     case 'investigation': return 'purple' as const;
     case 'case': return 'yellow' as const;
+    case 'information_request': return 'gray' as const;
+    case 'approval': return 'green' as const;
     default: return 'gray' as const;
   }
 }
@@ -294,7 +313,8 @@ export function Customer360Page() {
     if (financialGranted) list.push('accounts');
     if (transactionsGranted) list.push('transactions');
     if (riskGranted || kycGranted) list.push('risk');
-    if (analyticsGranted || workbenchGranted) list.push('alerts');
+    if (analyticsGranted) list.push('alerts');
+    if (workbenchGranted) list.push('workbench');
     return list;
   }, [financialGranted, transactionsGranted, riskGranted, kycGranted, analyticsGranted, workbenchGranted]);
 
@@ -421,6 +441,7 @@ export function Customer360Page() {
     transactions: 'Transactions',
     risk: 'Risk & KYC',
     alerts: 'Alerts & Cases',
+    workbench: 'Workbench',
   };
 
   return (
@@ -539,13 +560,9 @@ export function Customer360Page() {
           )}
           {tab === 'risk' && <RiskKycTab overview={overview} adminView={adminView} />}
           {tab === 'alerts' && (
-            <AlertsTab
-              analyticsGranted={analyticsGranted}
-              workbenchGranted={workbenchGranted}
-              alerts={overview.analytics_alerts}
-              links={overview.workbench_links}
-            />
+            <AlertsTab analyticsGranted={analyticsGranted} alerts={overview.analytics_alerts} />
           )}
+          {tab === 'workbench' && <WorkbenchTab links={overview.workbench_links} />}
         </div>
       </div>
     </div>
@@ -1129,21 +1146,23 @@ function RiskKycTab({ overview, adminView }: { overview: Customer360Overview; ad
   );
 }
 
-// ── Alerts & Cases tab ──────────────────────────────────────────────────────
+// ── Alerts & Cases tab (analytics AML alerts) ──────────────────────────────
 
-function AlertsTab({ analyticsGranted, workbenchGranted, alerts, links }: {
+function AlertsTab({ analyticsGranted, alerts }: {
   analyticsGranted: boolean;
-  workbenchGranted: boolean;
   alerts: AmlAlertSummary[];
-  links: WorkbenchLink[];
 }) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-      <SectionCard title="Analytics Alerts" icon={<Inbox size={12} />}>
+      <SectionCard title="Analytics Alerts" icon={<BellRing size={12} />}>
         {!analyticsGranted ? (
           <RestrictedNotice label="Analytics alerts" />
         ) : alerts.length === 0 ? (
-          <p className="text-[11px]" style={{ color: 'var(--text-subtle)' }}>No analytics alerts on record.</p>
+          <EmptyState
+            icon={<BellRing size={18} />}
+            title="No analytics alerts on record"
+            description="No AML analytics alerts were found for this customer within your permitted scope."
+          />
         ) : (
           <div className="space-y-2">
             {alerts.map((a) => (
@@ -1163,27 +1182,46 @@ function AlertsTab({ analyticsGranted, workbenchGranted, alerts, links }: {
           </div>
         )}
       </SectionCard>
+    </div>
+  );
+}
 
+// ── Workbench tab (explicit operational records linked to this customer) ───
+
+function WorkbenchTab({ links }: { links: WorkbenchLink[] }) {
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
       <SectionCard title="Workbench Records" icon={<Inbox size={12} />}>
-        {!workbenchGranted ? (
-          <RestrictedNotice label="Workbench records" />
-        ) : links.length === 0 ? (
-          <p className="text-[11px]" style={{ color: 'var(--text-subtle)' }}>No operational records explicitly linked to this customer.</p>
+        {links.length === 0 ? (
+          <EmptyState
+            icon={<Inbox size={18} />}
+            title="No linked operational records"
+            description="No workbench records are explicitly linked to this customer."
+          />
         ) : (
           <div className="space-y-2">
             {links.map((l) => {
-              const route = `${ENTITY_ROUTES[l.entity_type]}/${l.entity_id}`;
+              const Icon = ENTITY_ICONS[l.entity_type] ?? Inbox;
+              const href = entityHref(l.entity_type, l.entity_id);
               return (
                 <div key={`${l.entity_type}-${l.entity_id}`} className="rounded-xl border p-3"
                   style={{ background: 'var(--bg-tertiary)', borderColor: 'var(--bg-border)' }}>
                   <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <StatusBadge variant={entityVariant(l.entity_type)}>{ENTITY_LABELS[l.entity_type]}</StatusBadge>
+                    <StatusBadge variant={entityVariant(l.entity_type)}>
+                      <Icon size={11} /> {ENTITY_LABELS[l.entity_type] ?? 'Operational record'}
+                    </StatusBadge>
                     <StatusBadge variant={statusVariant(l.status)}>{l.status ?? '—'}</StatusBadge>
                   </div>
-                  <Link to={route} className="font-mono text-[11px] mt-1.5 block underline decoration-dotted hover:brightness-125"
-                    style={{ color: 'var(--accent-blue)' }}>
-                    {l.entity_id}
-                  </Link>
+                  {href ? (
+                    <Link to={href} className="font-mono text-[11px] mt-1.5 block underline decoration-dotted hover:brightness-125"
+                      style={{ color: 'var(--accent-blue)' }}>
+                      {l.entity_id}
+                    </Link>
+                  ) : (
+                    <p className="font-mono text-[11px] mt-1.5" style={{ color: 'var(--text-secondary)' }}>
+                      {l.entity_id || '—'}
+                    </p>
+                  )}
                   <p className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>
                     {[
                       l.assigned_to ? `assigned to ${l.assigned_to}` : null,

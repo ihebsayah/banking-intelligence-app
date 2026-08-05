@@ -487,7 +487,7 @@ class WorkbenchLinkRepository:
             params = [case_ids, investigation_ids, _WORKBENCH_LINK_LIMIT]
         return await self._db.fetch_all(
             f"""
-            SELECT ir_id, case_id, investigation_id, status, assigned_to, scope_id, updated_at
+            SELECT ir_id, case_id, investigation_id, status, assigned_to, updated_at
               FROM information_requests
              {filter_sql}
              ORDER BY updated_at DESC

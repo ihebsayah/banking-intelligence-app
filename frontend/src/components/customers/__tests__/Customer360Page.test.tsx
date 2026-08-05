@@ -172,6 +172,9 @@ const complianceOverview: Customer360Overview = {
   kyc_aml: kycCompliance,
   workbench_links: [
     { entity_type: 'alert', entity_id: 'AL-0001', status: 'assigned', assigned_to: 'comp_1', updated_at: '2026-07-15T00:00:00Z', scope_id: 'hq_main', source: 'workbench' },
+    { entity_type: 'investigation', entity_id: 'INV-0001', status: 'active', assigned_to: 'analyst_001', updated_at: '2026-07-14T00:00:00Z', scope_id: 'hq_main', source: 'workbench' },
+    { entity_type: 'case', entity_id: 'CASE-9', status: 'under_review', assigned_to: 'comp_1', updated_at: '2026-07-13T00:00:00Z', scope_id: 'hq_main', source: 'workbench' },
+    { entity_type: 'information_request', entity_id: 'IR-0001', status: 'open', assigned_to: 'analyst_001', updated_at: '2026-07-12T00:00:00Z', scope_id: null, source: 'workbench' },
   ],
 };
 
@@ -260,9 +263,61 @@ describe('Customer360Page', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Risk & KYC' }));
     expect(await screen.findByText('KC-0001')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Alerts & Cases' }));
-    const link = await screen.findByRole('link', { name: 'AL-0001' });
-    expect(link).toHaveAttribute('href', '/workbench/alerts/AL-0001');
+    fireEvent.click(screen.getByRole('tab', { name: 'Workbench' }));
+    const alertLink = await screen.findByRole('link', { name: 'AL-0001' });
+    expect(alertLink).toHaveAttribute('href', '/workbench/alerts/AL-0001');
+    expect(screen.getByRole('link', { name: 'INV-0001' })).toHaveAttribute('href', '/workbench/investigations/INV-0001');
+    expect(screen.getByRole('link', { name: 'CASE-9' })).toHaveAttribute('href', '/workbench/cases/CASE-9');
+
+    // No detail route exists for information requests → plain non-link row.
+    expect(screen.getByText('IR-0001')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'IR-0001' })).not.toBeInTheDocument();
+  });
+
+  it('hides the Workbench tab for an Analyst who is not granted workbench records', async () => {
+    mockGetOverview.mockResolvedValue(analystOverview);
+    renderPage();
+
+    await screen.findByText('Fouad Ben Salah');
+    expect(screen.queryByRole('tab', { name: 'Workbench' })).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Alerts & Cases' })).toBeInTheDocument();
+  });
+
+  it('shows the real error state instead of falling back to fabricated data when the API fails', async () => {
+    mockGetOverview.mockRejectedValue(axiosError(503));
+    renderPage();
+
+    expect(await screen.findByText('Service Unavailable')).toBeInTheDocument();
+    expect(screen.queryByText('Fouad Ben Salah')).not.toBeInTheDocument();
+    expect(screen.queryByText('150,000.00 TND')).not.toBeInTheDocument();
+  });
+
+  it('navigates from a linked Workbench case into its detail route', async () => {
+    mockUseAuth.mockReturnValue({
+      applicationUser: { user_id: 'comp_1', role: 'compliance' },
+      hasPermission: (p: string) => COMPLIANCE_PERMS.includes(p),
+      hasRole: () => false,
+    });
+    mockGetOverview.mockResolvedValue(complianceOverview);
+
+    function CaseStub() {
+      const { caseId } = useParams<{ caseId: string }>();
+      return <div>case:{caseId}</div>;
+    }
+
+    render(
+      <MemoryRouter initialEntries={['/workbench/customers/CUST_00001']}>
+        <Routes>
+          <Route path="/workbench/customers/:customerId" element={<Customer360Page />} />
+          <Route path="/workbench/cases/:caseId" element={<CaseStub />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole('tab', { name: 'Workbench' }));
+    const caseLink = await screen.findByRole('link', { name: 'CASE-9' });
+    fireEvent.click(caseLink);
+    expect(await screen.findByText('case:CASE-9')).toBeInTheDocument();
   });
 
   it('renders Admin metadata-only view with no balances, transactions or KYC content', async () => {
@@ -280,6 +335,8 @@ describe('Customer360Page', () => {
     expect(screen.queryByRole('tab', { name: 'Transactions' })).not.toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: 'Accounts & Loans' })).not.toBeInTheDocument();
     expect(screen.queryByRole('tab', { name: 'Risk & KYC' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Alerts & Cases' })).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Workbench' })).toBeInTheDocument();
     expect(screen.queryByText('150,000.00 TND')).not.toBeInTheDocument();
     expect(mockGetTransactions).not.toHaveBeenCalled();
   });

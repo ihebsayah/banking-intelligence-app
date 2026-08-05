@@ -44,6 +44,12 @@ describe('customer360Api', () => {
     await expect(customer360Api.getOverview('CUST_00001')).rejects.toMatchObject({ kind: 'malformed' });
   });
 
+  it('getOverview has no mock fallback — a failed request rejects instead of returning fabricated data', async () => {
+    mockGet.mockRejectedValue(Object.assign(new Error('source down'), { response: { status: 503 } }));
+    await expect(customer360Api.getOverview('CUST_00001')).rejects.toMatchObject({ response: { status: 503 } });
+    expect(mockGet).toHaveBeenCalledTimes(1);
+  });
+
   it('getTransactions sends only limit/offset query params supported by the backend', async () => {
     mockGet.mockResolvedValue({
       data: {

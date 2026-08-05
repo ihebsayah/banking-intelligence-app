@@ -174,7 +174,8 @@ export type WorkbenchEntityType =
   | 'alert'
   | 'investigation'
   | 'case'
-  | 'information_request';
+  | 'information_request'
+  | 'approval';
 
 export interface WorkbenchLink {
   entity_type: WorkbenchEntityType;

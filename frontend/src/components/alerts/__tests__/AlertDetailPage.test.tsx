@@ -99,6 +99,19 @@ describe('AlertDetailPage', () => {
     expect(screen.getByText('hq_main')).toBeInTheDocument();
   });
 
+  it('links to Customer 360 only when the alert carries a validated customer reference', async () => {
+    mockGet.mockResolvedValue(makeAlert({ related_entity_type: 'customer', related_entity_id: 'CUST_00001' }));
+    const { unmount } = renderDetail();
+    const link = await screen.findByRole('link', { name: 'Open Customer 360' });
+    expect(link).toHaveAttribute('href', '/workbench/customers/CUST_00001');
+
+    unmount();
+    mockGet.mockResolvedValue(makeAlert({ related_entity_type: 'customer', related_entity_id: null }));
+    renderDetail();
+    await screen.findByText('Suspicious transfer');
+    expect(screen.queryByRole('link', { name: 'Open Customer 360' })).not.toBeInTheDocument();
+  });
+
   it('acknowledges an assigned alert and refetches', async () => {
     renderDetail();
     fireEvent.click(await screen.findByRole('button', { name: /Acknowledge/i }));

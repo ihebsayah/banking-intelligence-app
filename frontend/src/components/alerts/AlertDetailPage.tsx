@@ -247,9 +247,9 @@ export function AlertDetailPage() {
             <span className="font-mono text-xs" style={{ color: 'var(--text-secondary)' }}>
               {alert.related_entity_type} · {alert.related_entity_id}
             </span>
-            {alert.related_entity_type === 'customer' && (
+            {alert.related_entity_type === 'customer' && alert.related_entity_id && (
               <Link
-                to={`/workbench/customers/${alert.related_entity_id}`}
+                to={`/workbench/customers/${encodeURIComponent(alert.related_entity_id)}`}
                 className="text-[10px] font-semibold underline decoration-dotted hover:brightness-125"
                 style={{ color: 'var(--accent-blue)' }}>
                 Open Customer 360
