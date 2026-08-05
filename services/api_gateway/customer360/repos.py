@@ -147,6 +147,36 @@ class Customer360Repository:
             params,
         )
 
+    async def fetch_customer_metadata_counts(
+        self,
+        customer_id: str,
+        allowed_branches: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """Admin metadata-only counts. Deliberately selects NO balance/amount
+        columns so a metadata viewer never touches monetary values."""
+        params: List[Any] = [customer_id]
+        account_filter = ""
+        loan_filter = ""
+        if allowed_branches:
+            account_filter = " AND a.branch_id = ANY($2)"
+            loan_filter = " AND lc.branch_id = ANY($2)"
+            params.append(allowed_branches)
+        row = await self._db.fetch_one(
+            f"""
+            SELECT
+              (SELECT COUNT(*) FROM accounts a
+                WHERE a.customer_id = $1 {account_filter}) AS account_count,
+              (SELECT COUNT(*) FROM accounts a
+                WHERE a.customer_id = $1 AND a.status = 'active' {account_filter}) AS active_account_count,
+              (SELECT COUNT(DISTINCT a.account_type) FROM accounts a
+                WHERE a.customer_id = $1 {account_filter}) AS product_count,
+              (SELECT COUNT(*) FROM loan_contracts lc
+                WHERE lc.customer_id = $1 {loan_filter}) AS loan_count
+            """,
+            params,
+        )
+        return row or {}
+
     async def fetch_loans(
         self,
         customer_id: str,

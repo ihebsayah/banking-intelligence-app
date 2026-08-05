@@ -6,6 +6,7 @@ links from banking_integration behind a single permission-scoped API surface.
 
 from .models import (
     AccountSummary,
+    AdminCustomerMetadata,
     AmlAlertSummary,
     Customer360Overview,
     CustomerIdentity,
@@ -31,6 +32,7 @@ __all__ = [
     "Customer360Repository",
     "WorkbenchLinkRepository",
     "AccountSummary",
+    "AdminCustomerMetadata",
     "AmlAlertSummary",
     "Customer360Overview",
     "CustomerIdentity",

@@ -16,6 +16,7 @@ from shared.database import DatabaseConnector
 
 from .models import (
     AccountSummary,
+    AdminCustomerMetadata,
     AmlAlertSummary,
     Customer360Overview,
     CustomerIdentity,
@@ -42,12 +43,20 @@ SECTION_PERMISSIONS = {
     "kyc_aml": "customer:read_kyc",
     "risk": "customer:read_risk",
     "workbench_links": "customer:read_compliance_history",
+    "admin_metadata": "customer:read_operational_metadata",
 }
 
 ALL_SECTIONS = [
     "relationship", "financial", "transactions", "kyc_aml",
-    "risk", "workbench_links",
+    "risk", "workbench_links", "admin_metadata",
 ]
+
+# Metadata-only admin view may list linked workbench entities (IDs/status/
+# assignment) without the compliance-history permission.
+_WORKBENCH_LINK_PERMISSIONS = (
+    "customer:read_compliance_history",
+    "customer:read_operational_metadata",
+)
 
 
 class Customer360SourceUnavailable(Exception):
@@ -104,7 +113,12 @@ class Customer360Service:
         allowed_branches, scope_ids = scope
 
         data_quality = DataQuality()
-        mask_pii = "customer:read_pii" in (user.permissions or [])
+        perms = set(user.permissions or [])
+        has_pii = "customer:read_pii" in perms
+        # Admin (operational-metadata viewer) never sees contact/PII: suppressed
+        # entirely rather than masked. Masking never applies when read_pii held.
+        suppress_pii = "customer:read_operational_metadata" in perms and not has_pii
+        mask_pii = not has_pii
         masked_fields: List[str] = []
 
         # ── customer + relationship ──
@@ -121,13 +135,17 @@ class Customer360Service:
         if not rms:
             data_quality.missing_relationship_manager = True
 
-        identity = self._build_identity(core, profile, mask_pii, masked_fields)
+        identity = self._build_identity(
+            core, profile, mask_pii, masked_fields, suppress_pii
+        )
         relationship = self._build_relationship(core, branches, primary, rms)
 
         # ── permission-gated sections ──
-        perms = set(user.permissions or [])
         section_granted = {s: SECTION_PERMISSIONS[s] in perms for s in ALL_SECTIONS}
         section_granted["relationship"] = True  # covered by the endpoint guard
+        section_granted["workbench_links"] = (
+            bool(perms & set(_WORKBENCH_LINK_PERMISSIONS))
+        )
 
         accounts: List[Dict[str, Any]] = []
         loans: List[Dict[str, Any]] = []
@@ -238,6 +256,11 @@ class Customer360Service:
             flags = await self._safe(self._main.fetch_active_risk_flags(customer_id))
             overview.risk = self._build_risk(core, flags)
 
+        if section_granted["admin_metadata"]:
+            overview.admin_metadata = await self._build_admin_metadata(
+                customer_id, core, allowed_branches
+            )
+
         if section_granted["workbench_links"]:
             links, unresolved = await self._fetch_workbench_links(customer_id)
             overview.workbench_links = links
@@ -248,6 +271,7 @@ class Customer360Service:
         audit = self._build_audit(
             user, customer_id, request_id, scope_ids, section_granted, masked_fields,
             success=True, failure=None,
+            endpoint=f"/api/v1/customers/{customer_id}/overview",
         )
         return overview, audit
 
@@ -317,6 +341,7 @@ class Customer360Service:
             user, customer_id, request_id, scope_ids,
             {s: (s == "transactions") for s in ALL_SECTIONS},
             [], success=True, failure=None,
+            endpoint=f"/api/v1/customers/{customer_id}/transactions",
         )
         return summary, rows, total, data_quality, audit
 
@@ -379,6 +404,7 @@ class Customer360Service:
         profile: Optional[Dict[str, Any]],
         mask_pii: bool,
         masked_fields: List[str],
+        suppress_pii: bool = False,
     ) -> CustomerIdentity:
         segment = core.get("segment")
         customer_type = None
@@ -418,15 +444,22 @@ class Customer360Service:
             identity.net_worth_band = None
             identity.pep = None
 
-        if not mask_pii:
+        if mask_pii:
+            # Deterministic, per-field masking. suppress_pii (admin metadata
+            # viewer) emits None instead of a token so the value never leaks
+            # even in masked form. pep is a boolean status and stays visible.
             for field in (
                 "national_id", "passport_number", "tax_id",
                 "email", "phone", "date_of_birth",
-                "annual_income", "net_worth_band", "pep",
+                "annual_income", "net_worth_band",
             ):
-                if getattr(identity, field) not in (None, "", ""):
-                    masked_fields.append(field)
-                    setattr(identity, field, _mask_value(getattr(identity, field)))
+                if getattr(identity, field) in (None, "", ""):
+                    continue
+                masked_fields.append(field)
+                setattr(
+                    identity, field,
+                    None if suppress_pii else _mask_field(field, getattr(identity, field)),
+                )
         return identity
 
     def _build_relationship(
@@ -535,14 +568,16 @@ class Customer360Service:
             else:
                 by_severity[str(value)] = int(row.get("cnt") or 0)
 
-        if not mask_pii:
+        if mask_pii:
             for s in (pep_row, san_row):
                 if s and s.get("matched_name"):
                     masked_fields.append("screening_matched_name")
         return KycAml(
             kyc_verified=core_kyc,
             latest_kyc_case=KycCaseSummary(
-                kyc_case_id=case_row["kyc_case_id"],
+                # Status-level only for users without read_pii: the internal
+                # case id is suppressed so analysts never see case identifiers.
+                kyc_case_id=None if mask_pii else case_row["kyc_case_id"],
                 case_type=case_row.get("case_type"),
                 status=case_row.get("status"),
                 risk_level=case_row.get("risk_level"),
@@ -585,6 +620,38 @@ class Customer360Service:
             highest_active_severity=highest,
             risk_factors=factors,
             unresolved_flag_count=len(flags),
+        )
+
+    async def _build_admin_metadata(
+        self,
+        customer_id: str,
+        core: Dict[str, Any],
+        allowed_branches: Optional[List[str]],
+    ) -> AdminCustomerMetadata:
+        """Metadata-only view for customer:read_operational_metadata holders.
+
+        Counts come from a balance-free query; risk uses the score band plus
+        flag counts (no flag descriptions serialised); KYC is status-only.
+        """
+        counts = await self._safe(
+            self._main.fetch_customer_metadata_counts(customer_id, allowed_branches)
+        ) or {}
+        flags = await self._safe(self._main.fetch_active_risk_flags(customer_id))
+        case_row = await self._safe(self._main.fetch_latest_kyc_case(customer_id))
+        risk_score = _to_float(core.get("risk_score"))
+        severities = {
+            (f.get("severity") or "").lower() for f in flags if f.get("severity")
+        }
+        return AdminCustomerMetadata(
+            account_count=int(counts.get("account_count") or 0),
+            active_account_count=int(counts.get("active_account_count") or 0),
+            product_count=int(counts.get("product_count") or 0),
+            loan_count=int(counts.get("loan_count") or 0),
+            risk_score=risk_score,
+            risk_classification=_risk_classification(risk_score),
+            active_flag_count=len(flags),
+            highest_active_severity=_highest_severity(severities),
+            kyc_status=case_row.get("status") if case_row else None,
         )
 
     # ── workbench links ─────────────────────────────────────────────────────
@@ -644,20 +711,25 @@ class Customer360Service:
         masked_fields: List[str],
         success: bool,
         failure: Optional[str],
+        endpoint: str,
     ) -> Dict[str, Any]:
         requested = list(ALL_SECTIONS)
         granted = [s for s in ALL_SECTIONS if section_granted.get(s)]
+        denied = [s for s in ALL_SECTIONS if not section_granted.get(s)]
         return {
             "action": "customer_360_access",
             "actor_id": user.user_id,
             "actor_role": getattr(user, "user_role", None),
             "customer_id": customer_id,
+            "endpoint": endpoint,
             "sections_requested": requested,
             "sections_granted": granted,
+            "sections_denied": denied,
             "fields_masked": masked_fields,
             "scope_used": scope_ids,
             "request_id": request_id,
             "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+            "result_status": "success" if success else ("denied" if failure else "error"),
             "success": success,
             "failure_reason": failure,
         }
@@ -671,11 +743,61 @@ class Customer360Service:
             return [] if isinstance(awaitable.__class__, type) else None
 
 
-def _mask_value(value: Any) -> str:
+def _mask_field(field: str, value: Any) -> str:
+    """Deterministic per-field masking.
+
+    - national_id / passport_number / tax_id: complete suppression (no length
+      leak) — the field is sensitive enough that a suffix is not acceptable.
+    - email: partial mask — first char of local part, suffix kept.
+    - phone: final digits only.
+    - date_of_birth: format preserved, all components suppressed.
+    - annual_income / net_worth_band: complete suppression for the analyst view.
+    Never masks None (callers skip None).
+    """
     s = str(value)
     if not s:
-        return "****"
-    return "****" + s[-4:] if len(s) >= 4 else "****"
+        return "***"
+    if field in ("national_id", "passport_number", "tax_id",
+                 "annual_income", "net_worth_band"):
+        return "***"
+    if field == "email":
+        local, _, rest = s.partition("@")
+        domain, _, tld = rest.rpartition(".")
+        if not rest:
+            return "***@***"
+        return f"{local[:1]}***@***.{tld}" if tld else f"{local[:1]}***@***"
+    if field == "phone":
+        digits = "".join(ch for ch in s if ch.isdigit())
+        return "****" + digits[-4:] if len(digits) >= 4 else "***"
+    if field == "date_of_birth":
+        return "****-**-**"
+    return "***"
+
+
+def _risk_classification(score: Optional[float]) -> Optional[str]:
+    if score is None:
+        return None
+    if score >= 0.8:
+        return "critical"
+    if score >= 0.6:
+        return "high"
+    if score >= 0.4:
+        return "medium"
+    return "low"
+
+
+_SEVERITY_RANK = {"low": 1, "medium": 2, "high": 3, "critical": 4}
+
+
+def _highest_severity(severities) -> Optional[str]:
+    best = None
+    best_rank = 0
+    for sev in severities:
+        rank = _SEVERITY_RANK.get(sev, 0)
+        if rank > best_rank:
+            best_rank = rank
+            best = sev
+    return best
 
 
 def _join_name(first: Optional[str], last: Optional[str]) -> Optional[str]:
@@ -701,6 +823,7 @@ def _build_screening(row: Optional[Dict[str, Any]], mask_pii: bool) -> Optional[
         risk_level=row.get("risk_level"),
         match_score=_money(row.get("match_score")),
         list_name=list_name,
-        matched_name=None if not mask_pii else row.get("matched_name"),
+        # matched_name is PII-level detail: only shown when PII is NOT masked.
+        matched_name=None if mask_pii else row.get("matched_name"),
         checked_at=_iso(row.get("created_at")),
     )

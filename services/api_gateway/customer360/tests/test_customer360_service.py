@@ -148,6 +148,16 @@ class FakeMainRepo:
     async def fetch_loans(self, customer_id, allowed_branches=None):
         return list(self.loans)
 
+    async def fetch_customer_metadata_counts(self, customer_id, allowed_branches=None):
+        return {
+            "account_count": len(self.accounts),
+            "active_account_count": sum(
+                1 for a in self.accounts if a.get("status") == "active"
+            ),
+            "product_count": len({a.get("account_type") for a in self.accounts}),
+            "loan_count": len(self.loans),
+        }
+
     async def fetch_transaction_summary(self, customer_id, allowed_accounts=None):
         return list(self.tx_summary)
 
@@ -243,17 +253,27 @@ async def test_overview_full_view_with_all_sections(monkeypatch):
     assert overview.risk.risk_score == 0.85
     assert overview.risk.unresolved_flag_count == 1
     assert audit["action"] == "customer_360_access"
-    assert set(audit["sections_granted"]) == set(service_mod.ALL_SECTIONS)
+    # analyst has no customer:read_operational_metadata -> admin_metadata denied
+    assert set(audit["sections_granted"]) == set(service_mod.ALL_SECTIONS) - {"admin_metadata"}
 
 
 @pytest.mark.asyncio
 async def test_overview_pii_masked_without_read_pii(monkeypatch):
     service = _make_service(monkeypatch, wb=FakeWbRepo())
     user = _user("analyst", BASE_PERMISSIONS)
-    overview, _ = await service.get_overview(user, "CUST_00001")
-    assert overview.customer.national_id == "****3321"
-    assert overview.customer.email == "****.com"
-    assert overview.customer.annual_income == "****0.00"
+    overview, audit = await service.get_overview(user, "CUST_00001")
+    # Complete suppression for high-sensitivity identifiers (no length leak),
+    # partial mask for email, final digits only for phone, PEP stays boolean.
+    assert overview.customer.national_id == "***"
+    assert overview.customer.passport_number == "***"
+    assert overview.customer.tax_id == "***"
+    assert overview.customer.email == "f***@***.com"
+    assert overview.customer.phone == "****3456"
+    assert overview.customer.annual_income == "***"
+    assert overview.customer.net_worth_band == "***"
+    assert overview.customer.pep is False
+    assert "national_id" in audit["fields_masked"]
+    assert "email" in audit["fields_masked"]
 
 
 @pytest.mark.asyncio
@@ -345,3 +365,161 @@ async def test_money_fields_are_exact_strings(monkeypatch):
     assert isinstance(overview.accounts[0].balance, str)
     assert overview.accounts[0].balance == "1500.50"
     assert overview.loans[0].principal == "50000.00"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Phase 3A.2a — authorization / privacy hardening
+# ═══════════════════════════════════════════════════════════════════════════════
+
+ADMIN_PERMISSIONS = [
+    "customer:read",
+    "customer:read_basic",
+    "customer:read_operational_metadata",
+]
+
+ANALYST_PERMISSIONS = [
+    "customer:read",
+    "customer:read_basic",
+    "customer:read_financial",
+    "customer:read_transactions",
+    "customer:read_kyc",
+    "customer:read_risk",
+]
+
+
+@pytest.mark.asyncio
+async def test_admin_overview_is_metadata_only(monkeypatch):
+    service = _make_service(monkeypatch, wb=FakeWbRepo())
+    overview, audit = await service.get_overview(
+        _user("admin", ADMIN_PERMISSIONS), "CUST_00001"
+    )
+    # no financial/transaction/kyc/risk content at all
+    assert overview.accounts == []
+    assert overview.loans == []
+    assert overview.financial_summary is None
+    assert overview.transaction_summary is None
+    assert overview.recent_transactions == []
+    assert overview.kyc_aml is None
+    assert overview.risk is None
+    assert overview.analytics_alerts == []
+    # metadata section populated
+    assert overview.admin_metadata is not None
+    meta = overview.admin_metadata
+    assert meta.account_count == 1
+    assert meta.active_account_count == 1
+    assert meta.product_count == 1
+    assert meta.loan_count == 1
+    assert meta.risk_score == 0.85
+    assert meta.risk_classification == "critical"
+    assert meta.active_flag_count == 1
+    assert meta.highest_active_severity == "high"
+    # contact + PII suppressed entirely (None, never a masked token)
+    assert overview.customer.email is None
+    assert overview.customer.phone is None
+    assert overview.customer.national_id is None
+    assert overview.customer.passport_number is None
+    assert overview.customer.tax_id is None
+    assert overview.customer.date_of_birth is None
+    assert overview.customer.annual_income is None
+    assert overview.customer.net_worth_band is None
+    # audit reflects the metadata-only grant set
+    assert set(audit["sections_granted"]) == {
+        "relationship", "workbench_links", "admin_metadata"
+    }
+    assert set(audit["sections_denied"]) == {
+        "financial", "transactions", "kyc_aml", "risk"
+    }
+
+
+def _walk_leaves(node, prefix=""):
+    """Yield (path, value) for every leaf in a nested dict/list."""
+    if isinstance(node, dict):
+        for k, v in node.items():
+            yield from _walk_leaves(v, f"{prefix}.{k}" if prefix else k)
+    elif isinstance(node, list):
+        for i, v in enumerate(node):
+            yield from _walk_leaves(v, f"{prefix}[{i}]")
+    else:
+        yield prefix, node
+
+
+_FORBIDDEN_ADMIN_KEYS = {
+    "balance", "available_balance", "amount", "principal", "outstanding_balance",
+    "interest_rate", "annual_income", "net_worth_band", "national_id",
+    "passport_number", "tax_id", "email", "phone", "date_of_birth",
+    "matched_name", "kyc_case_id", "sar_count",
+}
+
+_RAW_PII_VALUES = (
+    "09643321", "P1234567", "TAX778899", "fouad@example.com",
+    "+21650123456", "250000.00", "500k_1m", "1985-04-12",
+)
+
+
+@pytest.mark.asyncio
+async def test_admin_serialized_response_has_no_forbidden_fields(monkeypatch):
+    """Forbidden-field set against the complete serialized Admin response —
+    catches nested leakage (accounts/loans/transactions/kyc/pep/income)."""
+    service = _make_service(monkeypatch, wb=FakeWbRepo())
+    overview, _ = await service.get_overview(
+        _user("admin", ADMIN_PERMISSIONS), "CUST_00001"
+    )
+    payload = overview.model_dump(mode="json")
+    for path, value in _walk_leaves(payload):
+        key = path.rsplit(".", 1)[-1].split("[", 1)[0]
+        if key in _FORBIDDEN_ADMIN_KEYS:
+            assert value in (None, "", []), f"leak at {path}: {value!r}"
+    serialized = str(payload)
+    for raw in _RAW_PII_VALUES:
+        assert raw not in serialized, f"raw PII leaked: {raw}"
+
+
+@pytest.mark.asyncio
+async def test_analyst_kyc_is_status_level(monkeypatch):
+    main = FakeMainRepo()
+    main.latest_kyc = {
+        "kyc_case_id": "KYC-9", "case_type": "onboarding", "status": "validated",
+        "risk_level": "medium", "due_date": "2026-12-01", "opened_at": "2026-01-01",
+    }
+    main.latest_pep = {
+        "status": "matched", "risk_level": "high", "match_score": "0.95",
+        "source_list": "EU_SANCTIONS", "matched_name": "John Doe", "created_at": "2026-07-01",
+    }
+    service = _make_service(monkeypatch, main=main, wb=FakeWbRepo())
+    overview, audit = await service.get_overview(
+        _user("analyst", ANALYST_PERMISSIONS), "CUST_00001"
+    )
+    assert overview.kyc_aml.kyc_status == "validated"
+    assert overview.kyc_aml.latest_kyc_case.kyc_case_id is None  # status-level
+    assert overview.kyc_aml.latest_kyc_case.status == "validated"
+    assert overview.kyc_aml.pep_screening.matched_name is None  # PII masked
+    assert overview.kyc_aml.pep_screening.status == "matched"
+    assert "screening_matched_name" in audit["fields_masked"]
+
+
+@pytest.mark.asyncio
+async def test_compliance_sees_pep_matched_name_with_pii(monkeypatch):
+    main = FakeMainRepo()
+    main.latest_pep = {
+        "status": "matched", "risk_level": "high", "match_score": "0.95",
+        "source_list": "EU_SANCTIONS", "matched_name": "John Doe", "created_at": "2026-07-01",
+    }
+    service = _make_service(monkeypatch, main=main, wb=FakeWbRepo())
+    overview, audit = await service.get_overview(
+        _user("compliance", BASE_PERMISSIONS + ["customer:read_pii"]), "CUST_00001"
+    )
+    assert overview.kyc_aml.pep_screening.matched_name == "John Doe"
+    assert "screening_matched_name" not in audit["fields_masked"]
+
+
+@pytest.mark.asyncio
+async def test_audit_payload_has_no_raw_pii(monkeypatch):
+    service = _make_service(monkeypatch, wb=FakeWbRepo())
+    _, audit = await service.get_overview(
+        _user("analyst", ANALYST_PERMISSIONS), "CUST_00001"
+    )
+    assert audit["endpoint"] == "/api/v1/customers/CUST_00001/overview"
+    assert audit["result_status"] == "success"
+    assert "sections_denied" in audit
+    for raw in _RAW_PII_VALUES:
+        assert raw not in str(audit), f"raw PII in audit: {raw}"

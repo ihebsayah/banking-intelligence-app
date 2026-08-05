@@ -710,6 +710,33 @@ def require_any_permission(*permissions: str):
     return _check
 
 
+def require_any_permission_audited(*permissions: str, action: str = "customer_360_access"):
+    """Permission gate for Customer 360 routes that also emits a denial audit
+    event when the caller lacks every required permission (Phase 3A.2a). Denial
+    is permission-based, so it holds regardless of any assigned org scope."""
+    async def _check(request: Request, user: User = Depends(get_current_user)) -> User:
+        if set(user.permissions) & set(permissions):
+            return user
+        customer_id = request.path_params.get("customer_id", "")
+        await _send_audit_log(_customer_audit_entry(
+            user, action, customer_id, AuditStatus.REJECTED,
+            metadata={
+                "reason": "missing_permission",
+                "permissions_required": list(permissions),
+                "request_id": str(getattr(request.state, "request_id", "") or ""),
+            },
+        ))
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "INSUFFICIENT_PERMISSIONS",
+                "message": f"This endpoint requires one of the permissions: {list(permissions)}",
+                "permissions_required": list(permissions),
+            },
+        )
+    return _check
+
+
 # ─── Internal helper: log to audit service ───────────────────────────────────
 
 async def _send_audit_log(entry: AuditLogEntry) -> None:
@@ -2815,12 +2842,14 @@ async def admin_activity_log(
 # ───────────────────────────────────────────────────────────────────────────────
 
 _CUSTOMER_READ_PERMISSIONS = (
+    "customer:read",
     "customer:read_basic",
     "customer:read_financial",
     "customer:read_transactions",
     "customer:read_kyc",
     "customer:read_risk",
     "customer:read_compliance_history",
+    "customer:read_operational_metadata",
 )
 
 
@@ -2833,7 +2862,7 @@ _CUSTOMER_READ_PERMISSIONS = (
 async def customer360_overview(
     customer_id: str,
     request: Request,
-    user: User = Depends(require_any_permission(*_CUSTOMER_READ_PERMISSIONS)),
+    user: User = Depends(require_any_permission_audited(*_CUSTOMER_READ_PERMISSIONS)),
 ):
     service = _get_customer360_service(request)
     if service is None:
@@ -2891,7 +2920,9 @@ async def customer360_transactions(
     request: Request,
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-    user: User = Depends(require_permission("customer:read_transactions")),
+    user: User = Depends(require_any_permission_audited(
+        "customer:read_transactions", action="customer_transactions_access"
+    )),
 ):
     service = _get_customer360_service(request)
     if service is None:

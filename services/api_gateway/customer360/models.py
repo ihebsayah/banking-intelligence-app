@@ -104,7 +104,9 @@ class TransactionRow(BaseModel):
 
 
 class KycCaseSummary(BaseModel):
-    kyc_case_id: str
+    # Internal case id is suppressed for users without customer:read_pii
+    # (status-level KYC only); see customer360/service.py.
+    kyc_case_id: Optional[str] = None
     case_type: Optional[str] = None
     status: Optional[str] = None
     risk_level: Optional[str] = None
@@ -150,6 +152,23 @@ class RiskFlagSummary(BaseModel):
     created_at: Optional[str] = None
 
 
+class AdminCustomerMetadata(BaseModel):
+    """Metadata-only Customer 360 view for admin (customer:read_operational_metadata).
+
+    Explicitly excludes balances, transaction rows, loan amounts, KYC/PEP
+    content, and any raw PII. Populated only when the section is granted.
+    """
+    account_count: int = 0
+    active_account_count: int = 0
+    product_count: int = 0
+    loan_count: int = 0
+    risk_score: Optional[float] = None
+    risk_classification: Optional[str] = None
+    active_flag_count: int = 0
+    highest_active_severity: Optional[str] = None
+    kyc_status: Optional[str] = None
+
+
 class RiskSection(BaseModel):
     risk_score: Optional[float] = None
     active_flags: List[RiskFlagSummary] = Field(default_factory=list)
@@ -189,5 +208,6 @@ class Customer360Overview(BaseModel):
     risk: Optional[RiskSection] = None
     analytics_alerts: List[AmlAlertSummary] = Field(default_factory=list)
     workbench_links: List[WorkbenchLink] = Field(default_factory=list)
+    admin_metadata: Optional[AdminCustomerMetadata] = None
     data_quality: DataQuality = Field(default_factory=DataQuality)
     generated_at: str = ""
