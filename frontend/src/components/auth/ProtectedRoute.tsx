@@ -9,7 +9,7 @@ import { Building2, LogOut, Mail, RefreshCw, ShieldAlert, ShieldX, ArrowLeft } f
 interface Props {
   children: React.ReactNode;
   requiredRole?: string | string[];
-  requiredPermission?: string;
+  requiredPermission?: string | string[];
 }
 
 export function ProtectedRoute({ children, requiredRole, requiredPermission }: Props) {
@@ -41,7 +41,7 @@ function AuthLogo() {
 
 // ── Keycloak protected route ────────────────────────────────────────────
 
-function ProtectedRouteKeycloak({ children, requiredRole, requiredPermission }: { children: React.ReactNode; requiredRole?: string | string[]; requiredPermission?: string }) {
+function ProtectedRouteKeycloak({ children, requiredRole, requiredPermission }: { children: React.ReactNode; requiredRole?: string | string[]; requiredPermission?: string | string[] }) {
   const { phase, applicationUser, error, logout, login, hasPermission } = useAuth();
 
   if (phase === 'bootstrapping' || phase === 'loading-user') {
@@ -133,8 +133,11 @@ function ProtectedRouteKeycloak({ children, requiredRole, requiredPermission }: 
     );
   }
 
-  if (requiredPermission && !hasPermission(requiredPermission)) {
-    return <Navigate to="/unauthorized" state={{ requiredPermission, from: window.location.pathname }} replace />;
+  if (requiredPermission) {
+    const perms = Array.isArray(requiredPermission) ? requiredPermission : [requiredPermission];
+    if (perms.length > 0 && !perms.some((p) => hasPermission(p))) {
+      return <Navigate to="/unauthorized" state={{ requiredPermission, from: window.location.pathname }} replace />;
+    }
   }
 
   if (requiredRole && applicationUser) {
@@ -149,15 +152,18 @@ function ProtectedRouteKeycloak({ children, requiredRole, requiredPermission }: 
 
 // ── Legacy protected route ──────────────────────────────────────────────
 
-function ProtectedRouteLegacy({ children, requiredRole, requiredPermission }: { children: React.ReactNode; requiredRole?: string | string[]; requiredPermission?: string }) {
+function ProtectedRouteLegacy({ children, requiredRole, requiredPermission }: { children: React.ReactNode; requiredRole?: string | string[]; requiredPermission?: string | string[] }) {
   const { isAuthenticated, user } = useAuthStore();
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
 
-  if (requiredPermission && !user?.permissions?.includes(requiredPermission)) {
-    return <Navigate to="/unauthorized" state={{ requiredPermission, from: window.location.pathname }} replace />;
+  if (requiredPermission) {
+    const perms = Array.isArray(requiredPermission) ? requiredPermission : [requiredPermission];
+    if (perms.length > 0 && !perms.some((p) => user?.permissions?.includes(p))) {
+      return <Navigate to="/unauthorized" state={{ requiredPermission, from: window.location.pathname }} replace />;
+    }
   }
 
   if (requiredRole) {

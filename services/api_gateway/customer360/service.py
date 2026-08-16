@@ -32,6 +32,8 @@ from .models import (
     TransactionRow,
     TransactionSummary,
     WorkbenchLink,
+    CustomerSearchResultItem,
+    CustomerSearchResponse,
 )
 from .repos import Customer360Repository, WorkbenchLinkRepository
 
@@ -344,6 +346,94 @@ class Customer360Service:
             endpoint=f"/api/v1/customers/{customer_id}/transactions",
         )
         return summary, rows, total, data_quality, audit
+
+    # ── customer search ─────────────────────────────────────────────────────
+
+    async def search_customers(
+        self,
+        user: Any,
+        query: str = "",
+        limit: int = 20,
+        offset: int = 0,
+        request_id: str = "",
+    ) -> Tuple[CustomerSearchResponse, Dict[str, Any]]:
+        """Search authorized customers matching query within caller's org scope."""
+        clean_q = (query or "").strip()
+        limit = max(1, min(50, limit))
+        offset = max(0, offset)
+
+        perms = set(user.permissions or [])
+        has_pii = "customer:read_pii" in perms
+
+        if len(clean_q) < 2:
+            res = CustomerSearchResponse(items=[], total=0, limit=limit, offset=offset)
+            audit = self._build_audit(
+                user, "", request_id, [],
+                {s: False for s in ALL_SECTIONS},
+                [], success=True, failure=None,
+                endpoint="/api/v1/customers",
+            )
+            return res, audit
+
+        allowed_branches, scope_ids = await self._resolve_user_allowed_branches(user)
+
+        try:
+            rows, total = await self._main.search_customers(
+                clean_q, limit=limit, offset=offset, allowed_branches=allowed_branches
+            )
+        except Exception as exc:
+            raise Customer360SourceUnavailable(str(exc)) from exc
+
+        items: List[CustomerSearchResultItem] = []
+        for r in rows:
+            raw_name = r.get("name") or ""
+            display_name = raw_name if has_pii else _mask_name(raw_name)
+            items.append(
+                CustomerSearchResultItem(
+                    customer_id=r.get("customer_id", ""),
+                    name=display_name,
+                    segment=r.get("segment"),
+                )
+            )
+
+        res = CustomerSearchResponse(items=items, total=total, limit=limit, offset=offset)
+        audit = self._build_audit(
+            user, "", request_id, scope_ids,
+            {s: False for s in ALL_SECTIONS},
+            [] if has_pii else ["name"],
+            success=True, failure=None,
+            endpoint="/api/v1/customers",
+        )
+        return res, audit
+
+    async def _resolve_user_allowed_branches(
+        self, user: Any
+    ) -> Tuple[Optional[List[str]], List[str]]:
+        """Return (allowed_branches|None, scope_ids).
+        None branch list = unrestricted (global / hq_main).
+        Empty list = zero permitted branches.
+        """
+        scopes = await self._load_user_scopes(user)
+        if not scopes:
+            return [], []
+
+        scope_ids = [s["scope_id"] for s in scopes]
+        if "global" in scope_ids or "hq_main" in scope_ids:
+            return None, scope_ids
+
+        branch_scopes = [s["scope_id"] for s in scopes if s["scope_type"] == "branch"]
+        region_scopes = [s["scope_id"] for s in scopes if s["scope_type"] == "region"]
+
+        allowed = list(branch_scopes)
+        if region_scopes:
+            reg_branches = await self._safe(
+                self._main.fetch_branches_for_regions(region_scopes)
+            )
+            if reg_branches:
+                allowed += [rb["branch_id"] for rb in reg_branches if rb.get("branch_id")]
+
+        allowed = sorted(set(allowed))
+        return allowed, scope_ids
 
     # ── scope ───────────────────────────────────────────────────────────────
 
@@ -741,6 +831,19 @@ class Customer360Service:
             return await awaitable
         except Exception:
             return [] if isinstance(awaitable.__class__, type) else None
+
+
+def _mask_name(name: str) -> str:
+    if not name:
+        return "***"
+    parts = name.split()
+    masked = []
+    for p in parts:
+        if len(p) <= 1:
+            masked.append(p)
+        else:
+            masked.append(p[0] + "*" * (len(p) - 1))
+    return " ".join(masked)
 
 
 def _mask_field(field: str, value: Any) -> str:

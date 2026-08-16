@@ -17,6 +17,7 @@ class Alert(BaseModel):
     source_rule_id: Optional[str] = None
     related_entity_type: Optional[str] = None
     related_entity_id: Optional[str] = None
+    resolved_customer_id: Optional[str] = None
     scope_id: str = "hq_main"
     status: str = "new"
     assigned_to: Optional[str] = None
@@ -29,6 +30,19 @@ class Alert(BaseModel):
     version: int = 1
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class InvestigationAttachment(BaseModel):
+    attachment_id: str
+    investigation_id: str
+    original_filename: str
+    stored_filename: str
+    content_type: str
+    size_bytes: int
+    sha256_hash: str
+    description: Optional[str] = None
+    uploaded_by: str
+    uploaded_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 class Investigation(BaseModel):
@@ -96,7 +110,7 @@ class Decision(BaseModel):
 
 class InformationRequest(BaseModel):
     ir_id: str
-    case_id: str
+    case_id: Optional[str] = None
     investigation_id: Optional[str] = None
     created_by: str
     assigned_to: str

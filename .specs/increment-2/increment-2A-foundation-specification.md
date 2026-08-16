@@ -1,3 +1,4 @@
+
 # Increment 2A — Foundation Specification
 
 Phase 2A delivers zero user-visible features. It delivers the substrate Phase 2B requires: schema, tooling, policy engine, permission seeds, and audit infrastructure.

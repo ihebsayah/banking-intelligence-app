@@ -35,15 +35,15 @@ INSERT INTO alerts (
 ) VALUES
     ('11111111-1111-4111-8111-111111111111', 'kpi_breach', 'high',
      'KPI breach: customer onboarding timeliness', 'Onboarding SLA breached for 3 consecutive days.',
-     'kpi', 'kpi_onboarding_sla', 'customer', 'CUST-00921', 'hq_main', 'assigned',
+     'kpi', 'kpi_onboarding_sla', 'customer', 'CUST_00921', 'hq_main', 'assigned',
      'analyst_001', 1, now(), now()),
     ('22222222-2222-4222-8222-222222222222', 'transaction_anomaly', 'critical',
      'Unusual rapid same-account transfers', 'Six rapid transfers to the same counterparty in under 2 hours.',
-     'pattern', 'txn_rapid_same_counterparty', 'account', 'ACC-00412', 'hq_main',
+     'pattern', 'txn_rapid_same_counterparty', 'account', 'ACC_00412', 'hq_main',
      'acknowledged', 'analyst_001', 1, now(), now()),
     ('33333333-3333-4333-8333-333333333333', 'pattern_match', 'medium',
      'Unassigned pattern-match alert', 'Match against standard AML pattern library, no assignee yet.',
-     'pattern', 'aml_pattern_lib_014', 'customer', 'CUST-00077', 'hq_main', 'new',
+     'pattern', 'aml_pattern_lib_014', 'customer', 'CUST_00077', 'hq_main', 'new',
      NULL, 1, now(), now())
 ON CONFLICT (alert_id) DO NOTHING;
 

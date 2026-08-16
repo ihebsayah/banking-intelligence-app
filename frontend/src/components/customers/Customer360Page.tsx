@@ -9,12 +9,13 @@ import { clsx } from 'clsx';
 import {
   ArrowLeft, RefreshCw, ShieldX, ShieldAlert, AlertTriangle, AlertCircle,
   UserX, Landmark, Building2, Wallet, Scale, FileClock, Inbox, CheckCircle2,
-  BellRing, Search, FileQuestion, CheckCheck,
+  BellRing, Search, FileQuestion, CheckCheck, User, Info,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { BankingHeader } from '../Layout/BankingHeader';
 import { customer360Api, parseCustomer360Error } from '../../api/customer360Api';
 import type { Customer360ApiError } from '../../api/customer360Api';
+import { dateOnly, isMasked, money, riskClassification, severityVariant, statusVariant } from './customer360Format';
 import { useAuth } from '../../auth/AuthProvider';
 import { PERMISSIONS } from '../../lib/permissions';
 import { StatusBadge } from '../ui/StatusBadge';
@@ -26,64 +27,62 @@ import type {
   CustomerTransactionsResponse,
   DataQuality,
   LoanSummary,
+  RiskSection,
+  ScreeningSummary,
   TransactionRow,
   WorkbenchLink,
 } from '../../types/customer360';
 
 type TabId = 'overview' | 'accounts' | 'transactions' | 'risk' | 'alerts' | 'workbench';
 
-// ── formatting helpers ──────────────────────────────────────────────────────
+// ── banking helpers ─────────────────────────────────────────────────────────
 
-function money(value: string | null | undefined, currency?: string | null): string {
-  if (value == null || value === '') return '—';
-  if (!/^-?\d+(\.\d+)?$/.test(value)) return value; // masked / non-numeric token
-  const num = Number(value);
-  const cur = (currency ?? 'TND').toUpperCase();
-  const digits = num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return `${digits} ${cur}`;
+const ACCOUNT_GROUPS: { label: string; types: string[] }[] = [
+  { label: 'Checking', types: ['checking', 'current', 'courant'] },
+  { label: 'Savings', types: ['savings', 'epargne', 'épargne'] },
+  { label: 'Corporate', types: ['corporate', 'business', 'entreprise'] },
+  { label: 'Investment', types: ['investment', 'invest', 'investissement'] },
+];
+
+// Raw backend statuses are localized (e.g. "actif") — map to the banking
+// vocabulary analysts use, falling back to the raw status for unknown values.
+const LOAN_STATUS_BADGES: Record<string, { label: string; variant: 'green' | 'yellow' | 'red' }> = {
+  actif: { label: 'Current', variant: 'green' },
+  current: { label: 'Current', variant: 'green' },
+  active: { label: 'Current', variant: 'green' },
+  performing: { label: 'Current', variant: 'green' },
+  watchlist: { label: 'Watchlist', variant: 'yellow' },
+  restructured: { label: 'Restructured', variant: 'yellow' },
+  renégocié: { label: 'Restructured', variant: 'yellow' },
+  past_due: { label: 'Past due', variant: 'red' },
+  overdue: { label: 'Past due', variant: 'red' },
+  impayé: { label: 'Past due', variant: 'red' },
+  npl: { label: 'NPL', variant: 'red' },
+  non_performing: { label: 'NPL', variant: 'red' },
+};
+
+function loanBadge(l: LoanSummary): { label: string; variant: 'green' | 'yellow' | 'red' } | null {
+  if ((l.days_past_due ?? 0) > 0) return { label: 'Past due', variant: 'red' };
+  return LOAN_STATUS_BADGES[(l.status ?? '').toLowerCase()] ?? null;
 }
 
-function isMasked(value: string | null | undefined): boolean {
-  return typeof value === 'string' && (value.includes('***') || value.startsWith('****'));
+// Amounts arrive signed: negative = outbound (debit), positive = inbound.
+function directionOf(amount: string | null | undefined): 'in' | 'out' | null {
+  if (amount == null || !/^-?\d+(\.\d+)?$/.test(amount)) return null;
+  const n = Number(amount);
+  return n > 0 ? 'in' : n < 0 ? 'out' : null;
 }
 
-function dateOnly(iso: string | null | undefined): string {
-  if (!iso) return '—';
-  const d = iso.slice(0, 10);
-  return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : '—';
-}
-
-function severityVariant(sev?: string | null) {
-  switch ((sev ?? '').toLowerCase()) {
-    case 'critical': return 'red' as const;
-    case 'high': return 'orange' as const;
-    case 'medium': return 'yellow' as const;
-    case 'low': return 'green' as const;
-    default: return 'gray' as const;
-  }
-}
-
-function statusVariant(status?: string | null) {
-  switch ((status ?? '').toLowerCase()) {
-    case 'active': case 'approved': case 'completed': case 'cleared':
-    case 'passed': case 'verified': case 'resolved': case 'success':
-      return 'green' as const;
-    case 'blocked': case 'default': case 'past_due': case 'overdue':
-    case 'critical': case 'failed': case 'rejected': case 'escalated':
-      return 'red' as const;
-    case 'pending': case 'review': case 'under_review': case 'processing':
-    case 'under_investigation': case 'acknowledged': case 'assigned': case 'new':
-      return 'yellow' as const;
-    default: return 'gray' as const;
-  }
-}
-
-function riskClassification(score?: number | null): string | null {
-  if (score == null) return null;
-  if (score >= 0.8) return 'critical';
-  if (score >= 0.6) return 'high';
-  if (score >= 0.4) return 'medium';
-  return 'low';
+function timeAgo(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const t = Date.parse(iso.replace(/([+-]\d{2}:\d{2})Z$/, '$1'));
+  if (Number.isNaN(t)) return null;
+  const mins = Math.max(0, Math.floor((Date.now() - t) / 60000));
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const h = Math.floor(mins / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
 }
 
 // ── small shared presentational pieces ──────────────────────────────────────
@@ -156,17 +155,137 @@ function KeyValueRow({ label, value, mono }: { label: string; value?: string | n
   );
 }
 
-function dataQualityWarnings(dq: DataQuality): { message: string; warn: boolean }[] {
-  const out: { message: string; warn: boolean }[] = [];
-  if (dq.missing_profile) out.push({ message: 'Customer profile record is missing — some identity fields are unavailable.', warn: true });
-  if (dq.missing_branch) out.push({ message: 'No branch could be determined for this customer.', warn: true });
-  if (dq.missing_relationship_manager) out.push({ message: 'No relationship manager is currently assigned.', warn: false });
-  if (dq.stale_kyc) out.push({ message: 'KYC information may be out of date.', warn: true });
-  if (dq.unresolved_workbench_reference) out.push({ message: 'Some operational records could not be linked to this customer.', warn: true });
+function dataQualityItems(
+  dq: DataQuality,
+  ctx: { recentActivityCount: number | null; accountCount: number | null; loanCount: number | null },
+): { message: string; attention: boolean }[] {
+  const out: { message: string; attention: boolean }[] = [];
+  if (dq.missing_profile) out.push({ message: 'Customer profile record is missing — some identity fields are unavailable.', attention: true });
+  if (dq.missing_branch) out.push({ message: 'No branch could be determined for this customer.', attention: true });
+  if (dq.missing_relationship_manager) out.push({ message: 'No relationship manager is currently assigned.', attention: false });
+  if (dq.stale_kyc) out.push({ message: 'KYC information may be out of date — confirm next review.', attention: true });
+  if (dq.unresolved_workbench_reference) out.push({ message: 'Some operational records could not be linked to this customer.', attention: true });
   if (dq.unavailable_sections.length > 0) {
-    out.push({ message: `Some sections are temporarily unavailable: ${dq.unavailable_sections.join(', ')}.`, warn: true });
+    out.push({ message: `Some sections are temporarily unavailable: ${dq.unavailable_sections.join(', ')}.`, attention: true });
   }
+  if (ctx.recentActivityCount === 0) out.push({ message: 'No activity recorded in the last 30 days.', attention: false });
+  if (ctx.accountCount === 0 && ctx.loanCount === 0) out.push({ message: 'No active accounts or loans on record.', attention: false });
   return out;
+}
+
+type StatCard = { label: string; value: string; sub?: string | null; variant?: 'green' | 'red' | 'yellow' | 'gray' | 'orange' };
+
+function buildStats(overview: Customer360Overview, riskClass: string | null, kycStatus: string | null, flagCount: number | null): StatCard[] {
+  const out: StatCard[] = [];
+  const fs = overview.financial_summary;
+  const adminMeta = overview.admin_metadata;
+  const risk = overview.risk;
+  const kyc = overview.kyc_aml;
+
+  const accountCount = fs?.account_count ?? adminMeta?.account_count ?? null;
+  const activeCount = fs?.active_account_count ?? adminMeta?.active_account_count ?? null;
+  if (accountCount != null) {
+    out.push({ label: 'Accounts', value: String(accountCount), sub: activeCount != null ? `${activeCount} active` : null });
+  }
+
+  for (const [cur, val] of Object.entries(fs?.total_balance_by_currency ?? {})) {
+    out.push({ label: `Deposits · ${cur}`, value: money(val, cur), variant: 'green' });
+  }
+
+  const loanCount = fs?.loan_count ?? adminMeta?.loan_count ?? null;
+  if (loanCount != null) {
+    const pastDue = overview.loans.filter((l) => (l.days_past_due ?? 0) > 0).length;
+    out.push({ label: 'Loans', value: String(loanCount), sub: pastDue > 0 ? `${pastDue} past due` : null, variant: pastDue > 0 ? 'red' : undefined });
+  }
+
+  for (const [cur, val] of Object.entries(fs?.total_outstanding_loans_by_currency ?? {})) {
+    out.push({ label: `Loans out · ${cur}`, value: money(val, cur), variant: 'red' });
+  }
+
+  const riskScore = risk?.risk_score ?? adminMeta?.risk_score ?? null;
+  if (riskScore != null || adminMeta) {
+    out.push({ label: 'Risk', value: riskScore != null ? riskScore.toFixed(2) : '—', variant: riskClass ? severityVariant(riskClass) : undefined });
+  }
+
+  if (flagCount != null) out.push({ label: 'Active flags', value: String(flagCount), variant: flagCount > 0 ? 'red' : 'green' });
+  if (kycStatus != null) out.push({ label: 'KYC', value: kycStatus, variant: statusVariant(kycStatus) });
+
+  const openCaseStates = new Set(['open', 'active', 'assigned', 'under_review', 'pending', 'new', 'acknowledged']);
+  const activeCases = overview.workbench_links.filter(
+    (l) => l.entity_type === 'case' && openCaseStates.has((l.status ?? '').toLowerCase()),
+  ).length;
+  if (activeCases > 0) out.push({ label: 'Active cases', value: String(activeCases), variant: 'yellow' });
+
+  const amlTotal = overview.analytics_alerts.length
+    || Object.values(kyc?.aml_alert_counts_by_status ?? {}).reduce((a, b) => a + b, 0);
+  if (amlTotal > 0) out.push({ label: 'AML alerts', value: String(amlTotal), variant: 'yellow' });
+
+  const lastActivity = overview.transaction_summary?.latest_transaction_date ?? overview.recent_transactions?.[0]?.transaction_date ?? null;
+  if (lastActivity) out.push({ label: 'Last activity', value: dateOnly(lastActivity) });
+
+  return out;
+}
+
+// ── banking profile header (below the app header) ───────────────────────────
+
+function ProfileHeader({ overview, riskClass, kycStatus, flagCount }: {
+  overview: Customer360Overview;
+  riskClass: string | null;
+  kycStatus: string | null;
+  flagCount: number | null;
+}) {
+  const { customer, relationship, kyc_aml: kyc, transaction_summary: txs, recent_transactions, generated_at } = overview;
+  const branch = relationship?.primary_branch;
+  const rm = relationship?.relationship_managers?.[0];
+  const pep = customer?.pep == null ? null : customer.pep;
+  const sanctions = kyc?.sanctions_screening;
+  const sanctionsMatch = Boolean(sanctions?.matched_name) || (sanctions?.status ?? '').toLowerCase() === 'match';
+  const lastActivity = txs?.latest_transaction_date ?? recent_transactions?.[0]?.transaction_date ?? null;
+
+  return (
+    <section className="rounded-2xl border p-5 grid grid-cols-1 md:grid-cols-3 gap-5"
+      style={{ background: 'var(--bg-card)', borderColor: 'var(--bg-border)' }}>
+      <div>
+        <h1 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>{customer?.name ?? '—'}</h1>
+        <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+          <span className="font-mono text-[11px]" style={{ color: 'var(--text-muted)' }}>{customer?.customer_id}</span>
+          {customer?.customer_type && <StatusBadge>{customer.customer_type}</StatusBadge>}
+          {customer?.segment && <StatusBadge variant="blue">{customer.segment}</StatusBadge>}
+          {customer?.status && <StatusBadge variant={statusVariant(customer.status)}>{customer.status}</StatusBadge>}
+        </div>
+        <div className="mt-3 space-y-1 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+          {branch && (
+            <p className="flex items-center gap-1.5"><Building2 size={12} /> {branch}{relationship?.region ? ` · ${relationship.region}` : ''}</p>
+          )}
+          {rm?.name && (
+            <p className="flex items-center gap-1.5"><User size={12} /> {rm.name}{rm.title ? ` · ${rm.title}` : ''}</p>
+          )}
+        </div>
+      </div>
+
+      <div>
+        <p className="text-[9px] font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>Assessment</p>
+        <div className="flex flex-wrap gap-1.5">
+          {riskClass && <StatusBadge variant={severityVariant(riskClass)}><ShieldAlert size={11} /> {riskClass.toUpperCase()}</StatusBadge>}
+          {kycStatus && <StatusBadge variant={statusVariant(kycStatus)}><Scale size={11} /> KYC {kycStatus.toUpperCase()}</StatusBadge>}
+          {pep === true && <StatusBadge variant="red"><UserX size={11} /> PEP</StatusBadge>}
+          {sanctionsMatch && <StatusBadge variant="red"><AlertTriangle size={11} /> SANCTIONS MATCH</StatusBadge>}
+          {flagCount != null && flagCount > 0 && <StatusBadge variant="red"><AlertCircle size={11} /> {flagCount} FLAGS</StatusBadge>}
+        </div>
+      </div>
+
+      <div>
+        <p className="text-[9px] font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>Activity</p>
+        <div className="space-y-1 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+          <p className="flex items-center gap-1.5"><FileClock size={12} /> Last activity {dateOnly(lastActivity)}</p>
+          <p className="flex items-center gap-1.5"><RefreshCw size={12} /> Profile generated {dateOnly(generated_at)}</p>
+          {timeAgo(generated_at) && (
+            <p className="text-[10px]" style={{ color: 'var(--text-subtle)' }}>Data updated {timeAgo(generated_at)}</p>
+          )}
+        </div>
+      </div>
+    </section>
+  );
 }
 
 const ENTITY_LABELS: Record<string, string> = {
@@ -217,7 +336,8 @@ function TransactionsTable({ rows }: { rows: TransactionRow[] }) {
     <div className="overflow-x-auto">
       <table className="w-full text-left text-xs border-collapse">
         <thead>
-          <tr className="border-b" style={{ borderColor: 'var(--bg-border)', color: 'var(--text-muted)' }}>
+          <tr className="border-b sticky top-0 z-10"
+            style={{ borderColor: 'var(--bg-border)', color: 'var(--text-muted)', background: 'var(--bg-card)' }}>
             <th className="pb-2 pr-3 font-semibold">Date</th>
             <th className="pb-2 pr-3 font-semibold">Type</th>
             <th className="pb-2 pr-3 font-semibold">Status</th>
@@ -227,24 +347,35 @@ function TransactionsTable({ rows }: { rows: TransactionRow[] }) {
           </tr>
         </thead>
         <tbody className="divide-y divide-white/5">
-          {rows.map((tx) => (
-            <tr key={tx.transaction_id} style={{ color: 'var(--text-secondary)' }}>
-              <td className="py-2.5 pr-3 font-mono text-[11px]" style={{ color: 'var(--text-muted)' }}>
-                {dateOnly(tx.transaction_date)}
-              </td>
-              <td className="py-2.5 pr-3">{tx.type ?? '—'}</td>
-              <td className="py-2.5 pr-3">
-                <StatusBadge variant={statusVariant(tx.status)}>{tx.status ?? '—'}</StatusBadge>
-              </td>
-              <td className="py-2.5 pr-3 text-right font-mono font-semibold whitespace-nowrap">
-                {money(tx.amount, tx.currency)}
-              </td>
-              <td className="py-2.5 pr-3 max-w-xs truncate">{tx.description ?? '—'}</td>
-              <td className="py-2.5 font-mono text-[11px]" style={{ color: 'var(--text-muted)' }}>
-                {tx.account_id ?? '—'}
-              </td>
-            </tr>
-          ))}
+          {rows.map((tx) => {
+            const dir = directionOf(tx.amount);
+            const signed = tx.amount != null && /^-?\d+(\.\d+)?$/.test(tx.amount) ? Number(tx.amount) : null;
+            return (
+              <tr key={tx.transaction_id} style={{ color: 'var(--text-secondary)' }}>
+                <td className="py-2.5 pr-3 font-mono text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                  {dateOnly(tx.transaction_date)}
+                </td>
+                <td className="py-2.5 pr-3">
+                  <div className="flex items-center gap-1.5">
+                    <span>{tx.type ?? '—'}</span>
+                    {dir === 'in' && <StatusBadge variant="green">IN</StatusBadge>}
+                    {dir === 'out' && <StatusBadge variant="red">OUT</StatusBadge>}
+                  </div>
+                </td>
+                <td className="py-2.5 pr-3">
+                  <StatusBadge variant={statusVariant(tx.status)}>{tx.status ?? '—'}</StatusBadge>
+                </td>
+                <td className="py-2.5 pr-3 text-right font-mono font-semibold whitespace-nowrap"
+                  style={{ color: signed == null ? undefined : signed < 0 ? 'var(--accent-red)' : 'var(--accent-green)' }}>
+                  {money(tx.amount, tx.currency)}
+                </td>
+                <td className="py-2.5 pr-3 max-w-xs truncate">{tx.description ?? '—'}</td>
+                <td className="py-2.5 font-mono text-[11px]" style={{ color: 'var(--text-muted)' }}>
+                  {tx.account_id ?? '—'}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -322,12 +453,13 @@ export function Customer360Page() {
     if (!tabs.includes(tab)) setTab('overview');
   }, [tabs, tab]);
 
-  const fetchTransactions = useCallback(async () => {
+  const fetchTransactionsAt = useCallback(async (offset: number) => {
     if (!customerId || !transactionsGranted) return;
+    setTxOffset(offset);
     setTxLoading(true);
     setTxError(null);
     try {
-      const data = await customer360Api.getTransactions(customerId, { limit: TX_PAGE_SIZE, offset: txOffset });
+      const data = await customer360Api.getTransactions(customerId, { limit: TX_PAGE_SIZE, offset });
       setTxData(data);
     } catch (err) {
       setTxError(parseCustomer360Error(err));
@@ -335,11 +467,12 @@ export function Customer360Page() {
     } finally {
       setTxLoading(false);
     }
-  }, [customerId, transactionsGranted, txOffset]);
+  }, [customerId, transactionsGranted]);
 
+  const txLoaded = txData !== null;
   useEffect(() => {
-    if (tab === 'transactions' && transactionsGranted) fetchTransactions();
-  }, [tab, transactionsGranted, fetchTransactions]);
+    if (tab === 'transactions' && transactionsGranted && !txLoaded) fetchTransactionsAt(0);
+  }, [tab, transactionsGranted, txLoaded, fetchTransactionsAt]);
 
   const onTabKeyDown = (e: React.KeyboardEvent) => {
     const idx = tabs.indexOf(tab);
@@ -402,38 +535,31 @@ export function Customer360Page() {
     );
   }
 
-  const { customer, relationship, data_quality: dq, admin_metadata: adminMeta } = overview;
-  const warnings = dataQualityWarnings(dq);
+  const { data_quality: dq, admin_metadata: adminMeta } = overview;
   const isAdmin = Boolean(adminMeta);
   const sensitiveRestricted = adminView;
 
-  // ── summary strip stats ──
-  const stats: { label: string; value: string; variant?: 'green' | 'red' | 'yellow' | 'gray' | 'orange' }[] = [];
   const fs = overview.financial_summary;
   const risk = overview.risk;
   const kyc = overview.kyc_aml;
-  stats.push({ label: 'Accounts', value: String(fs?.account_count ?? adminMeta?.account_count ?? '—') });
-  stats.push({ label: 'Active', value: String(fs?.active_account_count ?? adminMeta?.active_account_count ?? '—') });
-  stats.push({
-    label: 'Products',
-    value: String(
-      adminMeta?.product_count ??
-      (overview.accounts.length
-        ? new Set(overview.accounts.map(a => a.account_type).filter(Boolean)).size
-        : '—'),
-    ),
-  });
-  stats.push({ label: 'Loans', value: String(fs?.loan_count ?? adminMeta?.loan_count ?? '—') });
 
+  // ── assessment badges ──
   const riskScore = risk?.risk_score ?? adminMeta?.risk_score ?? null;
   const riskClass = risk ? riskClassification(riskScore) : (adminMeta?.risk_classification ?? riskClassification(riskScore));
-  if (riskScore != null || adminMeta) {
-    stats.push({ label: 'Risk', value: riskScore != null ? String(riskScore) : '—', variant: riskClass ? severityVariant(riskClass) : undefined });
-  }
   const flagCount = risk?.unresolved_flag_count ?? adminMeta?.active_flag_count ?? null;
-  if (flagCount != null) stats.push({ label: 'Active flags', value: String(flagCount), variant: flagCount > 0 ? 'red' : 'green' });
   const kycStatus = kyc?.kyc_status ?? adminMeta?.kyc_status ?? null;
-  if (kycStatus != null) stats.push({ label: 'KYC', value: kycStatus, variant: statusVariant(kycStatus) });
+
+  // ── executive summary strip ──
+  const stats = buildStats(overview, riskClass, kycStatus, flagCount);
+
+  // ── data quality ──
+  const dqItems = dataQualityItems(dq, {
+    recentActivityCount: fs != null ? (fs.recent_transaction_count ?? 0) + overview.recent_transactions.length : null,
+    accountCount: fs != null ? overview.accounts.length : null,
+    loanCount: fs != null ? overview.loans.length : null,
+  });
+  const dqAttention = dqItems.filter((i) => i.attention);
+  const dqInfo = dqItems.filter((i) => !i.attention);
 
   const TAB_LABELS: Record<TabId, string> = {
     overview: 'Overview',
@@ -447,8 +573,8 @@ export function Customer360Page() {
   return (
     <div className="min-h-screen flex flex-col" style={{ background: 'var(--bg-primary)' }}>
       <BankingHeader
-        title={customer?.name ?? customerId ?? 'Customer'}
-        subtitle={`${customerId}${customer?.segment ? ` · ${customer.segment}` : ''}${customer?.status ? ` · ${customer.status}` : ''}`}
+        title="Customer 360"
+        subtitle={customerId}
         actions={
           <button onClick={() => navigate(-1)} className="btn-ghost text-xs px-2.5 py-1.5">
             <ArrowLeft size={13} /> Back
@@ -458,55 +584,55 @@ export function Customer360Page() {
 
       <div className="flex-1 p-6 space-y-5 max-w-[1200px] mx-auto w-full">
 
-        {/* Risk classification + KYC badges row */}
-        {(riskClass || kycStatus) && (
-          <div className="flex flex-wrap items-center gap-2">
-            {riskClass && (
-              <StatusBadge variant={severityVariant(riskClass)}>
-                <ShieldAlert size={11} /> Risk: {riskClass}
-              </StatusBadge>
-            )}
-            {kycStatus && (
-              <StatusBadge variant={statusVariant(kycStatus)}>
-                <Scale size={11} /> KYC: {kycStatus}
-              </StatusBadge>
-            )}
-            {flagCount != null && flagCount > 0 && (
-              <StatusBadge variant="red"><AlertCircle size={11} /> {flagCount} active risk {flagCount === 1 ? 'flag' : 'flags'}</StatusBadge>
-            )}
+        <ProfileHeader overview={overview} riskClass={riskClass} kycStatus={kycStatus} flagCount={flagCount} />
+
+        {/* Executive summary strip */}
+        {stats.length > 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {stats.map((s) => (
+              <div key={s.label} className="rounded-xl border p-3"
+                style={{ background: 'var(--bg-card)', borderColor: 'var(--bg-border)' }}>
+                <p className="text-[9px] font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>
+                  {s.label}
+                </p>
+                {s.variant
+                  ? <StatusBadge variant={s.variant}>{s.value}</StatusBadge>
+                  : <p className="text-sm font-bold font-mono" style={{ color: 'var(--text-secondary)' }}>{s.value}</p>}
+                {s.sub && <p className="text-[9px] mt-1" style={{ color: 'var(--text-muted)' }}>{s.sub}</p>}
+              </div>
+            ))}
           </div>
         )}
 
-        {/* Summary strip */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          {stats.map((s) => (
-            <div key={s.label} className="rounded-xl border p-3"
-              style={{ background: 'var(--bg-card)', borderColor: 'var(--bg-border)' }}>
-              <p className="text-[9px] font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>
-                {s.label}
-              </p>
-              {s.variant
-                ? <StatusBadge variant={s.variant}>{s.value}</StatusBadge>
-                : <p className="text-sm font-bold font-mono" style={{ color: 'var(--text-secondary)' }}>{s.value}</p>}
-            </div>
-          ))}
-        </div>
-
-        {/* Data quality warnings */}
-        {warnings.length > 0 && (
+        {/* Data quality — attention vs informational */}
+        {dqAttention.length > 0 && (
           <div className="rounded-xl border p-4 space-y-2"
             style={{ background: 'rgba(217,119,6,0.06)', borderColor: 'rgba(217,119,6,0.25)' }}>
             <div className="flex items-center gap-2">
               <AlertTriangle size={14} style={{ color: 'var(--accent-amber)' }} />
               <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
-                Data quality
+                Needs attention
               </span>
             </div>
             <ul className="space-y-1">
-              {warnings.map((w, i) => (
-                <li key={i} className="text-xs" style={{ color: w.warn ? 'var(--text-secondary)' : 'var(--text-muted)' }}>
-                  {w.message}
-                </li>
+              {dqAttention.map((w, i) => (
+                <li key={i} className="text-xs" style={{ color: 'var(--text-secondary)' }}>{w.message}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {dqInfo.length > 0 && (
+          <div className="rounded-xl border p-4 space-y-2"
+            style={{ background: 'var(--bg-card)', borderColor: 'var(--bg-border)' }}>
+            <div className="flex items-center gap-2">
+              <Info size={14} style={{ color: 'var(--text-muted)' }} />
+              <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+                Profile notes
+              </span>
+            </div>
+            <ul className="space-y-1">
+              {dqInfo.map((w, i) => (
+                <li key={i} className="text-xs" style={{ color: 'var(--text-muted)' }}>{w.message}</li>
               ))}
             </ul>
           </div>
@@ -554,11 +680,11 @@ export function Customer360Page() {
               error={txError}
               offset={txOffset}
               pageSize={TX_PAGE_SIZE}
-              onOffsetChange={setTxOffset}
-              onRetry={fetchTransactions}
+              onOffsetChange={fetchTransactionsAt}
+              onRetry={() => fetchTransactionsAt(txOffset)}
             />
           )}
-          {tab === 'risk' && <RiskKycTab overview={overview} adminView={adminView} />}
+          {tab === 'risk' && <RiskKycTab overview={overview} />}
           {tab === 'alerts' && (
             <AlertsTab analyticsGranted={analyticsGranted} alerts={overview.analytics_alerts} />
           )}
@@ -658,15 +784,6 @@ function OverviewTab({ overview, adminView, sensitiveRestricted, isAdmin }: {
                 </span>
               )}
             </div>
-            {Object.entries(fs.total_balance_by_currency).map(([cur, val]) => (
-              <KeyValueRow key={cur} label={`Total balance (${cur})`} value={money(val, cur)} mono />
-            ))}
-            {Object.entries(fs.available_balance_by_currency).map(([cur, val]) => (
-              <KeyValueRow key={cur} label={`Available (${cur})`} value={money(val, cur)} mono />
-            ))}
-            {Object.entries(fs.total_outstanding_loans_by_currency).map(([cur, val]) => (
-              <KeyValueRow key={cur} label={`Loans outstanding (${cur})`} value={money(val, cur)} mono />
-            ))}
             <div className="flex items-center gap-2 pt-1 text-[10px]" style={{ color: 'var(--text-muted)' }}>
               <FileClock size={11} />
               {fs.recent_transaction_count} transactions in the last 30 days
@@ -777,10 +894,9 @@ function OverviewTab({ overview, adminView, sensitiveRestricted, isAdmin }: {
 // ── Accounts & Loans tab ────────────────────────────────────────────────────
 
 function AccountsTab({ overview }: { overview: Customer360Overview }) {
-  const { accounts, loans, financial_summary: fs } = overview;
-  const hasAny = accounts.length > 0 || loans.length > 0;
+  const { accounts, loans } = overview;
 
-  if (!hasAny) {
+  if (accounts.length === 0 && loans.length === 0) {
     return (
       <EmptyState
         icon={<Wallet size={18} />}
@@ -792,25 +908,32 @@ function AccountsTab({ overview }: { overview: Customer360Overview }) {
 
   const delinquent = loans.filter((l) => (l.days_past_due ?? 0) > 0);
 
+  const groups = ACCOUNT_GROUPS
+    .map((g) => ({
+      label: g.label,
+      accounts: accounts.filter((a) => g.types.includes((a.account_type ?? '').toLowerCase())),
+    }))
+    .concat({
+      label: 'Other',
+      accounts: accounts.filter((a) => {
+        const t = (a.account_type ?? '').toLowerCase();
+        return t !== '' && !ACCOUNT_GROUPS.some((g) => g.types.includes(t));
+      }),
+    })
+    .filter((g) => g.accounts.length > 0);
+
+  const groupTotals = (accs: AccountSummary[]) => {
+    const byCur: Record<string, number> = {};
+    for (const a of accs) {
+      if (a.balance == null || !/^-?\d+(\.\d+)?$/.test(a.balance)) continue;
+      const cur = a.currency ?? '?';
+      byCur[cur] = (byCur[cur] ?? 0) + Number(a.balance);
+    }
+    return Object.entries(byCur);
+  };
+
   return (
     <div className="space-y-5">
-      {fs && (Object.keys(fs.total_balance_by_currency).length > 0 || Object.keys(fs.total_outstanding_loans_by_currency).length > 0) && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {Object.entries(fs.total_balance_by_currency).map(([cur, val]) => (
-            <div key={cur} className="rounded-xl border p-4" style={{ background: 'var(--bg-card)', borderColor: 'var(--bg-border)' }}>
-              <p className="text-[9px] font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>Total balance · {cur}</p>
-              <p className="text-lg font-bold font-mono" style={{ color: 'var(--accent-green)' }}>{money(val, cur)}</p>
-            </div>
-          ))}
-          {Object.entries(fs.total_outstanding_loans_by_currency).map(([cur, val]) => (
-            <div key={cur} className="rounded-xl border p-4" style={{ background: 'var(--bg-card)', borderColor: 'var(--bg-border)' }}>
-              <p className="text-[9px] font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>Loans outstanding · {cur}</p>
-              <p className="text-lg font-bold font-mono" style={{ color: 'var(--accent-red)' }}>{money(val, cur)}</p>
-            </div>
-          ))}
-        </div>
-      )}
-
       {delinquent.length > 0 && (
         <div className="rounded-xl border p-3 text-xs flex items-center gap-2"
           style={{ background: 'rgba(220,38,38,0.06)', borderColor: 'rgba(220,38,38,0.2)' }}>
@@ -822,33 +945,58 @@ function AccountsTab({ overview }: { overview: Customer360Overview }) {
       )}
 
       <SectionCard title="Accounts" icon={<Wallet size={12} />}>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="border-b" style={{ borderColor: 'var(--bg-border)', color: 'var(--text-muted)' }}>
-                {['Account ID', 'Type', 'Status', 'Balance', 'Available', 'Currency', 'Branch', 'Opened'].map((h) => (
-                  <th key={h} className="pb-2 pr-3 font-semibold">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5">
-              {accounts.map((a: AccountSummary) => (
-                <tr key={a.account_id} style={{ color: 'var(--text-secondary)' }}>
-                  <td className="py-2.5 pr-3 font-mono text-[11px]">{a.account_id}</td>
-                  <td className="py-2.5 pr-3">{a.account_type ?? '—'}</td>
-                  <td className="py-2.5 pr-3"><StatusBadge variant={statusVariant(a.status)}>{a.status ?? '—'}</StatusBadge></td>
-                  <td className="py-2.5 pr-3 text-right font-mono font-semibold whitespace-nowrap">{money(a.balance, a.currency)}</td>
-                  <td className="py-2.5 pr-3 text-right font-mono whitespace-nowrap">{money(a.available_balance, a.currency)}</td>
-                  <td className="py-2.5 pr-3">{a.currency ?? '—'}</td>
-                  <td className="py-2.5 pr-3">{a.branch ?? '—'}</td>
-                  <td className="py-2.5 font-mono text-[11px]" style={{ color: 'var(--text-muted)' }}>{dateOnly(a.opened_at)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {accounts.length === 0 && (
+        {accounts.length === 0 ? (
           <p className="text-[11px]" style={{ color: 'var(--text-subtle)' }}>No accounts within your permitted scope.</p>
+        ) : (
+          <div className="space-y-6">
+            {groups.map((g) => {
+              const totals = groupTotals(g.accounts);
+              return (
+                <div key={g.label}>
+                  <div className="flex items-center justify-between flex-wrap gap-1 mb-2">
+                    <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+                      {g.label} · {g.accounts.length} {g.accounts.length === 1 ? 'account' : 'accounts'}
+                    </p>
+                    {totals.length > 0 && (
+                      <p className="text-[11px] font-mono font-semibold" style={{ color: 'var(--text-secondary)' }}>
+                        {totals.map(([cur, v]) => `${money(String(v), cur)}`).join(' · ')}
+                      </p>
+                    )}
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="border-b" style={{ borderColor: 'var(--bg-border)', color: 'var(--text-muted)' }}>
+                          {['Account ID', 'Status', 'Balance', 'Available', 'Currency', 'Branch', 'Opened'].map((h) => (
+                            <th key={h} className="pb-2 pr-3 font-semibold">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {g.accounts.map((a: AccountSummary) => {
+                          const attention = a.status && !['active', 'ok', 'current', 'ouvert'].includes((a.status ?? '').toLowerCase());
+                          return (
+                            <tr key={a.account_id} style={{
+                              color: 'var(--text-secondary)',
+                              background: attention ? 'rgba(217,119,6,0.05)' : undefined,
+                            }}>
+                              <td className="py-2.5 pr-3 font-mono text-[11px]">{a.account_id}</td>
+                              <td className="py-2.5 pr-3"><StatusBadge variant={statusVariant(a.status)}>{a.status ?? '—'}</StatusBadge></td>
+                              <td className="py-2.5 pr-3 text-right font-mono font-semibold whitespace-nowrap">{money(a.balance, a.currency)}</td>
+                              <td className="py-2.5 pr-3 text-right font-mono whitespace-nowrap">{money(a.available_balance, a.currency)}</td>
+                              <td className="py-2.5 pr-3">{a.currency ?? '—'}</td>
+                              <td className="py-2.5 pr-3">{a.branch ?? '—'}</td>
+                              <td className="py-2.5 font-mono text-[11px]" style={{ color: 'var(--text-muted)' }}>{dateOnly(a.opened_at)}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         )}
       </SectionCard>
 
@@ -865,6 +1013,7 @@ function AccountsTab({ overview }: { overview: Customer360Overview }) {
             <tbody className="divide-y divide-white/5">
               {loans.map((l: LoanSummary) => {
                 const isDelinquent = (l.days_past_due ?? 0) > 0;
+                const badge = loanBadge(l);
                 return (
                   <tr key={l.loan_id}
                     style={{
@@ -879,7 +1028,9 @@ function AccountsTab({ overview }: { overview: Customer360Overview }) {
                     </td>
                     <td className="py-2.5 pr-3">{l.interest_rate != null ? `${l.interest_rate}%` : '—'}</td>
                     <td className="py-2.5 pr-3 font-mono text-[11px]" style={{ color: 'var(--text-muted)' }}>{dateOnly(l.maturity_date)}</td>
-                    <td className="py-2.5 pr-3"><StatusBadge variant={statusVariant(l.status)}>{l.status ?? '—'}</StatusBadge></td>
+                    <td className="py-2.5 pr-3">
+                      <StatusBadge variant={badge?.variant ?? statusVariant(l.status)}>{badge?.label ?? l.status ?? '—'}</StatusBadge>
+                    </td>
                     <td className="py-2.5 font-mono text-[11px]" style={{ color: isDelinquent ? 'var(--accent-red)' : 'var(--text-muted)' }}>
                       {l.days_past_due != null ? l.days_past_due : '—'}
                     </td>
@@ -938,6 +1089,12 @@ function TransactionsTab({ overview, data, loading, error, offset, pageSize, onO
             </div>
           ))}
         </div>
+      )}
+
+      {txSummary?.top_transaction_types && txSummary.top_transaction_types.length > 0 && (
+        <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+          Top transaction types: {txSummary.top_transaction_types.map((t) => `${t.transaction_type} ×${t.cnt}`).join(' · ')}
+        </p>
       )}
 
       <SectionCard title="Transactions" icon={<FileClock size={12} />}>
@@ -1000,147 +1157,157 @@ function TransactionsTab({ overview, data, loading, error, offset, pageSize, onO
   );
 }
 
-// ── Risk & KYC tab ──────────────────────────────────────────────────────────
+// ── Risk & Compliance tab (analyst workspace) ───────────────────────────────
 
-function RiskKycTab({ overview, adminView }: { overview: Customer360Overview; adminView: boolean }) {
+function RiskAssessmentCard({ risk }: { risk: RiskSection }) {
+  return (
+    <SectionCard title="Risk Assessment" icon={<ShieldAlert size={12} />}>
+      <div className="flex items-center gap-3 mb-4">
+        <span className="text-2xl font-bold font-mono" style={{ color: 'var(--text-secondary)' }}>
+          {risk.risk_score != null ? risk.risk_score.toFixed(2) : '—'}
+        </span>
+        {risk.highest_active_severity && (
+          <StatusBadge variant={severityVariant(risk.highest_active_severity)}>
+            highest {risk.highest_active_severity}
+          </StatusBadge>
+        )}
+      </div>
+      {risk.risk_factors.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-4">
+          {risk.risk_factors.map((f) => (
+            <span key={f} className="px-2 py-0.5 rounded text-[10px] font-mono border"
+              style={{ background: 'var(--bg-tertiary)', borderColor: 'var(--bg-border)', color: 'var(--text-muted)' }}>
+              {f}
+            </span>
+          ))}
+        </div>
+      )}
+      {risk.active_flags.length > 0 ? (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="border-b" style={{ borderColor: 'var(--bg-border)', color: 'var(--text-muted)' }}>
+                {['Type', 'Severity', 'Description', 'Created'].map((h) => (
+                  <th key={h} className="pb-2 pr-3 font-semibold">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {risk.active_flags.map((f) => (
+                <tr key={f.flag_id} style={{ color: 'var(--text-secondary)' }}>
+                  <td className="py-2.5 pr-3 font-mono text-[11px]">{f.flag_type ?? '—'}</td>
+                  <td className="py-2.5 pr-3"><StatusBadge variant={severityVariant(f.severity)}>{f.severity ?? '—'}</StatusBadge></td>
+                  <td className="py-2.5 pr-3 max-w-xs">{f.description ?? '—'}</td>
+                  <td className="py-2.5 font-mono text-[11px]" style={{ color: 'var(--text-muted)' }}>{dateOnly(f.created_at)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="text-[11px] flex items-center gap-1.5" style={{ color: 'var(--accent-green)' }}>
+          <CheckCircle2 size={13} /> No active risk flags.
+        </p>
+      )}
+    </SectionCard>
+  );
+}
+
+function ScreeningCard({ title, screening }: { title: string; screening: ScreeningSummary }) {
+  return (
+    <div className="rounded-xl border p-3" style={{ background: 'var(--bg-tertiary)', borderColor: 'var(--bg-border)' }}>
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <p className="text-[9px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>{title}</p>
+        {screening.status && <StatusBadge variant={statusVariant(screening.status)}>{screening.status}</StatusBadge>}
+      </div>
+      <KeyValueRow label="Risk level" value={screening.risk_level} />
+      <KeyValueRow label="Match score" value={screening.match_score != null ? money(screening.match_score) : null} />
+      <KeyValueRow label="List" value={screening.list_name} />
+      {screening.matched_name && <KeyValueRow label="Matched name" value={screening.matched_name} />}
+      <KeyValueRow label="Checked" value={dateOnly(screening.checked_at)} mono />
+    </div>
+  );
+}
+
+function RiskKycTab({ overview }: { overview: Customer360Overview }) {
   const risk = overview.risk;
   const kyc = overview.kyc_aml;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-      {risk && (
-        <SectionCard title="Risk Profile" icon={<ShieldAlert size={12} />}>
-          <div className="flex items-center gap-3 mb-4">
-            <span className="text-2xl font-bold font-mono" style={{ color: 'var(--text-secondary)' }}>
-              {risk.risk_score != null ? risk.risk_score.toFixed(2) : '—'}
-            </span>
-            {risk.highest_active_severity && (
-              <StatusBadge variant={severityVariant(risk.highest_active_severity)}>
-                highest {risk.highest_active_severity}
-              </StatusBadge>
-            )}
-          </div>
-          {risk.risk_factors.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 mb-4">
-              {risk.risk_factors.map((f) => (
-                <span key={f} className="px-2 py-0.5 rounded text-[10px] font-mono border"
-                  style={{ background: 'var(--bg-tertiary)', borderColor: 'var(--bg-border)', color: 'var(--text-muted)' }}>
-                  {f}
-                </span>
-              ))}
-            </div>
-          )}
-          {risk.active_flags.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="border-b" style={{ borderColor: 'var(--bg-border)', color: 'var(--text-muted)' }}>
-                    {['Type', 'Severity', 'Description', 'Created'].map((h) => (
-                      <th key={h} className="pb-2 pr-3 font-semibold">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {risk.active_flags.map((f) => (
-                    <tr key={f.flag_id} style={{ color: 'var(--text-secondary)' }}>
-                      <td className="py-2.5 pr-3 font-mono text-[11px]">{f.flag_type ?? '—'}</td>
-                      <td className="py-2.5 pr-3"><StatusBadge variant={severityVariant(f.severity)}>{f.severity ?? '—'}</StatusBadge></td>
-                      <td className="py-2.5 pr-3 max-w-xs">{f.description ?? '—'}</td>
-                      <td className="py-2.5 font-mono text-[11px]" style={{ color: 'var(--text-muted)' }}>{dateOnly(f.created_at)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <p className="text-[11px] flex items-center gap-1.5" style={{ color: 'var(--accent-green)' }}>
-              <CheckCircle2 size={13} /> No active risk flags.
-            </p>
-          )}
-        </SectionCard>
-      )}
+      {risk && <RiskAssessmentCard risk={risk} />}
 
       {kyc && (
-        <SectionCard title="KYC & AML" icon={<Scale size={12} />}>
-          <div className="space-y-3">
-            <KeyValueRow label="KYC status" value={kyc.kyc_status} />
-            <KeyValueRow label="Next review" value={dateOnly(kyc.next_review_date)} mono />
-            {kyc.latest_kyc_case && (
-              <div className="rounded-xl border p-3" style={{ background: 'var(--bg-tertiary)', borderColor: 'var(--bg-border)' }}>
-                <p className="text-[9px] font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>
-                  Latest KYC case
-                </p>
-                <div className="space-y-1.5">
-                  {kyc.latest_kyc_case.kyc_case_id && (
-                    <KeyValueRow label="Case ID" value={kyc.latest_kyc_case.kyc_case_id} mono />
-                  )}
-                  <KeyValueRow label="Type" value={kyc.latest_kyc_case.case_type} />
-                  <KeyValueRow label="Status" value={kyc.latest_kyc_case.status} />
-                  <KeyValueRow label="Risk level" value={kyc.latest_kyc_case.risk_level} />
-                  <KeyValueRow label="Opened" value={dateOnly(kyc.latest_kyc_case.opened_at)} mono />
-                </div>
+        <>
+          <SectionCard title="KYC" icon={<Scale size={12} />}>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <KeyValueRow label="KYC status" value={kyc.kyc_status} />
+                {kyc.kyc_status && <StatusBadge variant={statusVariant(kyc.kyc_status)}>{kyc.kyc_status}</StatusBadge>}
               </div>
-            )}
+              <KeyValueRow label="Next review" value={dateOnly(kyc.next_review_date)} mono />
+              {kyc.latest_kyc_case && (
+                <div className="rounded-xl border p-3 mt-2" style={{ background: 'var(--bg-tertiary)', borderColor: 'var(--bg-border)' }}>
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <p className="text-[9px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+                      Latest KYC case
+                    </p>
+                    {kyc.latest_kyc_case.status && (
+                      <StatusBadge variant={statusVariant(kyc.latest_kyc_case.status)}>{kyc.latest_kyc_case.status}</StatusBadge>
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    {kyc.latest_kyc_case.kyc_case_id && (
+                      <KeyValueRow label="Case ID" value={kyc.latest_kyc_case.kyc_case_id} mono />
+                    )}
+                    <KeyValueRow label="Type" value={kyc.latest_kyc_case.case_type} />
+                    <KeyValueRow label="Risk level" value={kyc.latest_kyc_case.risk_level} />
+                    <KeyValueRow label="Opened" value={dateOnly(kyc.latest_kyc_case.opened_at)} mono />
+                  </div>
+                </div>
+              )}
+            </div>
+          </SectionCard>
 
-            {(kyc.pep_screening || kyc.sanctions_screening) && (
+          {(kyc.pep_screening || kyc.sanctions_screening) && (
+            <SectionCard title="Screening" icon={<UserX size={12} />}>
               <div className="space-y-2">
-                {kyc.pep_screening && (
-                  <div className="rounded-xl border p-3" style={{ background: 'var(--bg-tertiary)', borderColor: 'var(--bg-border)' }}>
-                    <p className="text-[9px] font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>PEP screening</p>
-                    <KeyValueRow label="Status" value={kyc.pep_screening.status} />
-                    <KeyValueRow label="Risk level" value={kyc.pep_screening.risk_level} />
-                    <KeyValueRow label="Match score" value={kyc.pep_screening.match_score != null ? money(kyc.pep_screening.match_score) : null} />
-                    <KeyValueRow label="List" value={kyc.pep_screening.list_name} />
-                    {kyc.pep_screening.matched_name && (
-                      <KeyValueRow label="Matched name" value={kyc.pep_screening.matched_name} />
-                    )}
-                    <KeyValueRow label="Checked" value={dateOnly(kyc.pep_screening.checked_at)} mono />
-                  </div>
-                )}
-                {kyc.sanctions_screening && (
-                  <div className="rounded-xl border p-3" style={{ background: 'var(--bg-tertiary)', borderColor: 'var(--bg-border)' }}>
-                    <p className="text-[9px] font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>Sanctions screening</p>
-                    <KeyValueRow label="Status" value={kyc.sanctions_screening.status} />
-                    <KeyValueRow label="Risk level" value={kyc.sanctions_screening.risk_level} />
-                    <KeyValueRow label="Match score" value={kyc.sanctions_screening.match_score != null ? money(kyc.sanctions_screening.match_score) : null} />
-                    <KeyValueRow label="List" value={kyc.sanctions_screening.list_name} />
-                    {kyc.sanctions_screening.matched_name && (
-                      <KeyValueRow label="Matched name" value={kyc.sanctions_screening.matched_name} />
-                    )}
-                    <KeyValueRow label="Checked" value={dateOnly(kyc.sanctions_screening.checked_at)} mono />
-                  </div>
+                {kyc.pep_screening && <ScreeningCard title="PEP screening" screening={kyc.pep_screening} />}
+                {kyc.sanctions_screening && <ScreeningCard title="Sanctions screening" screening={kyc.sanctions_screening} />}
+              </div>
+            </SectionCard>
+          )}
+
+          {(Object.keys(kyc.aml_alert_counts_by_status).length > 0 ||
+            Object.keys(kyc.aml_alert_counts_by_severity).length > 0 ||
+            kyc.sar_count > 0) && (
+            <SectionCard title="AML" icon={<BellRing size={12} />}>
+              <div className="flex flex-wrap gap-x-6 gap-y-1">
+                {Object.entries(kyc.aml_alert_counts_by_status).map(([s, c]) => (
+                  <span key={s} className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                    {s}: <strong className="font-mono">{c}</strong>
+                  </span>
+                ))}
+                {Object.entries(kyc.aml_alert_counts_by_severity).map(([s, c]) => (
+                  <span key={s} className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                    {s}: <strong className="font-mono">{c}</strong>
+                  </span>
+                ))}
+                {kyc.sar_count > 0 && (
+                  <span className="text-xs" style={{ color: 'var(--accent-red)' }}>
+                    SARs: <strong className="font-mono">{kyc.sar_count}</strong>
+                  </span>
                 )}
               </div>
-            )}
-
-            {(Object.keys(kyc.aml_alert_counts_by_status).length > 0 ||
-              Object.keys(kyc.aml_alert_counts_by_severity).length > 0 ||
-              kyc.sar_count > 0) && (
-              <div className="rounded-xl border p-3" style={{ background: 'var(--bg-tertiary)', borderColor: 'var(--bg-border)' }}>
-                <p className="text-[9px] font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>AML summary</p>
-                <div className="flex flex-wrap gap-x-6 gap-y-1">
-                  {Object.entries(kyc.aml_alert_counts_by_status).map(([s, c]) => (
-                    <span key={s} className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-                      {s}: <strong className="font-mono">{c}</strong>
-                    </span>
-                  ))}
-                  {Object.entries(kyc.aml_alert_counts_by_severity).map(([s, c]) => (
-                    <span key={s} className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-                      {s}: <strong className="font-mono">{c}</strong>
-                    </span>
-                  ))}
-                  {kyc.sar_count > 0 && (
-                    <span className="text-xs" style={{ color: 'var(--accent-red)' }}>
-                      SARs: <strong className="font-mono">{kyc.sar_count}</strong>
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {adminView && <RestrictedNotice label="Only status-level KYC is shown in your view" />}
-          </div>
-        </SectionCard>
+              {Object.keys(kyc.aml_alert_counts_by_status).length === 0 &&
+                Object.keys(kyc.aml_alert_counts_by_severity).length === 0 && (
+                <p className="text-[11px] mt-2 flex items-center gap-1.5" style={{ color: 'var(--accent-green)' }}>
+                  <CheckCircle2 size={13} /> No open AML alerts.
+                </p>
+              )}
+            </SectionCard>
+          )}
+        </>
       )}
     </div>
   );
@@ -1188,54 +1355,79 @@ function AlertsTab({ analyticsGranted, alerts }: {
 
 // ── Workbench tab (explicit operational records linked to this customer) ───
 
+const WORKBENCH_GROUPS: { type: string; label: string }[] = [
+  { type: 'alert', label: 'Alerts' },
+  { type: 'investigation', label: 'Investigations' },
+  { type: 'case', label: 'Compliance cases' },
+  { type: 'information_request', label: 'Information requests' },
+  { type: 'approval', label: 'Approvals' },
+];
+
+function WorkbenchRow({ l }: { l: WorkbenchLink }) {
+  const Icon = ENTITY_ICONS[l.entity_type] ?? Inbox;
+  const href = entityHref(l.entity_type, l.entity_id);
+  return (
+    <div className="rounded-xl border p-3" style={{ background: 'var(--bg-tertiary)', borderColor: 'var(--bg-border)' }}>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <StatusBadge variant={entityVariant(l.entity_type)}>
+          <Icon size={11} /> {ENTITY_LABELS[l.entity_type] ?? 'Operational record'}
+        </StatusBadge>
+        <StatusBadge variant={statusVariant(l.status)}>{l.status ?? '—'}</StatusBadge>
+      </div>
+      {href ? (
+        <Link to={href} className="font-mono text-[11px] mt-1.5 block underline decoration-dotted hover:brightness-125"
+          style={{ color: 'var(--accent-blue)' }}>
+          {l.entity_id}
+        </Link>
+      ) : (
+        <p className="font-mono text-[11px] mt-1.5" style={{ color: 'var(--text-secondary)' }}>
+          {l.entity_id || '—'}
+        </p>
+      )}
+      <p className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>
+        {[
+          l.assigned_to ? `assigned to ${l.assigned_to}` : null,
+          l.updated_at ? `updated ${dateOnly(l.updated_at)}` : null,
+          l.scope_id ? `scope ${l.scope_id}` : null,
+          l.source ? `source ${l.source}` : null,
+        ].filter(Boolean).join(' · ')}
+      </p>
+    </div>
+  );
+}
+
 function WorkbenchTab({ links }: { links: WorkbenchLink[] }) {
+  if (links.length === 0) {
+    return (
+      <EmptyState
+        icon={<Inbox size={18} />}
+        title="No linked operational records"
+        description="No workbench records are explicitly linked to this customer."
+      />
+    );
+  }
+
+  const grouped = WORKBENCH_GROUPS
+    .map((g) => ({ ...g, items: links.filter((l) => l.entity_type === g.type) }))
+    .filter((g) => g.items.length > 0);
+  const others = links.filter((l) => !WORKBENCH_GROUPS.some((g) => g.type === l.entity_type));
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-      <SectionCard title="Workbench Records" icon={<Inbox size={12} />}>
-        {links.length === 0 ? (
-          <EmptyState
-            icon={<Inbox size={18} />}
-            title="No linked operational records"
-            description="No workbench records are explicitly linked to this customer."
-          />
-        ) : (
+      {grouped.map((g) => (
+        <SectionCard key={g.type} title={`${g.label} (${g.items.length})`} icon={<Inbox size={12} />}>
           <div className="space-y-2">
-            {links.map((l) => {
-              const Icon = ENTITY_ICONS[l.entity_type] ?? Inbox;
-              const href = entityHref(l.entity_type, l.entity_id);
-              return (
-                <div key={`${l.entity_type}-${l.entity_id}`} className="rounded-xl border p-3"
-                  style={{ background: 'var(--bg-tertiary)', borderColor: 'var(--bg-border)' }}>
-                  <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <StatusBadge variant={entityVariant(l.entity_type)}>
-                      <Icon size={11} /> {ENTITY_LABELS[l.entity_type] ?? 'Operational record'}
-                    </StatusBadge>
-                    <StatusBadge variant={statusVariant(l.status)}>{l.status ?? '—'}</StatusBadge>
-                  </div>
-                  {href ? (
-                    <Link to={href} className="font-mono text-[11px] mt-1.5 block underline decoration-dotted hover:brightness-125"
-                      style={{ color: 'var(--accent-blue)' }}>
-                      {l.entity_id}
-                    </Link>
-                  ) : (
-                    <p className="font-mono text-[11px] mt-1.5" style={{ color: 'var(--text-secondary)' }}>
-                      {l.entity_id || '—'}
-                    </p>
-                  )}
-                  <p className="text-[10px] mt-1" style={{ color: 'var(--text-muted)' }}>
-                    {[
-                      l.assigned_to ? `assigned to ${l.assigned_to}` : null,
-                      l.updated_at ? `updated ${dateOnly(l.updated_at)}` : null,
-                      l.scope_id ? `scope ${l.scope_id}` : null,
-                      l.source ? `source ${l.source}` : null,
-                    ].filter(Boolean).join(' · ')}
-                  </p>
-                </div>
-              );
-            })}
+            {g.items.map((l) => <WorkbenchRow key={`${l.entity_type}-${l.entity_id}`} l={l} />)}
           </div>
-        )}
-      </SectionCard>
+        </SectionCard>
+      ))}
+      {others.length > 0 && (
+        <SectionCard title={`Other records (${others.length})`} icon={<Inbox size={12} />}>
+          <div className="space-y-2">
+            {others.map((l) => <WorkbenchRow key={`${l.entity_type}-${l.entity_id}`} l={l} />)}
+          </div>
+        </SectionCard>
+      )}
     </div>
   );
 }

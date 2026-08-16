@@ -14,6 +14,7 @@ import { PerformanceMonitor } from './pages/PerformanceMonitor';
 import { Settings } from './pages/Settings';
 import { LoginPage } from './components/auth/LoginPage';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { PERMISSIONS } from './lib/permissions';
 import { BankingDashboard } from './pages/BankingDashboard';
 import { Branches } from './pages/Branches';
 import { Assistant } from './pages/Assistant';
@@ -34,42 +35,34 @@ import { NotificationsPanel } from './components/notifications/NotificationsPane
 import { OutboxMonitor } from './components/admin/OutboxMonitor';
 import { ReportsPage } from './pages/ReportsPage';
 import { Customer360Page } from './components/customers/Customer360Page';
+import { CustomerSearchPage } from './components/customers/CustomerSearchPage';
 import { AdminPage } from './pages/AdminPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { UnauthorizedPage } from './pages/UnauthorizedPage';
 import { useWebSocket } from './hooks/useWebSocket';
 
-function AppShell() {
+function AppContent() {
   useWebSocket();
-  const path = useLocation().pathname;
+  const location = useLocation();
+  const isDevRoute = location.pathname.startsWith('/dev');
+  const isAuthRoute = location.pathname === '/login' || location.pathname === '/unauthorized';
 
-  // /login is unreachable in Keycloak mode (login-required handles redirect at init)
-  // and shows LoginPage in legacy mode
-  if (path === '/login') {
+  if (isAuthRoute) {
     return (
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-      </Routes>
-    );
-  }
-
-  if (path === '/unauthorized') {
-    return (
-      <Routes>
         <Route path="/unauthorized" element={<UnauthorizedPage />} />
       </Routes>
     );
   }
 
-  // Dev layout — admin-only, uses legacy Sidebar + Header
-  const isDevRoute = path === '/dev' || path.startsWith('/dev/');
   if (isDevRoute) {
     return (
-      <div className="flex h-screen overflow-hidden" style={{ background: 'var(--bg-primary)' }}>
+      <div className="flex h-screen overflow-hidden">
         <Sidebar />
         <div className="flex-1 flex flex-col overflow-hidden">
           <Header />
-          <main className="flex-1 overflow-y-auto">
+          <main className="flex-1 overflow-auto bg-[#0F172A] p-6">
             <Routes>
               <Route path="/dev"            element={<ProtectedRoute requiredRole="admin"><Dashboard /></ProtectedRoute>} />
               <Route path="/dev/query"       element={<ProtectedRoute requiredRole="admin"><QueryTester /></ProtectedRoute>} />
@@ -84,13 +77,12 @@ function AppShell() {
     );
   }
 
-  // Business layout — sidebar + topbar + content + command palette + AI panel
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: 'var(--bg-primary)' }}>
       <BankingSidebar />
-      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+      <div className="flex-1 flex flex-col overflow-hidden">
         <TopBar />
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-auto p-6">
           <Routes>
             <Route path="/"               element={<ProtectedRoute><BankingDashboard /></ProtectedRoute>} />
             <Route path="/dashboard"       element={<ProtectedRoute><BankingDashboard /></ProtectedRoute>} />
@@ -99,14 +91,15 @@ function AppShell() {
             <Route path="/kpi"             element={<ProtectedRoute><KpiPage /></ProtectedRoute>} />
             <Route path="/kpi-governance"  element={<ProtectedRoute requiredRole={['analyst', 'manager', 'compliance', 'admin']} requiredPermission="workbench:access"><KpiGovernancePage /></ProtectedRoute>} />
             <Route path="/risk"            element={<ProtectedRoute requiredRole={['analyst', 'manager', 'compliance', 'admin']} requiredPermission="workbench:access"><RiskPage /></ProtectedRoute>} />
-            <Route path="/workbench/alerts"        element={<ProtectedRoute requiredRole={['analyst', 'compliance', 'admin']} requiredPermission="alert:read_assigned"><AlertQueuePage /></ProtectedRoute>} />
-            <Route path="/workbench/alerts/:alertId" element={<ProtectedRoute requiredRole={['analyst', 'compliance', 'admin']} requiredPermission="alert:read_assigned"><AlertDetailPage /></ProtectedRoute>} />
-            <Route path="/workbench/investigations" element={<ProtectedRoute requiredRole={['analyst', 'compliance', 'admin']} requiredPermission="investigation:read_own"><InvestigationQueuePage /></ProtectedRoute>} />
-            <Route path="/workbench/investigations/:investigationId" element={<ProtectedRoute requiredRole={['analyst', 'compliance', 'admin']} requiredPermission="investigation:read_own"><InvestigationDetailPage /></ProtectedRoute>} />
-            <Route path="/workbench/cases" element={<ProtectedRoute requiredRole={['analyst', 'compliance', 'admin']} requiredPermission="case:read_assigned"><CaseQueuePage /></ProtectedRoute>} />
-            <Route path="/workbench/cases/:caseId" element={<ProtectedRoute requiredRole={['analyst', 'compliance', 'admin']} requiredPermission="case:read_assigned"><CaseDetailPage /></ProtectedRoute>} />
-            <Route path="/workbench/information-requests" element={<ProtectedRoute requiredRole={['analyst', 'compliance', 'admin']} requiredPermission="info_request:read_assigned"><IRInboxPage /></ProtectedRoute>} />
+            <Route path="/workbench/alerts"        element={<ProtectedRoute requiredRole={['analyst', 'compliance', 'admin']} requiredPermission={[PERMISSIONS.ALERT_READ_ASSIGNED, PERMISSIONS.ALERT_READ]}><AlertQueuePage /></ProtectedRoute>} />
+            <Route path="/workbench/alerts/:alertId" element={<ProtectedRoute requiredRole={['analyst', 'compliance', 'admin']} requiredPermission={[PERMISSIONS.ALERT_READ_ASSIGNED, PERMISSIONS.ALERT_READ]}><AlertDetailPage /></ProtectedRoute>} />
+            <Route path="/workbench/investigations" element={<ProtectedRoute requiredRole={['analyst', 'compliance', 'admin']} requiredPermission={[PERMISSIONS.INVESTIGATION_READ_OWN, PERMISSIONS.INVESTIGATION_READ]}><InvestigationQueuePage /></ProtectedRoute>} />
+            <Route path="/workbench/investigations/:investigationId" element={<ProtectedRoute requiredRole={['analyst', 'compliance', 'admin']} requiredPermission={[PERMISSIONS.INVESTIGATION_READ_OWN, PERMISSIONS.INVESTIGATION_READ]}><InvestigationDetailPage /></ProtectedRoute>} />
+            <Route path="/workbench/cases" element={<ProtectedRoute requiredRole={['analyst', 'compliance', 'admin']} requiredPermission={[PERMISSIONS.CASE_READ_ASSIGNED, PERMISSIONS.CASE_READ]}><CaseQueuePage /></ProtectedRoute>} />
+            <Route path="/workbench/cases/:caseId" element={<ProtectedRoute requiredRole={['analyst', 'compliance', 'admin']} requiredPermission={[PERMISSIONS.CASE_READ_ASSIGNED, PERMISSIONS.CASE_READ]}><CaseDetailPage /></ProtectedRoute>} />
+            <Route path="/workbench/information-requests" element={<ProtectedRoute requiredRole={['analyst', 'compliance', 'admin']} requiredPermission={[PERMISSIONS.INFO_REQUEST_READ_ASSIGNED, PERMISSIONS.INFO_REQUEST_READ]}><IRInboxPage /></ProtectedRoute>} />
             <Route path="/workbench/approvals" element={<ProtectedRoute requiredRole={['analyst', 'compliance', 'admin']} requiredPermission="approval:read"><ApprovalQueuePage /></ProtectedRoute>} />
+            <Route path="/workbench/customers" element={<ProtectedRoute requiredPermission="customer:read_basic"><CustomerSearchPage /></ProtectedRoute>} />
             <Route path="/workbench/customers/:customerId" element={<ProtectedRoute requiredPermission="customer:read_basic"><Customer360Page /></ProtectedRoute>} />
             <Route path="/notifications" element={<ProtectedRoute requiredRole={['analyst', 'compliance', 'admin']} requiredPermission="notification:read"><NotificationsPanel /></ProtectedRoute>} />
             <Route path="/workbench/admin/outbox" element={<ProtectedRoute requiredRole="admin" requiredPermission="admin:outbox_monitor"><OutboxMonitor /></ProtectedRoute>} />
@@ -127,7 +120,7 @@ function AppShell() {
 export default function App() {
   return (
     <BrowserRouter>
-      <AppShell />
+      <AppContent />
     </BrowserRouter>
   );
 }

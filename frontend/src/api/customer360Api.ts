@@ -57,6 +57,25 @@ function isOverviewShape(data: unknown, customerId: string): boolean {
   );
 }
 
+export interface CustomerSearchResultItem {
+  customer_id: string;
+  name: string;
+  segment?: string | null;
+}
+
+export interface CustomerSearchResponse {
+  items: CustomerSearchResultItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface CustomerSearchParams {
+  q: string;
+  limit?: number;
+  offset?: number;
+}
+
 export const customer360Api = {
   getOverview: async (customerId: string): Promise<Customer360Overview> => {
     const res = await apiClient.get<Customer360Overview>(
@@ -81,6 +100,22 @@ export const customer360Api = {
     const rows = res.data?.recent_transactions;
     if (!Array.isArray(rows) || typeof res.data?.total_count !== 'number') {
       throw Object.assign(new Error('Malformed transactions response'), { kind: 'malformed' });
+    }
+    return res.data;
+  },
+
+  searchCustomers: async (
+    params: CustomerSearchParams,
+  ): Promise<CustomerSearchResponse> => {
+    const qs = new URLSearchParams();
+    qs.append('q', params.q);
+    qs.append('limit', String(params.limit ?? 20));
+    qs.append('offset', String(params.offset ?? 0));
+    const res = await apiClient.get<CustomerSearchResponse>(
+      `/v1/customers?${qs.toString()}`,
+    );
+    if (!res.data || !Array.isArray(res.data.items)) {
+      throw Object.assign(new Error('Malformed search response'), { kind: 'malformed' });
     }
     return res.data;
   },

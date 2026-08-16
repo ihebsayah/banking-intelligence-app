@@ -60,10 +60,17 @@ except ImportError:
     KPIService = None
 
 try:
-    from customer360.models import Customer360Overview, DataQuality, TransactionRow, TransactionSummary
+    from customer360.models import (
+        Customer360Overview,
+        CustomerSearchResponse,
+        DataQuality,
+        TransactionRow,
+        TransactionSummary,
+    )
     from customer360.service import Customer360Service, Customer360SourceUnavailable
 except ImportError:
     Customer360Overview = None
+    CustomerSearchResponse = None
     DataQuality = None
     TransactionRow = None
     TransactionSummary = None
@@ -650,7 +657,7 @@ async def _authenticate_legacy(token: str, db) -> User:
 # ─── RBAC Helper ─────────────────────────────────────────────────────────────
 
 ROLE_GROUPS = {
-    "business": {UserRole.ANALYST, UserRole.MANAGER, UserRole.ADMIN, "analyst", "manager", "admin"},
+    "business": {UserRole.ANALYST, UserRole.MANAGER, UserRole.COMPLIANCE, UserRole.ADMIN, "analyst", "manager", "compliance", "admin"},
     "compliance": {UserRole.COMPLIANCE, UserRole.ADMIN, "compliance", "admin"},
     "admin": {UserRole.ADMIN, "admin"},
 }
@@ -2854,7 +2861,7 @@ _CUSTOMER_READ_PERMISSIONS = (
 
 
 @router.get(
-    "/api/v1/customers/{customer_id}/overview",
+    "/v1/customers/{customer_id}/overview",
     response_model=Customer360Overview,
     summary="Customer 360 overview — permission-scoped aggregate of one customer",
     tags=["customer360"],
@@ -2910,7 +2917,7 @@ async def customer360_overview(
 
 
 @router.get(
-    "/api/v1/customers/{customer_id}/transactions",
+    "/v1/customers/{customer_id}/transactions",
     response_model=CustomerTransactionsResponse,
     summary="Recent transactions + lifetime summary for one customer",
     tags=["customer360"],
@@ -2975,6 +2982,53 @@ async def customer360_transactions(
         data_quality=data_quality,
         generated_at=datetime.utcnow().isoformat() + "Z",
     )
+
+
+@router.get(
+    "/v1/customers",
+    response_model=CustomerSearchResponse,
+    summary="Search authorized customers within caller's org scope",
+    tags=["customer360"],
+)
+async def search_customers(
+    request: Request,
+    q: str = Query(default="", description="Search query string (customer ID or name)"),
+    limit: int = Query(default=20, ge=1, le=50),
+    offset: int = Query(default=0, ge=0),
+    user: User = Depends(require_any_permission_audited(
+        "customer:read_basic", action="customer_search"
+    )),
+):
+    service = _get_customer360_service(request)
+    if service is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"error": "CUSTOMER360_UNAVAILABLE",
+                    "message": "Customer 360 service is unavailable (no database connection)"},
+        )
+
+    start_time = time.monotonic()
+    request_id = str(getattr(request.state, "request_id", "") or "")
+    try:
+        res, audit = await service.search_customers(user, q, limit, offset, request_id)
+    except Customer360SourceUnavailable as exc:
+        await _send_audit_log(_customer_audit_entry(
+            user, "customer_search", "", AuditStatus.ERROR,
+            metadata={"error": str(exc), "request_id": request_id},
+            execution_ms=int((time.monotonic() - start_time) * 1000),
+        ))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"error": "CUSTOMER360_SOURCE_UNAVAILABLE",
+                    "message": "Customer data source is temporarily unavailable"},
+        )
+
+    await _send_audit_log(_customer_audit_entry(
+        user, "customer_search", "", AuditStatus.SUCCESS,
+        metadata=audit,
+        execution_ms=int((time.monotonic() - start_time) * 1000),
+    ))
+    return res
 
 
 # ───────────────────────────────────────────────────────────────────────────────

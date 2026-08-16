@@ -21,8 +21,12 @@ import {
   Info
 } from 'lucide-react';
 import { clsx } from 'clsx';
+import { usePermissions, PERMISSIONS } from '../lib/permissions';
 
 export function RiskPage() {
+  const { hasPermission } = usePermissions();
+  const canReadCustomer = hasPermission(PERMISSIONS.CUSTOMER_READ_BASIC);
+
   const [overview, setOverview] = useState<RiskOverview | null>(null);
   const [segments, setSegments] = useState<RiskSegment[]>([]);
   const [flags, setFlags] = useState<RiskFlag[]>([]);
@@ -347,10 +351,14 @@ export function RiskPage() {
                           <tr key={flag.flag_id} className="hover:bg-white/5 transition-all">
                             <td className="py-4 font-mono text-[10px] font-semibold select-all" style={{ color: 'var(--text-muted)' }}>#{flag.flag_id.slice(0, 8)}...</td>
                             <td className="py-4 font-mono text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>
-                              <Link to={`/workbench/customers/${flag.customer_id}`}
-                                className="underline decoration-dotted hover:brightness-125" style={{ color: 'var(--accent-blue)' }}>
-                                {flag.customer_id.slice(0, 8)}...
-                              </Link>
+                              {canReadCustomer ? (
+                                <Link to={`/workbench/customers/${flag.customer_id}`}
+                                  className="underline decoration-dotted hover:brightness-125" style={{ color: 'var(--accent-blue)' }}>
+                                  {flag.customer_id.slice(0, 8)}...
+                                </Link>
+                              ) : (
+                                <span>{flag.customer_id.slice(0, 8)}...</span>
+                              )}
                             </td>
                             <td className="py-4">
                               <span className="font-mono text-[10px] font-semibold px-1.5 py-0.5 rounded border uppercase" style={{ color: 'var(--text-secondary)', background: 'var(--bg-card)', borderColor: 'var(--bg-border)' }}>

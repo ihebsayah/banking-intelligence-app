@@ -28,7 +28,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Compliance Agent",
-    description="GDPR / PCI-DSS / SOX / AML / KYC compliance enforcement.",
+    description="GDPR /   / SOX / AML / KYC compliance enforcement.",
     version="2.0.0",
     lifespan=lifespan,
 )

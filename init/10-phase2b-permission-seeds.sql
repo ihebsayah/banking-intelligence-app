@@ -118,7 +118,6 @@ INSERT INTO role_permissions (role_id, permission_key) VALUES
     ('admin', 'workbench:access'),
     ('admin', 'alert:read'),
     ('admin', 'alert:assign'),
-    ('admin', 'alert:dismiss'),
     ('admin', 'investigation:read'),
     ('admin', 'investigation:assign'),
     ('admin', 'case:read'),

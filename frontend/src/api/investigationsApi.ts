@@ -53,6 +53,15 @@ export const investigationsApi = {
     return res.data;
   },
 
+  listSubmitted: async (params: Omit<ListAssignedParams, 'status'> = {}): Promise<InvestigationListResponse> => {
+    const qs = new URLSearchParams();
+    if (params.priority) qs.append('priority', params.priority);
+    qs.append('page', String(params.page ?? 1));
+    qs.append('per_page', String(params.perPage ?? 50));
+    const res = await apiClient.get<InvestigationListResponse>(`/investigations/submitted?${qs.toString()}`);
+    return res.data;
+  },
+
   get: async (investigationId: string): Promise<Investigation> => {
     const res = await apiClient.get<Investigation>(`/investigations/${investigationId}`);
     return res.data;
@@ -92,4 +101,27 @@ export const investigationsApi = {
     const res = await apiClient.get<TimelineListResponse>(`/investigations/${investigationId}/timeline?page=${page}&per_page=${perPage}`);
     return res.data;
   },
+
+  reviewNotHarmful: async (investigationId: string, payload: {
+    rationale: string;
+    expected_version: number;
+  }): Promise<InvestigationMutationResponse> => {
+    const res = await apiClient.post<InvestigationMutationResponse>(
+      `/investigations/${investigationId}/review/not-harmful`, payload,
+      { headers: { 'X-Request-ID': uuid(), 'X-Idempotency-Key': uuid() } });
+    return res.data;
+  },
+
+  escalateToCase: async (investigationId: string, payload: {
+    title: string;
+    priority: string;
+    rationale: string;
+    expected_version: number;
+  }): Promise<{ success: boolean; investigation: Investigation; case_id: string; version: number }> => {
+    const res = await apiClient.post<{ success: boolean; investigation: Investigation; case_id: string; version: number }>(
+      `/investigations/${investigationId}/review/escalate`, payload,
+      { headers: { 'X-Request-ID': uuid(), 'X-Idempotency-Key': uuid() } });
+    return res.data;
+  },
 };
+

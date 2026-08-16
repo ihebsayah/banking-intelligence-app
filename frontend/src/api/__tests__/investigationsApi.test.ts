@@ -47,6 +47,15 @@ describe('investigationsApi', () => {
     expect(url).toContain('per_page=50');
   });
 
+  it('listSubmitted calls GET /investigations/submitted with priority and pagination', async () => {
+    await investigationsApi.listSubmitted({ priority: 'high', page: 1, perPage: 50 });
+    const [url] = mockGet.mock.calls[0];
+    expect(url).toContain('/investigations/submitted?');
+    expect(url).toContain('priority=high');
+    expect(url).toContain('page=1');
+    expect(url).toContain('per_page=50');
+  });
+
   it('get targets the investigation id', async () => {
     await investigationsApi.get('inv_1');
     expect(mockGet).toHaveBeenCalledWith('/investigations/inv_1');

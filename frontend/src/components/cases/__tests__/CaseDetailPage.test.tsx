@@ -41,6 +41,8 @@ const mocks = vi.hoisted(() => ({
   mockInvTransition: vi.fn(),
   mockApprovalCreate: vi.fn(),
   mockApprovalGet: vi.fn(),
+  mockAlertGet: vi.fn(),
+  mockGetOverview: vi.fn(),
 }));
 
 vi.mock('../../../api/casesApi', () => ({
@@ -76,6 +78,22 @@ vi.mock('../../../api/approvalsApi', () => ({
     create: mocks.mockApprovalCreate,
     get: mocks.mockApprovalGet,
   },
+}));
+
+vi.mock('../../../api/alertsApi', () => ({
+  alertsApi: { get: mocks.mockAlertGet },
+}));
+
+vi.mock('../../../api/customer360Api', () => ({
+  customer360Api: { getOverview: mocks.mockGetOverview, getTransactions: vi.fn() },
+  parseCustomer360Error: (err: unknown) => ({
+    kind: (err as { response?: { status?: number } })?.response?.status === 403 ? 'forbidden'
+      : (err as { response?: { status?: number } })?.response?.status === 404 ? 'not_found'
+      : (err as { response?: { status?: number } })?.response?.status === 503 ? 'unavailable'
+      : 'unknown',
+    status: (err as { response?: { status?: number } })?.response?.status,
+    message: 'mock',
+  }),
 }));
 
 import { CaseDetailPage } from '../CaseDetailPage';
@@ -139,6 +157,21 @@ describe('CaseDetailPage', () => {
     mocks.mockInvTransition.mockResolvedValue({ success: true, investigation: { ...investigationSubmitted, status: 'completed' }, version: 6 });
     mocks.mockApprovalCreate.mockResolvedValue({ success: true, approval_request: approval('pending'), version: 1 });
     mocks.mockApprovalGet.mockResolvedValue(approval('pending'));
+    mocks.mockAlertGet.mockResolvedValue({
+      alert_id: 'al_12345678', alert_type: 'transaction_anomaly', severity: 'high', title: 'Suspicious transfer',
+      description: 'Large round-trip transaction', source_rule_type: 'ml_anomaly', source_rule_id: 'r1',
+      related_entity_type: 'customer', related_entity_id: 'CUST_00001', scope_id: 'hq_main',
+      status: 'assigned', assigned_to: 'analyst_001', dismissed_reason: null, dismissed_at: null,
+      dismissed_by: null, resolved_at: null, resolved_by: null,
+      created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z', version: 3,
+    });
+    mocks.mockGetOverview.mockResolvedValue({
+      customer: { customer_id: 'CUST_00001', name: 'Fouad Ben Salah', customer_type: 'corporate', segment: 'CORP-A', status: 'active', onboarding_date: '2019-04-12T00:00:00Z', email: null, phone: null, nationality: null, date_of_birth: null, employment_status: null, employer_name: null, national_id: null, passport_number: null, tax_id: null, annual_income: null, net_worth_band: null, pep: false },
+      relationship: null, financial_summary: null, accounts: [], loans: [], transaction_summary: null, recent_transactions: [],
+      kyc_aml: null, risk: null, analytics_alerts: [], workbench_links: [], admin_metadata: null,
+      data_quality: { missing_profile: false, missing_branch: false, missing_relationship_manager: false, stale_kyc: false, unresolved_workbench_reference: false, unavailable_sections: [] },
+      generated_at: '2026-08-01T00:00:00Z',
+    });
   });
 
   it('renders fields, badges, version and assignee', async () => {
@@ -292,5 +325,65 @@ describe('CaseDetailPage', () => {
     const dialog = screen.getByRole('dialog');
     fireEvent.click(within(dialog).getByRole('button', { name: /Assign/i }));
     await waitFor(() => expect(mocks.mockAssign).toHaveBeenCalledWith('case_1', { assigned_to: 'compliance_007', expected_version: 4 }));
+  });
+
+  it('shows customer context when the case links an alert to a customer', async () => {
+    renderDetail();
+    expect(await screen.findByTestId('customer-context-panel')).toBeInTheDocument();
+    expect(await screen.findByText('Fouad Ben Salah')).toBeInTheDocument();
+    expect(mocks.mockAlertGet).toHaveBeenCalledWith('al_12345678');
+    expect(mocks.mockGetOverview).toHaveBeenCalledWith('CUST_00001');
+  });
+
+  it('resolves customer context via the investigation when the case has no direct alert', async () => {
+    mocks.mockGet.mockResolvedValue(makeCase({ alert_id: null }));
+    mocks.mockInvGet.mockResolvedValue({ ...investigationSubmitted, alert_id: 'al_55555555' });
+    mocks.mockAlertGet.mockResolvedValue({ alert_id: 'al_55555555', related_entity_type: 'customer', related_entity_id: 'CUST_00099', scope_id: 'hq_main', status: 'assigned', assigned_to: 'analyst_001', severity: 'high', alert_type: 'transaction_anomaly', title: 'Suspicious transfer', description: '', source_rule_type: 'ml_anomaly', source_rule_id: 'r1', dismissed_reason: null, dismissed_at: null, dismissed_by: null, resolved_at: null, resolved_by: null, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z', version: 3 });
+    renderDetail();
+    expect(await screen.findByTestId('customer-context-panel')).toBeInTheDocument();
+    expect(mocks.mockInvGet).toHaveBeenCalledWith('inv_1');
+    expect(mocks.mockAlertGet).toHaveBeenCalledWith('al_55555555');
+    expect(mocks.mockGetOverview).toHaveBeenCalledWith('CUST_00099');
+  });
+
+  it('shows no customer context for a non-customer linked alert', async () => {
+    mocks.mockAlertGet.mockResolvedValue({ alert_id: 'al_12345678', related_entity_type: 'account', related_entity_id: 'ACC-1', scope_id: 'hq_main', status: 'assigned', assigned_to: 'analyst_001', severity: 'high', alert_type: 'transaction_anomaly', title: 'Suspicious transfer', description: '', source_rule_type: 'ml_anomaly', source_rule_id: 'r1', dismissed_reason: null, dismissed_at: null, dismissed_by: null, resolved_at: null, resolved_by: null, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z', version: 3 });
+    renderDetail();
+    await screen.findByText('Round-trip transfer');
+    await waitFor(() => expect(mocks.mockAlertGet).toHaveBeenCalled());
+    expect(screen.queryByTestId('customer-context-panel')).not.toBeInTheDocument();
+    expect(mocks.mockGetOverview).not.toHaveBeenCalled();
+  });
+
+  it('renders CustomerContextPanel when linked alert carries resolved_customer_id', async () => {
+    mocks.mockAlertGet.mockResolvedValue({
+      alert_id: 'al_12345678',
+      related_entity_type: 'account',
+      related_entity_id: 'ACC_00412',
+      resolved_customer_id: 'CUST_00141',
+      scope_id: 'hq_main',
+      status: 'assigned',
+      assigned_to: 'analyst_001',
+      severity: 'high',
+      alert_type: 'transaction_anomaly',
+      title: 'Suspicious transfer',
+      description: '',
+      source_rule_type: 'ml_anomaly',
+      source_rule_id: 'r1',
+      dismissed_reason: null, dismissed_at: null, dismissed_by: null, resolved_at: null, resolved_by: null,
+      created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z', version: 3,
+    });
+    renderDetail();
+    expect(await screen.findByTestId('customer-context-panel')).toBeInTheDocument();
+    expect(mocks.mockGetOverview).toHaveBeenCalledWith('CUST_00141');
+  });
+
+  it('shows no customer context when the case has no linked alert or investigation', async () => {
+    mocks.mockGet.mockResolvedValue(makeCase({ alert_id: null, investigation_id: null }));
+    renderDetail();
+    await screen.findByText('Round-trip transfer');
+    expect(screen.queryByTestId('customer-context-panel')).not.toBeInTheDocument();
+    expect(mocks.mockInvGet).not.toHaveBeenCalled();
+    expect(mocks.mockAlertGet).not.toHaveBeenCalled();
   });
 });

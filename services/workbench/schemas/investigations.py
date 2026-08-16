@@ -42,6 +42,18 @@ class CancelInvestigationRequest(BaseModel):
     expected_version: int = Field(ge=1)
 
 
+class ReviewNotHarmfulRequest(BaseModel):
+    rationale: str = Field(min_length=1)
+    expected_version: int = Field(ge=1)
+
+
+class EscalateInvestigationRequest(BaseModel):
+    title: str = Field(min_length=1)
+    priority: str = "medium"
+    rationale: str = Field(min_length=1)
+    expected_version: int = Field(ge=1)
+
+
 class InvestigationResponse(BaseModel):
     investigation_id: str
     title: str
@@ -75,3 +87,11 @@ class InvestigationMutationResponse(BaseModel):
     success: bool = True
     investigation: InvestigationResponse
     version: int
+
+
+class EscalateInvestigationResponse(BaseModel):
+    success: bool = True
+    investigation: InvestigationResponse
+    case_id: str
+    version: int
+

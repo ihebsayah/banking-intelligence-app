@@ -34,6 +34,32 @@ export const informationRequestsApi = {
     return res.data;
   },
 
+  createForInvestigation: async (
+    investigationId: string,
+    payload: { assigned_to: string; question: string; due_date?: string | null; expected_investigation_version?: number }
+  ): Promise<InformationRequestMutationResponse> => {
+    const res = await apiClient.post<InformationRequestMutationResponse>(
+      `/investigations/${investigationId}/information-requests`,
+      payload,
+      { headers: { 'X-Request-ID': uuid(), 'X-Idempotency-Key': uuid() } }
+    );
+    return res.data;
+  },
+
+  listForInvestigation: async (
+    investigationId: string,
+    params: ListAssignedParams = {}
+  ): Promise<InformationRequestListResponse> => {
+    const qs = new URLSearchParams();
+    if (params.status) qs.append('status', params.status);
+    qs.append('page', String(params.page ?? 1));
+    qs.append('per_page', String(params.perPage ?? 50));
+    const res = await apiClient.get<InformationRequestListResponse>(
+      `/investigations/${investigationId}/information-requests?${qs.toString()}`
+    );
+    return res.data;
+  },
+
   acknowledge: async (irId: string, payload: { expected_version: number }): Promise<InformationRequestMutationResponse> => {
     const res = await apiClient.patch<InformationRequestMutationResponse>(`/information-requests/${irId}/acknowledge`, payload,
       { headers: { 'X-Request-ID': uuid(), 'X-Idempotency-Key': uuid() } });
@@ -42,6 +68,18 @@ export const informationRequestsApi = {
 
   respond: async (irId: string, payload: { response_text: string; expected_version: number }): Promise<InformationRequestMutationResponse> => {
     const res = await apiClient.patch<InformationRequestMutationResponse>(`/information-requests/${irId}/respond`, payload,
+      { headers: { 'X-Request-ID': uuid(), 'X-Idempotency-Key': uuid() } });
+    return res.data;
+  },
+
+  accept: async (irId: string, payload: { acceptance_note?: string; expected_version: number }): Promise<InformationRequestMutationResponse> => {
+    const res = await apiClient.patch<InformationRequestMutationResponse>(`/information-requests/${irId}/accept`, payload,
+      { headers: { 'X-Request-ID': uuid(), 'X-Idempotency-Key': uuid() } });
+    return res.data;
+  },
+
+  return: async (irId: string, payload: { return_reason: string; expected_version: number }): Promise<InformationRequestMutationResponse> => {
+    const res = await apiClient.patch<InformationRequestMutationResponse>(`/information-requests/${irId}/return`, payload,
       { headers: { 'X-Request-ID': uuid(), 'X-Idempotency-Key': uuid() } });
     return res.data;
   },

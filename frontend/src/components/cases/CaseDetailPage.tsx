@@ -3,11 +3,14 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, RefreshCw, AlertTriangle, Eye, Link2, FileText,
-  PlayCircle, MessageSquarePlus, Flag, CheckCircle2, Gavel, UserRoundPlus, CircleSlash2,
+  PlayCircle, MessageSquarePlus, Flag, CheckCircle2, Gavel, UserRoundPlus, CircleSlash2, RotateCcw, Lock,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { BankingHeader } from '../Layout/BankingHeader';
 import { casesApi } from '../../api/casesApi';
+import { alertsApi } from '../../api/alertsApi';
+import { investigationsApi } from '../../api/investigationsApi';
+import { CustomerContextPanel } from '../customers/CustomerContextPanel';
 import { CasePriorityBadge, CaseRiskBadge, CaseStatusBadge } from './CaseBadges';
 import { parseCaseError } from './caseErrors';
 import { CaseInvestigationTab } from './CaseInvestigationTab';
@@ -18,13 +21,16 @@ import { TimelineTab } from '../investigations/TimelineTab';
 import { TransitionCaseDialog } from './dialogs/TransitionCaseDialog';
 import { AdminAssignCaseDialog } from './dialogs/AdminAssignCaseDialog';
 import { IRCreateModal } from './dialogs/IRCreateModal';
+import { CaseCloseDialog } from './dialogs/CaseCloseDialog';
+import { CaseReopenDialog } from './dialogs/CaseReopenDialog';
+import { CaseApprovalStatusBanner } from './CaseApprovalStatusBanner';
 import { useAuth } from '../../auth/AuthProvider';
 import { PERMISSIONS } from '../../lib/permissions';
 import { formatDateTime } from '../../utils/formatters';
 import type { Case } from '../../types/cases';
 
 type Tab = 'overview' | 'investigation' | 'ir' | 'decisions' | 'comments' | 'timeline';
-type Dialog = 'begin_review' | 'decision_pending' | 'resolve' | 'assign' | 'ir_create' | null;
+type Dialog = 'begin_review' | 'decision_pending' | 'resolve' | 'close' | 'reopen' | 'assign' | 'ir_create' | null;
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'overview', label: 'Overview' },
@@ -40,11 +46,11 @@ function workflowGuidance(status: Case['status']): string {
     case 'open': return 'Awaiting assignment by an administrator.';
     case 'assigned': return 'Begin review to start working this case.';
     case 'under_review': return 'Review the linked investigation, request information if needed, then mark the case ready for a decision.';
-    case 'awaiting_information': return 'Awaiting analyst information — resumes from the Information Request workflow (2B.14).';
+    case 'awaiting_information': return 'Awaiting analyst information — resumes from the Information Request workflow.';
     case 'decision_pending': return 'Record a decision on the Decisions tab.';
     case 'awaiting_compliance_action': return 'The required compliance action has been completed — resolve the case.';
-    case 'resolved': return 'Case resolved — read-only. (Closure requires a close endpoint, deferred to Phase 2E.)';
-    case 'closed': return 'Case closed — read-only.';
+    case 'resolved': return 'Case resolved — ready for final closure (High/Critical risk cases require 4-eyes approval).';
+    case 'closed': return 'Case closed — read-only (Reopening requires approval).';
     case 'cancelled': return 'Case cancelled — read-only.';
   }
 }
@@ -61,6 +67,7 @@ export function CaseDetailPage() {
   const [tab, setTab] = useState<Tab>('overview');
   const [dialog, setDialog] = useState<Dialog>(null);
   const [irRefreshKey, setIrRefreshKey] = useState(0);
+  const [customerId, setCustomerId] = useState<string | null>(null);
 
   const fetchCase = useCallback(async () => {
     if (!caseId) return;
@@ -78,6 +85,35 @@ export function CaseDetailPage() {
   }, [caseId]);
 
   useEffect(() => { fetchCase(); }, [fetchCase]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const resolveCustomer = async () => {
+      setCustomerId(null);
+      const alertId = caseData?.alert_id ?? null;
+      const invId = caseData?.investigation_id ?? null;
+      if (!alertId && !invId) return;
+      let resolvedAlertId = alertId;
+      if (!resolvedAlertId && invId) {
+        try {
+          const inv = await investigationsApi.get(invId);
+          if (cancelled) return;
+          resolvedAlertId = inv.alert_id ?? null;
+        } catch { return; }
+      }
+      if (!resolvedAlertId) return;
+      try {
+        const alert = await alertsApi.get(resolvedAlertId);
+        if (cancelled) return;
+        const resId = 'resolved_customer_id' in alert && alert.resolved_customer_id ? alert.resolved_customer_id : null;
+        const relType = 'related_entity_type' in alert ? alert.related_entity_type : null;
+        const relId = 'related_entity_id' in alert ? alert.related_entity_id : null;
+        setCustomerId(resId || (relType === 'customer' && relId ? relId : null));
+      } catch { if (!cancelled) setCustomerId(null); }
+    };
+    resolveCustomer();
+    return () => { cancelled = true; };
+  }, [caseData?.alert_id, caseData?.investigation_id]);
 
   const onMutationConflict = useCallback(() => {
     setConflict(true);
@@ -124,6 +160,8 @@ export function CaseDetailPage() {
   const isAssignee = Boolean(applicationUser?.user_id && caseData.assigned_to === applicationUser.user_id);
   const canTransition = hasPermission(PERMISSIONS.CASE_TRANSITION) && isAssignee;
   const canDecide = hasPermission(PERMISSIONS.CASE_DECISION) && isAssignee;
+  const canClose = hasPermission(PERMISSIONS.CASE_CLOSE) && (isAssignee || hasRole('compliance'));
+  const canReopen = hasPermission(PERMISSIONS.CASE_REOPEN);
   const canAssign = hasPermission(PERMISSIONS.CASE_ASSIGN) && hasRole('admin');
 
   const showBeginReview = canTransition && s === 'assigned';
@@ -131,7 +169,11 @@ export function CaseDetailPage() {
   const showDecisionPending = canTransition && s === 'under_review';
   const showResolve = canTransition && s === 'awaiting_compliance_action';
   const showRecordDecision = canDecide && s === 'decision_pending';
+  const showClose = canClose && s === 'resolved';
+  const showReopen = canReopen && s === 'closed';
   const showAssign = canAssign && !caseData.assigned_to;
+
+  const isClosed = s === 'closed';
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: 'var(--bg-primary)' }}>
@@ -187,6 +229,35 @@ export function CaseDetailPage() {
           </span>
         </div>
 
+        {/* Closed Case Read-Only Banner */}
+        {isClosed && (
+          <div className="rounded-2xl border p-5 space-y-2" style={{ background: 'rgba(75,85,99,0.08)', borderColor: 'rgba(75,85,99,0.25)' }}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Lock size={16} style={{ color: 'var(--text-muted)' }} />
+                <span className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-primary)' }}>
+                  Case Closed
+                </span>
+              </div>
+              {caseData.closed_at && (
+                <span className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                  Closed {formatDateTime(caseData.closed_at)} {caseData.closed_by ? `by ${caseData.closed_by}` : ''}
+                </span>
+              )}
+            </div>
+            {caseData.resolution && (
+              <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                <span className="font-semibold" style={{ color: 'var(--text-muted)' }}>Resolution:</span> {caseData.resolution}
+              </p>
+            )}
+            {caseData.reopen_reason && (
+              <p className="text-xs leading-relaxed font-mono" style={{ color: 'var(--accent-blue)' }}>
+                <span className="font-semibold" style={{ color: 'var(--text-muted)' }}>Reopen Reason:</span> {caseData.reopen_reason}
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Tabs */}
         <div role="tablist" aria-label="Case sections"
           className="flex items-center gap-1 border-b" style={{ borderColor: 'var(--bg-border)' }}>
@@ -211,7 +282,7 @@ export function CaseDetailPage() {
           {tab === 'overview' && (
             <div className="space-y-5">
               {/* Action bar */}
-              {(showBeginReview || showRequestInfo || showDecisionPending || showResolve || showRecordDecision || showAssign) && (
+              {(showBeginReview || showRequestInfo || showDecisionPending || showResolve || showRecordDecision || showClose || showReopen || showAssign) && (
                 <div className="flex flex-wrap items-center gap-2">
                   {showBeginReview && (
                     <button
@@ -258,6 +329,24 @@ export function CaseDetailPage() {
                       <Gavel size={14} /> Record Decision
                     </button>
                   )}
+                  {showClose && (
+                    <button
+                      onClick={() => setDialog('close')}
+                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold shadow-md transition-all hover:brightness-90"
+                      style={{ background: 'var(--accent-green)', color: 'var(--text-primary)' }}
+                    >
+                      <CheckCircle2 size={14} /> Close Case
+                    </button>
+                  )}
+                  {showReopen && (
+                    <button
+                      onClick={() => setDialog('reopen')}
+                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold shadow-md transition-all hover:brightness-90"
+                      style={{ background: 'var(--accent-blue)', color: 'var(--text-primary)' }}
+                    >
+                      <RotateCcw size={14} /> Request Reopen
+                    </button>
+                  )}
                   {showAssign && (
                     <button
                       onClick={() => setDialog('assign')}
@@ -279,13 +368,16 @@ export function CaseDetailPage() {
                 </p>
               </div>
 
+              {/* Inline approval status (4-eyes gated actions) */}
+              <CaseApprovalStatusBanner caseId={caseData.case_id} />
+
               {/* Awaiting-information note */}
               {s === 'awaiting_information' && (
                 <div className="flex items-center gap-2.5 px-4 py-3 rounded-xl border"
                   style={{ background: 'rgba(217,119,6,0.08)', borderColor: 'rgba(217,119,6,0.25)' }}>
                   <CircleSlash2 size={16} style={{ color: 'var(--accent-amber)' }} />
                   <p className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>
-                    Case is awaiting analyst information — resumes from the Information Request workflow (2B.14).
+                    Case is awaiting analyst information — resumes from the Information Request workflow.
                   </p>
                 </div>
               )}
@@ -308,7 +400,7 @@ export function CaseDetailPage() {
                 <div className="rounded-2xl border p-5"
                   style={{ background: 'var(--bg-card)', borderColor: 'var(--bg-border)' }}>
                   <h3 className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>
-                    Resolution
+                    Resolution Summary
                   </h3>
                   <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--text-secondary)' }}>
                     {caseData.resolution}
@@ -333,6 +425,9 @@ export function CaseDetailPage() {
                 </button>
               )}
 
+              {/* Customer context (authorized, read-only) */}
+              {customerId && <CustomerContextPanel customerId={customerId} />}
+
               {/* Meta grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {[
@@ -345,6 +440,7 @@ export function CaseDetailPage() {
                   { label: 'Regulatory Frameworks', value: caseData.regulatory_frameworks?.join(', ') ?? '—' },
                   { label: 'Target Date', value: caseData.target_date ?? '—' },
                   { label: 'Resolved', value: caseData.resolved_at ? formatDateTime(caseData.resolved_at) : '—' },
+                  { label: 'Closed', value: caseData.closed_at ? formatDateTime(caseData.closed_at) : '—' },
                   { label: 'Investigation', value: caseData.investigation_id ? `#${caseData.investigation_id.slice(0, 8)}` : '—' },
                   { label: 'Created', value: formatDateTime(caseData.created_at) },
                   { label: 'Updated', value: formatDateTime(caseData.updated_at) },
@@ -417,6 +513,20 @@ export function CaseDetailPage() {
             target="resolved"
             withResolution
             resolutionRequired
+            onClose={() => setDialog(null)}
+            onSuccess={setCaseData}
+            onConflict={onMutationConflict}
+          />
+          <CaseCloseDialog
+            open={dialog === 'close'}
+            caseData={caseData}
+            onClose={() => setDialog(null)}
+            onSuccess={setCaseData}
+            onConflict={onMutationConflict}
+          />
+          <CaseReopenDialog
+            open={dialog === 'reopen'}
+            caseData={caseData}
             onClose={() => setDialog(null)}
             onSuccess={setCaseData}
             onConflict={onMutationConflict}

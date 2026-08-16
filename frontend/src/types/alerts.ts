@@ -21,6 +21,7 @@ export interface Alert {
   source_rule_id?: string | null;
   related_entity_type?: string | null;
   related_entity_id?: string | null;
+  resolved_customer_id?: string | null;
   scope_id: string;
   status: AlertStatus;
   assigned_to?: string | null;

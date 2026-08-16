@@ -151,6 +151,26 @@ class AlertService:
     def __init__(self, db: DatabaseConnector) -> None:
         self._db = db
 
+    async def _resolve_customer_id(self, entity_type: Optional[str], entity_id: Optional[str]) -> Optional[str]:
+        if not entity_type or not entity_id:
+            return None
+        et = entity_type.strip().lower()
+        ei = entity_id.strip()
+        if et == "customer":
+            return ei
+        elif et == "account":
+            try:
+                row = await self._db.fetch_one("SELECT customer_id FROM accounts WHERE account_id = $1", [ei])
+                return str(row["customer_id"]) if row and row.get("customer_id") else None
+            except Exception:
+                return None
+        return None
+
+    async def _to_alert_response(self, alert: Alert) -> AlertResponse:
+        d = alert.model_dump()
+        d["resolved_customer_id"] = await self._resolve_customer_id(alert.related_entity_type, alert.related_entity_id)
+        return AlertResponse(**d)
+
     # ── GET /alerts/assigned ──────────────────────────────────────────────────
 
     async def list_assigned(
@@ -167,7 +187,8 @@ class AlertService:
         )
         if severity:
             alerts = [a for a in alerts if a.severity == severity]
-        return [AlertResponse(**a.model_dump()) for a in alerts], len(alerts)
+        resps = [await self._to_alert_response(a) for a in alerts]
+        return resps, len(alerts)
 
     # ── GET /alerts/{alert_id} ────────────────────────────────────────────────
 
@@ -181,7 +202,7 @@ class AlertService:
         try:
             await authorise(user, "alert:read_assigned", _resource_from_alert(alert),
                             self._db, RequestContext())
-            return AlertResponse(**alert.model_dump())
+            return await self._to_alert_response(alert)
         except (AuthOwnershipDenied, AuthScopeDenied, AuthPermissionDenied):
             pass
 
@@ -221,7 +242,7 @@ class AlertService:
                             self._db, RequestContext(request_id=request_id))
 
             if alert.assigned_to == req.assigned_to and alert.status in ("assigned", "acknowledged", "under_investigation"):
-                return MutationResponse(alert=AlertResponse(**alert.model_dump()), version=alert.version)
+                return MutationResponse(alert=await self._to_alert_response(alert), version=alert.version)
 
             await _validate_assignee(self._db, req.assigned_to, alert.scope_id, uow.conn)
 
@@ -274,7 +295,7 @@ class AlertService:
                             user.role, {"alert_id": alert_id, "assigned_to": req.assigned_to}),
                 uow.conn)
 
-            resp = MutationResponse(alert=AlertResponse(**alert.model_dump()), version=alert.version)
+            resp = MutationResponse(alert=await self._to_alert_response(alert), version=alert.version)
             await _store_idempotency(
                 IdempotencyRepo(self._db), idempotency_key, "PATCH", path,
                 req.model_dump(), 200, resp.model_dump_json(), uow.conn)
@@ -300,7 +321,7 @@ class AlertService:
                 raise ResourceNotFound("Alert", alert_id)
 
             if alert.status == "acknowledged":
-                return MutationResponse(alert=AlertResponse(**alert.model_dump()), version=alert.version)
+                return MutationResponse(alert=await self._to_alert_response(alert), version=alert.version)
 
             await authorise(user, "alert:acknowledge", _resource_from_alert(alert),
                             self._db, RequestContext(request_id=request_id))
@@ -327,7 +348,7 @@ class AlertService:
                             user.role, {"alert_id": alert_id}),
                 uow.conn)
 
-            resp = MutationResponse(alert=AlertResponse(**alert.model_dump()), version=alert.version)
+            resp = MutationResponse(alert=await self._to_alert_response(alert), version=alert.version)
             await _store_idempotency(
                 IdempotencyRepo(self._db), idempotency_key, "PATCH", path, body,
                 200, resp.model_dump_json(), uow.conn)
@@ -404,7 +425,7 @@ class AlertService:
                             user.role, {"alert_id": alert_id, "reason": req.dismissed_reason}),
                 uow.conn)
 
-            resp = MutationResponse(alert=AlertResponse(**alert.model_dump()), version=alert.version)
+            resp = MutationResponse(alert=await self._to_alert_response(alert), version=alert.version)
             await _store_idempotency(
                 IdempotencyRepo(self._db), idempotency_key, "PATCH", path,
                 req.model_dump(), 200, resp.model_dump_json(), uow.conn)
@@ -438,7 +459,7 @@ class AlertService:
             inv = await InvestigationRepo(self._db).fetch_by_alert(alert_id, uow.conn)
             if inv:
                 return InvestigateResponse(
-                    alert=AlertResponse(**alert.model_dump()),
+                    alert=await self._to_alert_response(alert),
                     investigation_id=inv.investigation_id,
                     version=alert.version,
                 )
@@ -477,7 +498,7 @@ class AlertService:
                 uow.conn)
 
             resp = InvestigateResponse(
-                alert=AlertResponse(**alert.model_dump()),
+                alert=await self._to_alert_response(alert),
                 investigation_id=investigation.investigation_id,
                 version=alert.version,
             )
@@ -518,7 +539,7 @@ class AlertService:
             existing_case = await CaseRepo(self._db).fetch_active_for_alert(alert_id, uow.conn)
             if existing_case:
                 return EscalateResponse(
-                    alert=AlertResponse(**alert.model_dump()),
+                    alert=await self._to_alert_response(alert),
                     case_id=existing_case.case_id,
                     version=alert.version,
                 )
@@ -554,7 +575,7 @@ class AlertService:
                 uow.conn)
 
             resp = EscalateResponse(
-                alert=AlertResponse(**alert.model_dump()),
+                alert=await self._to_alert_response(alert),
                 case_id=case.case_id, version=alert.version,
             )
             await _store_idempotency(

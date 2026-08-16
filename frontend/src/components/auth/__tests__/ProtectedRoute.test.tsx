@@ -53,3 +53,108 @@ describe('ProtectedRoute · Customer 360 gate', () => {
     expect(screen.getByText('customer page')).toBeInTheDocument();
   });
 });
+
+describe('ProtectedRoute · Phase 3A.9A Authorization Alignment', () => {
+  beforeEach(() => useAuthStore.getState().logout());
+
+  it('admits Compliance to Investigations via investigation:read (array permission)', () => {
+    useAuthStore.setState({
+      user: makeUser('compliance', ['investigation:read', 'investigation:review']),
+      token: 't', isAuthenticated: true, isLoading: false, error: null,
+    });
+    render(
+      <MemoryRouter initialEntries={['/workbench/investigations']}>
+        <Routes>
+          <Route path="/workbench/investigations" element={
+            <ProtectedRoute requiredPermission={['investigation:read_own', 'investigation:read']}>
+              <div>investigations page</div>
+            </ProtectedRoute>
+          } />
+          <Route path="/unauthorized" element={<div>unauthorized-redirect</div>} />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(screen.getByText('investigations page')).toBeInTheDocument();
+  });
+
+  it('admits Analyst to Investigations via investigation:read_own (array permission)', () => {
+    useAuthStore.setState({
+      user: makeUser('analyst', ['investigation:read_own']),
+      token: 't', isAuthenticated: true, isLoading: false, error: null,
+    });
+    render(
+      <MemoryRouter initialEntries={['/workbench/investigations']}>
+        <Routes>
+          <Route path="/workbench/investigations" element={
+            <ProtectedRoute requiredPermission={['investigation:read_own', 'investigation:read']}>
+              <div>investigations page</div>
+            </ProtectedRoute>
+          } />
+          <Route path="/unauthorized" element={<div>unauthorized-redirect</div>} />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(screen.getByText('investigations page')).toBeInTheDocument();
+  });
+
+  it('admits Compliance to Information Requests via info_request:read', () => {
+    useAuthStore.setState({
+      user: makeUser('compliance', ['info_request:read', 'info_request:create']),
+      token: 't', isAuthenticated: true, isLoading: false, error: null,
+    });
+    render(
+      <MemoryRouter initialEntries={['/workbench/information-requests']}>
+        <Routes>
+          <Route path="/workbench/information-requests" element={
+            <ProtectedRoute requiredPermission={['info_request:read_assigned', 'info_request:read']}>
+              <div>ir inbox page</div>
+            </ProtectedRoute>
+          } />
+          <Route path="/unauthorized" element={<div>unauthorized-redirect</div>} />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(screen.getByText('ir inbox page')).toBeInTheDocument();
+  });
+
+  it('admits Analyst to Information Requests via info_request:read_assigned', () => {
+    useAuthStore.setState({
+      user: makeUser('analyst', ['info_request:read_assigned', 'info_request:respond']),
+      token: 't', isAuthenticated: true, isLoading: false, error: null,
+    });
+    render(
+      <MemoryRouter initialEntries={['/workbench/information-requests']}>
+        <Routes>
+          <Route path="/workbench/information-requests" element={
+            <ProtectedRoute requiredPermission={['info_request:read_assigned', 'info_request:read']}>
+              <div>ir inbox page</div>
+            </ProtectedRoute>
+          } />
+          <Route path="/unauthorized" element={<div>unauthorized-redirect</div>} />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(screen.getByText('ir inbox page')).toBeInTheDocument();
+  });
+
+  it('denies user when holding none of the required permissions in array', () => {
+    useAuthStore.setState({
+      user: makeUser('analyst', ['some:other_permission']),
+      token: 't', isAuthenticated: true, isLoading: false, error: null,
+    });
+    render(
+      <MemoryRouter initialEntries={['/workbench/investigations']}>
+        <Routes>
+          <Route path="/workbench/investigations" element={
+            <ProtectedRoute requiredPermission={['investigation:read_own', 'investigation:read']}>
+              <div>investigations page</div>
+            </ProtectedRoute>
+          } />
+          <Route path="/unauthorized" element={<div>unauthorized-redirect</div>} />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(screen.getByText('unauthorized-redirect')).toBeInTheDocument();
+    expect(screen.queryByText('investigations page')).not.toBeInTheDocument();
+  });
+});

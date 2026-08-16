@@ -1,11 +1,10 @@
 // src/components/CommandPalette.tsx
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Search, LayoutDashboard, GitBranch, Bot, BarChart3, ShieldAlert,
-  Scale, FileText, Settings2, Shield, User, Settings, Command,
-} from 'lucide-react';
+import { Command } from 'lucide-react';
 import { useUIStore } from '../stores/uiStore';
+import { usePermissions } from '../lib/permissions';
+import { ALL_NAV_ITEMS, BOTTOM_NAV_ITEMS, type NavItem } from '../lib/navigation';
 
 interface CommandItem {
   id: string;
@@ -17,24 +16,32 @@ interface CommandItem {
 
 export function CommandPalette() {
   const { commandPaletteOpen, setCommandPaletteOpen } = useUIStore();
+  const { canAccess } = usePermissions();
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
 
-  const commands: CommandItem[] = [
-    { id: 'dashboard',  label: 'Dashboard',       icon: <LayoutDashboard size={15} />, action: () => navigate('/dashboard'),       category: 'Navigate' },
-    { id: 'branches',   label: 'Branches',        icon: <GitBranch size={15} />,       action: () => navigate('/branches'),        category: 'Navigate' },
-    { id: 'assistant',  label: 'AI Assistant',     icon: <Bot size={15} />,             action: () => navigate('/assistant'),        category: 'Navigate' },
-    { id: 'kpi',        label: 'KPI Analytics',    icon: <BarChart3 size={15} />,       action: () => navigate('/kpi'),             category: 'Navigate' },
-    { id: 'kpi-gov',    label: 'KPI Governance',   icon: <Shield size={15} />,          action: () => navigate('/kpi-governance'),  category: 'Navigate' },
-    { id: 'risk',       label: 'Risk Monitor',     icon: <ShieldAlert size={15} />,     action: () => navigate('/risk'),            category: 'Navigate' },
-    { id: 'compliance', label: 'Compliance',       icon: <Scale size={15} />,           action: () => navigate('/compliance'),      category: 'Navigate' },
-    { id: 'reports',    label: 'Reports',          icon: <FileText size={15} />,        action: () => navigate('/reports'),         category: 'Navigate' },
-    { id: 'admin',      label: 'Admin',            icon: <Settings2 size={15} />,       action: () => navigate('/admin'),           category: 'Navigate' },
-    { id: 'profile',    label: 'Profile',          icon: <User size={15} />,            action: () => navigate('/profile'),         category: 'Navigate' },
-    { id: 'settings',   label: 'Settings',         icon: <Settings size={15} />,        action: () => navigate('/settings'),        category: 'Navigate' },
-  ];
+  const commands: CommandItem[] = useMemo(() => {
+    const rawItems: NavItem[] = [...ALL_NAV_ITEMS, ...BOTTOM_NAV_ITEMS];
+    return rawItems
+      .filter((item) =>
+        canAccess({
+          requiredPermissions: item.requiredPermissions,
+          requiredRoles: item.requiredRoles,
+        })
+      )
+      .map((item) => {
+        const IconComponent = item.icon;
+        return {
+          id: item.id,
+          label: item.label,
+          icon: <IconComponent size={15} />,
+          action: () => navigate(item.to),
+          category: item.category || 'Navigate',
+        };
+      });
+  }, [canAccess, navigate]);
 
   const filtered = query
     ? commands.filter((c) => c.label.toLowerCase().includes(query.toLowerCase()))
@@ -140,3 +147,4 @@ export function CommandPalette() {
     </div>
   );
 }
+

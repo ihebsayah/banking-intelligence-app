@@ -23,7 +23,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 URL = os.environ.get("INTEGRATION_DATABASE_URL", "")
-REQ = "analyst_001"
+REQ = "analyst_expiry_001"
 DUMMY_BCRYPT_HASH = "$2b$12$kc0bFMxOvWwy6Y6vd23VOeoWHSgBh3MPKUqlBiD2wmEG.nbuChW4y"
 
 from shared.database import DatabaseConnector  # noqa: E402
@@ -34,15 +34,15 @@ INSERT_APPROVALS = """
         (action_type, entity_type, entity_id, requested_by, rationale,
          required_approvals, status, expires_at, version)
     VALUES
-        ('alert_dismissal_critical_high', 'alert', '11111111-1111-1111-1111-111111111111', $1,
+        ('alert_dismissal_critical_high', 'alert', 'a1111111-1111-1111-1111-111111111111', $1,
          'overdue pending', 1, 'pending', NOW() - interval '5 minutes', 1),
-        ('alert_dismissal_critical_high', 'alert', '22222222-2222-2222-2222-222222222222', $1,
+        ('alert_dismissal_critical_high', 'alert', 'a2222222-2222-2222-2222-222222222222', $1,
          'future pending', 1, 'pending', NOW() + interval '5 minutes', 1),
-        ('alert_dismissal_critical_high', 'alert', '33333333-3333-3333-3333-333333333333', $1,
+        ('alert_dismissal_critical_high', 'alert', 'a3333333-3333-3333-3333-333333333333', $1,
          'overdue approved', 1, 'approved', NOW() - interval '5 minutes', 1),
-        ('alert_dismissal_critical_high', 'alert', '44444444-4444-4444-4444-444444444444', $1,
+        ('alert_dismissal_critical_high', 'alert', 'a4444444-4444-4444-4444-444444444444', $1,
          'overdue rejected', 1, 'rejected', NOW() - interval '5 minutes', 1),
-        ('alert_dismissal_critical_high', 'alert', '55555555-5555-5555-5555-555555555555', $1,
+        ('alert_dismissal_critical_high', 'alert', 'a5555555-5555-5555-5555-555555555555', $1,
          'already expired', 1, 'expired', NOW() - interval '5 minutes', 1)
     RETURNING approval_request_id, status
 """
@@ -58,9 +58,11 @@ async def db():
 
 CLEANUP = (
     ("DELETE FROM audit_outbox WHERE event_type = 'approval.expired'", None),
-    ("DELETE FROM activity_timeline WHERE event_type = 'approval_expired'", None),
-    ("DELETE FROM notifications WHERE notification_type = 'approval_expired'", None),
+    ("DELETE FROM activity_timeline WHERE event_type = 'approval_expired' OR actor_id = $1", REQ),
+    ("DELETE FROM notifications WHERE notification_type = 'approval_expired' OR user_id = $1", REQ),
+    ("DELETE FROM approval_decisions WHERE approval_request_id IN (SELECT approval_request_id FROM approval_requests WHERE requested_by = $1)", REQ),
     ("DELETE FROM approval_requests WHERE requested_by = $1", REQ),
+    ("DELETE FROM user_scopes WHERE user_id = $1", REQ),
     ("DELETE FROM users WHERE user_id = $1", REQ),
 )
 
@@ -74,7 +76,7 @@ async def seeded(db):
             await _run(pool, stmt, params)
         await pool.execute(
             "INSERT INTO users (user_id, email, name, role, bank_id, password_hash, status) "
-            "VALUES ($1, 'analyst_001@bankintel.hq', 'Analyst One', 'analyst', 'hq_main', $2, 'active') "
+            "VALUES ($1, $1::text || '@bankintel.hq', 'Analyst One', 'analyst', 'hq_main', $2, 'active') "
             "ON CONFLICT (user_id) DO NOTHING", REQ, DUMMY_BCRYPT_HASH,
         )
         rows = await pool.fetch(INSERT_APPROVALS, REQ)

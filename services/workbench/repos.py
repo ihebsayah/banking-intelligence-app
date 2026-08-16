@@ -16,7 +16,8 @@ from workbench.exceptions import VersionConflict
 from .models import (
     ActivityTimelineEntry, Alert, ApprovalDecision, ApprovalRequest,
     AssignmentHistoryEntry, AuditOutboxEvent, Comment, ComplianceCase,
-    Decision, IdempotencyRecord, InformationRequest, Investigation, Notification,
+    Decision, IdempotencyRecord, InformationRequest, Investigation,
+    InvestigationAttachment, Notification,
 )
 
 T = TypeVar("T")
@@ -208,6 +209,41 @@ class InvestigationRepo:
         return inv
 
 
+# ── Investigation Attachment Repository ───────────────────────────────────────
+
+class AttachmentRepo:
+    def __init__(self, db: DatabaseConnector) -> None:
+        self._db = db
+
+    async def fetch_by_id(self, attachment_id: str, conn: asyncpg.Connection | None = None) -> InvestigationAttachment | None:
+        r = await _fetch_one(self._db, "SELECT * FROM investigation_attachments WHERE attachment_id = $1", [attachment_id], conn)
+        return InvestigationAttachment(**r) if r else None
+
+    async def fetch_by_id_and_investigation(self, attachment_id: str, investigation_id: str, conn: asyncpg.Connection | None = None) -> InvestigationAttachment | None:
+        r = await _fetch_one(self._db, "SELECT * FROM investigation_attachments WHERE attachment_id = $1 AND investigation_id = $2", [attachment_id, investigation_id], conn)
+        return InvestigationAttachment(**r) if r else None
+
+    async def list_by_investigation(self, investigation_id: str, conn: asyncpg.Connection | None = None) -> list[InvestigationAttachment]:
+        rows = await _fetch_all(self._db, "SELECT * FROM investigation_attachments WHERE investigation_id = $1 ORDER BY uploaded_at ASC", [investigation_id], conn)
+        return [InvestigationAttachment(**r) for r in rows]
+
+    async def create(self, att: InvestigationAttachment, conn: asyncpg.Connection | None = None) -> InvestigationAttachment:
+        await _execute(self._db, """
+            INSERT INTO investigation_attachments (attachment_id, investigation_id, original_filename,
+                stored_filename, content_type, size_bytes, sha256_hash, description, uploaded_by, uploaded_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        """, [
+            att.attachment_id, att.investigation_id, att.original_filename,
+            att.stored_filename, att.content_type, att.size_bytes,
+            att.sha256_hash, att.description, att.uploaded_by, att.uploaded_at,
+        ], conn)
+        return att
+
+    async def delete(self, attachment_id: str, conn: asyncpg.Connection | None = None) -> bool:
+        r = await _execute(self._db, "DELETE FROM investigation_attachments WHERE attachment_id = $1", [attachment_id], conn)
+        return r != "DELETE 0"
+
+
 # ── Compliance Case Repository ─────────────────────────────────────────────────
 
 class CaseRepo:
@@ -222,6 +258,12 @@ class CaseRepo:
         r = await _fetch_one(self._db,
             "SELECT * FROM compliance_cases WHERE alert_id = $1 AND status NOT IN ('cancelled') LIMIT 1",
             [alert_id], conn)
+        return ComplianceCase(**r) if r else None
+
+    async def fetch_active_for_investigation(self, investigation_id: str, conn: asyncpg.Connection | None = None) -> ComplianceCase | None:
+        r = await _fetch_one(self._db,
+            "SELECT * FROM compliance_cases WHERE investigation_id = $1 AND status NOT IN ('cancelled') LIMIT 1",
+            [investigation_id], conn)
         return ComplianceCase(**r) if r else None
 
     async def list(self, scope_id: str | None = None, status: str | None = None,
@@ -240,6 +282,37 @@ class CaseRepo:
         params.extend([limit, offset])
         rows = await _fetch_all(self._db, " ".join(parts), params, conn)
         return [ComplianceCase(**r) for r in rows]
+
+    async def list_unassigned(self, scope_id: str | None = None, status: str | None = None,
+                              priority: str | None = None, limit: int = 50, offset: int = 0,
+                              conn: asyncpg.Connection | None = None) -> list[ComplianceCase]:
+        parts = ["SELECT * FROM compliance_cases WHERE assigned_to IS NULL"]
+        params: list = []
+        i = 1
+        if scope_id:
+            parts.append(f"AND scope_id = ${i}"); params.append(scope_id); i += 1
+        if status:
+            parts.append(f"AND status = ${i}"); params.append(status); i += 1
+        if priority:
+            parts.append(f"AND priority = ${i}"); params.append(priority); i += 1
+        parts.append(f"ORDER BY created_at DESC LIMIT ${i} OFFSET ${i+1}")
+        params.extend([limit, offset])
+        rows = await _fetch_all(self._db, " ".join(parts), params, conn)
+        return [ComplianceCase(**r) for r in rows]
+
+    async def count_unassigned(self, scope_id: str | None = None, status: str | None = None,
+                               priority: str | None = None, conn: asyncpg.Connection | None = None) -> int:
+        parts = ["SELECT count(*) FROM compliance_cases WHERE assigned_to IS NULL"]
+        params: list = []
+        i = 1
+        if scope_id:
+            parts.append(f"AND scope_id = ${i}"); params.append(scope_id); i += 1
+        if status:
+            parts.append(f"AND status = ${i}"); params.append(status); i += 1
+        if priority:
+            parts.append(f"AND priority = ${i}"); params.append(priority); i += 1
+        row = await _fetch_one(self._db, " ".join(parts), params, conn)
+        return int(row["count"]) if row and "count" in row else 0
 
     async def create(self, case: ComplianceCase, conn: asyncpg.Connection | None = None) -> ComplianceCase:
         await _execute(self._db, """
@@ -355,14 +428,28 @@ class InfoRequestRepo:
         rows = await _fetch_all(self._db, " ".join(parts), params, conn)
         return [InformationRequest(**r) for r in rows]
 
+    async def list_by_investigation(self, investigation_id: str, status: str | None = None,
+                                    limit: int = 100, offset: int = 0,
+                                    conn: asyncpg.Connection | None = None) -> list[InformationRequest]:
+        parts = ["SELECT * FROM information_requests WHERE investigation_id = $1"]
+        params: list = [investigation_id]
+        i = 2
+        if status:
+            parts.append(f"AND status = ${i}"); params.append(status); i += 1
+        parts.append(f"ORDER BY created_at DESC LIMIT ${i} OFFSET ${i+1}")
+        params.extend([limit, offset])
+        rows = await _fetch_all(self._db, " ".join(parts), params, conn)
+        return [InformationRequest(**r) for r in rows]
+
     async def list_assigned(self, assigned_to: str, scopes: list[str],
                             status: str | None = None, limit: int = 100,
                             offset: int = 0,
                             conn: asyncpg.Connection | None = None) -> list[InformationRequest]:
-        """IRs assigned to a user, restricted to the owning case's scope."""
+        """IRs assigned to a user, restricted to the owning case's or investigation's scope."""
         parts = ["""SELECT ir.* FROM information_requests ir
-                    JOIN compliance_cases c ON c.case_id = ir.case_id
-                    WHERE ir.assigned_to = $1 AND c.scope_id = ANY($2::text[])"""]
+                    LEFT JOIN compliance_cases c ON c.case_id = ir.case_id
+                    LEFT JOIN investigations inv ON inv.investigation_id = ir.investigation_id
+                    WHERE ir.assigned_to = $1 AND COALESCE(c.scope_id, inv.scope_id) = ANY($2::text[])"""]
         params: list = [assigned_to, scopes]
         i = 3
         if status:
@@ -376,8 +463,9 @@ class InfoRequestRepo:
                              status: str | None = None,
                              conn: asyncpg.Connection | None = None) -> int:
         parts = ["""SELECT COUNT(*) FROM information_requests ir
-                    JOIN compliance_cases c ON c.case_id = ir.case_id
-                    WHERE ir.assigned_to = $1 AND c.scope_id = ANY($2::text[])"""]
+                    LEFT JOIN compliance_cases c ON c.case_id = ir.case_id
+                    LEFT JOIN investigations inv ON inv.investigation_id = ir.investigation_id
+                    WHERE ir.assigned_to = $1 AND COALESCE(c.scope_id, inv.scope_id) = ANY($2::text[])"""]
         params: list = [assigned_to, scopes]
         i = 3
         if status:
@@ -387,17 +475,35 @@ class InfoRequestRepo:
 
     async def fetch_active_by_case_assignee(self, case_id: str, assigned_to: str,
                                             conn: asyncpg.Connection | None = None) -> list[InformationRequest]:
-        """Active (open/acknowledged/responded/returned) IRs for a case+assignee.
-
-        Enforces the consistency constraint: at most one non-cancelled,
-        non-accepted IR per (case_id, assigned_to) per status cycle.
-        """
+        """Active (open/acknowledged/responded/returned) IRs for a case+assignee."""
         rows = await _fetch_all(self._db, """
             SELECT * FROM information_requests
             WHERE case_id = $1 AND assigned_to = $2
               AND status NOT IN ('cancelled', 'accepted')
             ORDER BY created_at DESC
         """, [case_id, assigned_to], conn)
+        return [InformationRequest(**r) for r in rows]
+
+    async def fetch_active_by_investigation_assignee(self, investigation_id: str, assigned_to: str,
+                                                     conn: asyncpg.Connection | None = None) -> list[InformationRequest]:
+        """Active (open/acknowledged/responded/returned) IRs for an investigation+assignee."""
+        rows = await _fetch_all(self._db, """
+            SELECT * FROM information_requests
+            WHERE investigation_id = $1 AND assigned_to = $2
+              AND status NOT IN ('cancelled', 'accepted')
+            ORDER BY created_at DESC
+        """, [investigation_id, assigned_to], conn)
+        return [InformationRequest(**r) for r in rows]
+
+    async def fetch_active_by_investigation(self, investigation_id: str,
+                                            conn: asyncpg.Connection | None = None) -> list[InformationRequest]:
+        """All active (open/acknowledged/responded/returned) IRs for an investigation."""
+        rows = await _fetch_all(self._db, """
+            SELECT * FROM information_requests
+            WHERE investigation_id = $1 AND case_id IS NULL
+              AND status NOT IN ('cancelled', 'accepted')
+            ORDER BY created_at DESC
+        """, [investigation_id], conn)
         return [InformationRequest(**r) for r in rows]
 
     async def create(self, ir: InformationRequest, conn: asyncpg.Connection | None = None) -> InformationRequest:

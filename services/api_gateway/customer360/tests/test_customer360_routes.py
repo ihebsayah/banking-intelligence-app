@@ -41,6 +41,14 @@ class _FakeService:
         self.calls.append(("transactions", user.user_id, customer_id))
         return self.tx_result
 
+    async def search_customers(self, user, query="", limit=20, offset=0, request_id=""):
+        self.calls.append(("search", user.user_id, query))
+        from customer360.models import CustomerSearchResponse, CustomerSearchResultItem
+        return CustomerSearchResponse(
+            items=[CustomerSearchResultItem(customer_id="CUST_00001", name="Fouad Ben Salah", segment="PART_PREM")],
+            total=1, limit=limit, offset=offset
+        ), {}
+
 
 def _min_overview():
     return (
@@ -140,3 +148,21 @@ def test_out_of_scope_compliance_overview_404(monkeypatch):
     resp = client.get("/api/v1/customers/CUST_00001/overview")
     assert resp.status_code == 404
     assert resp.json()["detail"]["error"] == "CUSTOMER_NOT_FOUND"
+
+
+def test_customer_search_permission_denied_403(monkeypatch):
+    fake = _FakeService()
+    client = _make_client(monkeypatch, _user("manager", [], user_id="manager_001"), fake)
+    resp = client.get("/api/v1/customers?q=Fouad")
+    assert resp.status_code == 403
+
+
+def test_customer_search_allowed_with_basic_perm(monkeypatch):
+    fake = _FakeService()
+    client = _make_client(monkeypatch, _user("analyst", ["customer:read_basic"], user_id="analyst_001"), fake)
+    resp = client.get("/api/v1/customers?q=Fouad")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["items"]) == 1
+    assert data["items"][0]["customer_id"] == "CUST_00001"
+    assert ("search", "analyst_001", "Fouad") in fake.calls

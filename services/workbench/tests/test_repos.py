@@ -756,8 +756,8 @@ class TestInfoRequestAssignedRepo:
             result = await InfoRequestRepo(mock_db).list_assigned("user2", ["hq_main"])
         sql, params = mock_fetch_all.call_args[0][1], mock_fetch_all.call_args[0][2]
         assert "ir.assigned_to = $1" in sql
-        assert "scope_id = ANY($2::text[])" in sql
-        assert "JOIN compliance_cases c ON c.case_id = ir.case_id" in sql
+        assert "ANY($2::text[])" in sql
+        assert "LEFT JOIN compliance_cases c ON c.case_id = ir.case_id" in sql
         assert "ORDER BY ir.created_at DESC, ir.ir_id" in sql
         assert params[0] == "user2"
         assert params[1] == ["hq_main"]
@@ -795,7 +795,7 @@ class TestInfoRequestAssignedRepo:
         sql, params = mock_fetch_one.call_args[0][1], mock_fetch_one.call_args[0][2]
         assert "COUNT(*)" in sql
         assert "ir.assigned_to = $1" in sql
-        assert "scope_id = ANY($2::text[])" in sql
+        assert "ANY($2::text[])" in sql
         assert params[0] == "user2"
         assert params[1] == ["hq_main"]
         assert params[2] == "open"

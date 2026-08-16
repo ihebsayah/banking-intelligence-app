@@ -3,11 +3,13 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft, RefreshCw, AlertTriangle, CheckCircle2, PlayCircle,
-  Flag, Undo2, XCircle, Link2, Eye,
+  Flag, Undo2, XCircle, Link2, Eye, ArrowRight,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { BankingHeader } from '../Layout/BankingHeader';
 import { investigationsApi } from '../../api/investigationsApi';
+import { alertsApi } from '../../api/alertsApi';
+import { CustomerContextPanel } from '../customers/CustomerContextPanel';
 import { InvestigationPriorityBadge, InvestigationStatusBadge } from './InvestigationBadges';
 import { parseInvestigationError } from './investigationErrors';
 import { FindingsEditor } from './FindingsEditor';
@@ -16,13 +18,18 @@ import { TimelineTab } from './TimelineTab';
 import { ConfirmTransitionDialog } from './dialogs/ConfirmTransitionDialog';
 import { ReturnInvestigationDialog } from './dialogs/ReturnInvestigationDialog';
 import { CancelInvestigationDialog } from './dialogs/CancelInvestigationDialog';
+import { RequestInfoDialog } from './dialogs/RequestInfoDialog';
+import { MarkNotHarmfulDialog } from './dialogs/MarkNotHarmfulDialog';
+import { EscalateToCaseDialog } from './dialogs/EscalateToCaseDialog';
+import { EvidenceUploadPanel } from './EvidenceUploadPanel';
+import { HelpCircle } from 'lucide-react';
 import { useAuth } from '../../auth/AuthProvider';
 import { PERMISSIONS } from '../../lib/permissions';
 import { formatDateTime } from '../../utils/formatters';
 import type { Investigation } from '../../types/investigations';
 
 type Tab = 'overview' | 'findings' | 'comments' | 'timeline';
-type Dialog = 'submit' | 'complete' | 'approve' | 'return' | 'cancel' | null;
+type Dialog = 'submit' | 'complete' | 'not_harmful' | 'escalate_case' | 'return' | 'cancel' | 'request_info' | null;
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'overview', label: 'Overview' },
@@ -64,6 +71,7 @@ export function InvestigationDetailPage() {
   const [dialog, setDialog] = useState<Dialog>(null);
   const [acting, setActing] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [customerId, setCustomerId] = useState<string | null>(null);
 
   const fetchInvestigation = useCallback(async () => {
     if (!investigationId) return;
@@ -81,6 +89,27 @@ export function InvestigationDetailPage() {
   }, [investigationId]);
 
   useEffect(() => { fetchInvestigation(); }, [fetchInvestigation]);
+
+  // Resolve the linked alert's customer context for the analyst's flow. The
+  // alert read is itself server-gated; if it resolves to a customer entity, the
+  // panel shows the authorized Customer 360 context (or a safe empty state).
+  useEffect(() => {
+    let cancelled = false;
+    if (!investigation?.alert_id) {
+      setCustomerId(null);
+      return;
+    }
+    alertsApi.get(investigation.alert_id)
+      .then((alert) => {
+        if (cancelled) return;
+        const resId = 'resolved_customer_id' in alert && alert.resolved_customer_id ? alert.resolved_customer_id : null;
+        const relType = 'related_entity_type' in alert ? alert.related_entity_type : null;
+        const relId = 'related_entity_id' in alert ? alert.related_entity_id : null;
+        setCustomerId(resId || (relType === 'customer' && relId ? relId : null));
+      })
+      .catch(() => { if (!cancelled) setCustomerId(null); });
+    return () => { cancelled = true; };
+  }, [investigation?.alert_id]);
 
   // Unsaved-changes guard: warn on tab close and on the page's own navigation
   // actions (the app uses a non-data BrowserRouter, so useBlocker is unavailable).
@@ -167,8 +196,10 @@ export function InvestigationDetailPage() {
 
   const showSubmit = canTransition && s === 'active' && hasFindings(investigation);
   const showComplete = canTransition && s === 'active' && hasFindings(investigation) && hasConclusion(investigation);
-  const showApprove = canReview && s === 'submitted';
+  const showNotHarmful = canReview && s === 'submitted';
+  const showEscalateCase = canReview && hasPermission(PERMISSIONS.CASE_CREATE) && s === 'submitted';
   const showReturn = canReview && s === 'submitted';
+  const showRequestInfo = (canReview || hasPermission(PERMISSIONS.INFO_REQUEST_CREATE)) && s === 'submitted';
   const showCancel = canCancel && s !== 'completed' && s !== 'cancelled';
   const showStart = canTransition && s === 'open';
   const showResume = canTransition && s === 'returned';
@@ -263,7 +294,7 @@ export function InvestigationDetailPage() {
           {tab === 'overview' && (
             <div className="space-y-5">
               {/* Action bar */}
-              {(showStart || showSubmit || showComplete || showApprove || showReturn || showCancel || showResume) && (
+              {(showStart || showSubmit || showComplete || showNotHarmful || showEscalateCase || showReturn || showCancel || showResume) && (
                 <div className="flex flex-wrap items-center gap-2">
                   {showStart && (
                     <button
@@ -303,13 +334,22 @@ export function InvestigationDetailPage() {
                       <PlayCircle size={14} /> {acting ? 'Resuming…' : 'Mark Revision Started'}
                     </button>
                   )}
-                  {showApprove && (
+                  {showNotHarmful && (
                     <button
-                      onClick={() => setDialog('approve')}
+                      onClick={() => setDialog('not_harmful')}
                       className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold shadow-md transition-all hover:brightness-90"
                       style={{ background: 'var(--accent-green)', color: 'var(--text-primary)' }}
                     >
-                      <CheckCircle2 size={14} /> Approve
+                      <CheckCircle2 size={14} /> Mark Not Harmful
+                    </button>
+                  )}
+                  {showEscalateCase && (
+                    <button
+                      onClick={() => setDialog('escalate_case')}
+                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold shadow-md transition-all hover:brightness-90"
+                      style={{ background: 'var(--accent-red)', color: 'var(--text-primary)' }}
+                    >
+                      <ArrowRight size={14} /> Escalate to Case
                     </button>
                   )}
                   {showReturn && (
@@ -319,6 +359,15 @@ export function InvestigationDetailPage() {
                       style={{ background: 'rgba(217,119,6,0.9)', color: 'var(--text-primary)' }}
                     >
                       <Undo2 size={14} /> Return for Revision
+                    </button>
+                  )}
+                  {showRequestInfo && (
+                    <button
+                      onClick={() => setDialog('request_info')}
+                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold shadow-md transition-all hover:brightness-90"
+                      style={{ background: 'var(--accent-blue)', color: 'var(--text-primary)' }}
+                    >
+                      <HelpCircle size={14} /> Request Additional Information
                     </button>
                   )}
                   {showCancel && (
@@ -370,6 +419,9 @@ export function InvestigationDetailPage() {
                 </button>
               )}
 
+              {/* Customer context (authorized, read-only) */}
+              {customerId && <CustomerContextPanel customerId={customerId} />}
+
               {/* Meta grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {[
@@ -408,15 +460,11 @@ export function InvestigationDetailPage() {
                 onConflict={onMutationConflict}
                 onDirtyChange={setDirty}
               />
-              <div className="rounded-2xl border p-5 opacity-70"
-                style={{ background: 'var(--bg-card)', borderColor: 'var(--bg-border)' }}>
-                <h3 className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>
-                  Evidence
-                </h3>
-                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                  File evidence upload available in Phase 2D.
-                </p>
-              </div>
+              <EvidenceUploadPanel
+                investigationId={investigation.investigation_id}
+                editable={canEditFindings}
+                canDownload={hasPermission(PERMISSIONS.INVESTIGATION_READ) || hasPermission(PERMISSIONS.INVESTIGATION_READ_OWN) || canReview}
+              />
             </div>
           )}
 
@@ -459,13 +507,16 @@ export function InvestigationDetailPage() {
             onSuccess={setInvestigation}
             onConflict={onMutationConflict}
           />
-          <ConfirmTransitionDialog
-            open={dialog === 'approve'}
-            title="Approve Investigation"
-            body="Approve this submitted investigation. It will be marked complete and closed."
-            confirmLabel="Approve"
+          <MarkNotHarmfulDialog
+            open={dialog === 'not_harmful'}
             investigation={investigation}
-            target="completed"
+            onClose={() => setDialog(null)}
+            onSuccess={setInvestigation}
+            onConflict={onMutationConflict}
+          />
+          <EscalateToCaseDialog
+            open={dialog === 'escalate_case'}
+            investigation={investigation}
             onClose={() => setDialog(null)}
             onSuccess={setInvestigation}
             onConflict={onMutationConflict}
@@ -482,6 +533,13 @@ export function InvestigationDetailPage() {
             investigation={investigation}
             onClose={() => setDialog(null)}
             onSuccess={setInvestigation}
+            onConflict={onMutationConflict}
+          />
+          <RequestInfoDialog
+            open={dialog === 'request_info'}
+            investigation={investigation}
+            onClose={() => setDialog(null)}
+            onSuccess={fetchInvestigation}
             onConflict={onMutationConflict}
           />
         </>

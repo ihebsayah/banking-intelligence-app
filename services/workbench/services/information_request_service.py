@@ -27,10 +27,10 @@ from workbench.exceptions import (
 )
 from workbench.models import (
     ActivityTimelineEntry, AuditOutboxEvent, ComplianceCase,
-    IdempotencyRecord, InformationRequest, Notification,
+    IdempotencyRecord, InformationRequest, Investigation, Notification,
 )
 from workbench.repos import (
-    CaseRepo, IdempotencyRepo, InfoRequestRepo,
+    CaseRepo, IdempotencyRepo, InfoRequestRepo, InvestigationRepo,
     NotificationRepo, OutboxRepo, TimelineRepo,
 )
 from workbench.schemas.information_requests import (
@@ -119,6 +119,14 @@ def _resource_from_case(c: ComplianceCase) -> Resource:
     )
 
 
+def _resource_from_inv(inv: Investigation) -> Resource:
+    return Resource(
+        id=inv.investigation_id, status=inv.status,
+        assigned_to=inv.assigned_to, scope_id=inv.scope_id,
+        version=inv.version, entity_type="investigation",
+    )
+
+
 def _resource_from_ir(ir: InformationRequest, scope_id: str) -> Resource:
     return Resource(
         id=ir.ir_id, status=ir.status, assigned_to=ir.assigned_to,
@@ -198,6 +206,22 @@ async def _validate_assignee(db: DatabaseConnector, user_id: str,
 class InformationRequestService:
     def __init__(self, db: DatabaseConnector) -> None:
         self._db = db
+
+    async def _resolve_ir_parent(
+        self, ir: InformationRequest, conn: Any = None
+    ) -> Tuple[str, Resource, Optional[ComplianceCase], Optional[Investigation]]:
+        if ir.case_id:
+            case = await CaseRepo(self._db).fetch_by_id(ir.case_id, conn)
+            if case is None:
+                raise ResourceNotFound("Case", ir.case_id)
+            return case.scope_id, _resource_from_ir(ir, case.scope_id), case, None
+        elif ir.investigation_id:
+            inv = await InvestigationRepo(self._db).fetch_by_id(ir.investigation_id, conn)
+            if inv is None:
+                raise ResourceNotFound("Investigation", ir.investigation_id)
+            return inv.scope_id, _resource_from_ir(ir, inv.scope_id), None, inv
+        else:
+            raise WorkbenchError("INVALID_IR", "Information request has no parent entity", 400)
 
     # ── IR1 — POST /cases/{case_id}/information-requests ─────────────────────
 
@@ -311,6 +335,119 @@ class InformationRequestService:
                 req.model_dump(), 201, resp.model_dump_json(), uow.conn)
             return resp
 
+    # ── IR1.5 — POST /investigations/{investigation_id}/information-requests ──
+
+    async def create_for_investigation(
+        self, user: ApplicationUser, investigation_id: str, req: CreateInformationRequest,
+        idempotency_key: Optional[str] = None,
+        request_id: str = "",
+    ) -> InformationRequestMutationResponse:
+        path = f"/api/v1/investigations/{investigation_id}/information-requests"
+        async with UnitOfWork(self._db) as uow:
+            idem = await _check_idempotency(
+                IdempotencyRepo(self._db), idempotency_key, "POST", path,
+                req.model_dump(), uow.conn)
+            if idem:
+                return InformationRequestMutationResponse.model_validate_json(idem[1])
+
+            inv = await InvestigationRepo(self._db).fetch_by_id(investigation_id, uow.conn)
+            if inv is None:
+                raise ResourceNotFound("Investigation", investigation_id)
+
+            if inv.status != "submitted":
+                raise InvalidTransition(inv.status, "create_information_request")
+
+            await authorise(user, "info_request:create", _resource_from_inv(inv),
+                            self._db, RequestContext(request_id=request_id))
+
+            if req.due_date and req.due_date < date.today():
+                raise WorkbenchError("INVALID_DUE_DATE",
+                                     "due_date must be today or later", 400)
+
+            active = await InfoRequestRepo(self._db).fetch_active_by_investigation_assignee(
+                investigation_id, req.assigned_to, uow.conn)
+            if active:
+                raise InvalidTransition(
+                    inv.status, "create_information_request",
+                    detail="An active information request already exists for this analyst")
+
+            await _validate_assignee(self._db, req.assigned_to, inv.scope_id, uow.conn)
+
+            old_status = inv.status
+            inv.status = "awaiting_information"
+            inv.version += 1
+            inv.updated_at = _now()
+
+            ir = InformationRequest(
+                ir_id=_uuid(), case_id=None,
+                investigation_id=investigation_id,
+                created_by=user.user_id, assigned_to=req.assigned_to,
+                question=req.question, due_date=req.due_date,
+                status="open", version=1, created_at=_now(), updated_at=_now(),
+            )
+
+            expected_ver = req.expected_investigation_version or (inv.version - 1)
+            updated = await InvestigationRepo(self._db).update(inv, expected_ver, uow.conn)
+            if updated is None:
+                raise VersionConflict()
+            await InfoRequestRepo(self._db).create(ir, uow.conn)
+
+            await TimelineRepo(self._db).insert(
+                _make_timeline("investigation", investigation_id,
+                               "investigation.awaiting_information", user.user_id,
+                               {"status": old_status},
+                               {"status": "awaiting_information", "ir_id": ir.ir_id}),
+                uow.conn)
+            await TimelineRepo(self._db).insert(
+                _make_timeline("information_request", ir.ir_id,
+                               "ir.created", user.user_id,
+                               None,
+                               {"question_sha256": _sha256(ir.question),
+                                "assigned_to": ir.assigned_to,
+                                "due_date": str(ir.due_date) if ir.due_date else None}),
+                uow.conn)
+
+            await NotificationRepo(self._db).insert(
+                _make_notification(ir.assigned_to, "ir_created",
+                                   f"Information request assigned to you",
+                                   ir.question,
+                                   "information_request", ir.ir_id),
+                uow.conn)
+
+            await OutboxRepo(self._db).insert(
+                _make_outbox("ir.created", "information_request", ir.ir_id,
+                             user.user_id, user.role,
+                             _audit_payload(
+                                 "ir.created", "information_request", ir.ir_id,
+                                 user.user_id, user.role,
+                                 before=None,
+                                 after={"status": "open", "version": 1,
+                                        "assigned_to": ir.assigned_to,
+                                        "question_sha256": _sha256(ir.question),
+                                        "due_date": str(ir.due_date) if ir.due_date else None},
+                                 request_id=request_id,
+                                 metadata={"investigation_id": investigation_id})),
+                uow.conn)
+            await OutboxRepo(self._db).insert(
+                _make_outbox("investigation.awaiting_info", "investigation", investigation_id,
+                             user.user_id, user.role,
+                             _audit_payload(
+                                 "investigation.awaiting_info", "investigation", investigation_id,
+                                 user.user_id, user.role,
+                                 before={"status": old_status},
+                                 after={"status": "awaiting_information",
+                                        "version": inv.version},
+                                 request_id=request_id,
+                                 metadata={"ir_id": ir.ir_id})),
+                uow.conn)
+
+            resp = InformationRequestMutationResponse(
+                information_request=_full_response(ir), version=ir.version)
+            await _store_idempotency(
+                IdempotencyRepo(self._db), idempotency_key, "POST", path,
+                req.model_dump(), 201, resp.model_dump_json(), uow.conn)
+            return resp
+
     # ── IR2 — GET /cases/{case_id}/information-requests ──────────────────────
 
     async def list_for_case(
@@ -348,6 +485,43 @@ class InformationRequestService:
             return [_admin_view(ir) for ir in irs], len(irs)
         return [_full_response(ir) for ir in irs], len(irs)
 
+    # ── IR2.1 — GET /investigations/{investigation_id}/information-requests ──
+
+    async def list_for_investigation(
+        self, user: ApplicationUser, investigation_id: str,
+        status: Optional[str] = None, page: int = 1, per_page: int = 50,
+    ) -> Tuple[List[Any], int]:
+        inv = await InvestigationRepo(self._db).fetch_by_id(investigation_id)
+        if inv is None:
+            raise ResourceNotFound("Investigation", investigation_id)
+        resource = _resource_from_inv(inv)
+
+        assigned_path = False
+        try:
+            await authorise(user, "info_request:read_assigned", resource,
+                            self._db, RequestContext())
+            assigned_path = True
+        except (AuthOwnershipDenied, AuthScopeDenied, AuthPermissionDenied):
+            try:
+                await authorise(user, "info_request:read", resource,
+                                self._db, RequestContext())
+            except AuthPermissionDenied:
+                raise ResourceNotFound("Investigation", investigation_id)
+
+        limit = min(per_page, 100)
+        irs = await InfoRequestRepo(self._db).list_by_investigation(
+            investigation_id, status=status, limit=limit, offset=(page - 1) * limit)
+
+        if assigned_path:
+            irs = [ir for ir in irs if ir.assigned_to == user.user_id]
+        elif user.role != "admin":
+            irs = [ir for ir in irs
+                   if ir.created_by == user.user_id or inv.assigned_to == user.user_id]
+
+        if user.role == "admin":
+            return [_admin_view(ir) for ir in irs], len(irs)
+        return [_full_response(ir) for ir in irs], len(irs)
+
     # ── IR2.5 — GET /information-requests/assigned ────────────────────────────
 
     async def list_assigned(
@@ -375,10 +549,8 @@ class InformationRequestService:
         ir = await InfoRequestRepo(self._db).fetch_by_id(ir_id)
         if ir is None:
             raise ResourceNotFound("InformationRequest", ir_id)
-        case = await CaseRepo(self._db).fetch_by_id(ir.case_id)
-        if case is None:
-            raise ResourceNotFound("Case", ir.case_id)
-        resource = _resource_from_ir(ir, case.scope_id)
+        scope_id, resource, case, inv = await self._resolve_ir_parent(ir)
+        parent_assigned_to = case.assigned_to if case else (inv.assigned_to if inv else None)
 
         try:
             await authorise(user, "info_request:read_assigned", resource,
@@ -397,7 +569,7 @@ class InformationRequestService:
             raise ResourceNotFound("InformationRequest", ir_id)
 
         if user.role != "admin":
-            if not (ir.created_by == user.user_id or case.assigned_to == user.user_id):
+            if not (ir.created_by == user.user_id or parent_assigned_to == user.user_id):
                 raise ResourceNotFound("InformationRequest", ir_id)
         return _admin_view(ir) if user.role == "admin" else _full_response(ir)
 
@@ -419,11 +591,9 @@ class InformationRequestService:
             ir = await InfoRequestRepo(self._db).fetch_by_id(ir_id, uow.conn)
             if ir is None:
                 raise ResourceNotFound("InformationRequest", ir_id)
-            case = await CaseRepo(self._db).fetch_by_id(ir.case_id, uow.conn)
-            if case is None:
-                raise ResourceNotFound("Case", ir.case_id)
+            scope_id, resource, case, inv = await self._resolve_ir_parent(ir, uow.conn)
 
-            await authorise(user, "info_request:respond", _resource_from_ir(ir, case.scope_id),
+            await authorise(user, "info_request:respond", resource,
                             self._db, RequestContext(request_id=request_id))
 
             if ir.status == "acknowledged":
@@ -463,7 +633,7 @@ class InformationRequestService:
                                  before={"status": old_status, "version": req.expected_version},
                                  after={"status": "acknowledged", "version": ir.version},
                                  request_id=request_id,
-                                 metadata={"case_id": ir.case_id})),
+                                 metadata={"case_id": ir.case_id, "investigation_id": ir.investigation_id})),
                 uow.conn)
 
             resp = _mutation_response(ir, user.role)
@@ -490,11 +660,9 @@ class InformationRequestService:
             ir = await InfoRequestRepo(self._db).fetch_by_id(ir_id, uow.conn)
             if ir is None:
                 raise ResourceNotFound("InformationRequest", ir_id)
-            case = await CaseRepo(self._db).fetch_by_id(ir.case_id, uow.conn)
-            if case is None:
-                raise ResourceNotFound("Case", ir.case_id)
+            scope_id, resource, case, inv = await self._resolve_ir_parent(ir, uow.conn)
 
-            await authorise(user, "info_request:respond", _resource_from_ir(ir, case.scope_id),
+            await authorise(user, "info_request:respond", resource,
                             self._db, RequestContext(request_id=request_id))
 
             if ir.status == "responded":
@@ -537,7 +705,7 @@ class InformationRequestService:
                                         "response_text_sha256": _sha256(req.response_text),
                                         "responded_at": ir.responded_at.isoformat()},
                                  request_id=request_id,
-                                 metadata={"case_id": ir.case_id})),
+                                 metadata={"case_id": ir.case_id, "investigation_id": ir.investigation_id})),
                 uow.conn)
 
             resp = _mutation_response(ir, user.role)
@@ -564,11 +732,9 @@ class InformationRequestService:
             ir = await InfoRequestRepo(self._db).fetch_by_id(ir_id, uow.conn)
             if ir is None:
                 raise ResourceNotFound("InformationRequest", ir_id)
-            case = await CaseRepo(self._db).fetch_by_id(ir.case_id, uow.conn)
-            if case is None:
-                raise ResourceNotFound("Case", ir.case_id)
+            scope_id, resource, case, inv = await self._resolve_ir_parent(ir, uow.conn)
 
-            await authorise(user, "info_request:accept", _resource_from_ir(ir, case.scope_id),
+            await authorise(user, "info_request:accept", resource,
                             self._db, RequestContext(request_id=request_id))
 
             if ir.status == "accepted":
@@ -593,15 +759,48 @@ class InformationRequestService:
                                {"status": old_status}, {"status": "accepted"}),
                 uow.conn)
 
-            # Side effect: if case is awaiting_information, notify the case
-            # assignee to resume review (case transition C4) manually.
-            if case.status == "awaiting_information" and case.assigned_to:
+            if case and case.status == "awaiting_information" and case.assigned_to:
                 await NotificationRepo(self._db).insert(
                     _make_notification(case.assigned_to, "ir_accepted",
                                        f"Information received — resume case review",
                                        f"IR {ir_id} accepted",
                                        "compliance_case", case.case_id),
                     uow.conn)
+
+            inv_resumed = False
+            if inv and inv.status == "awaiting_information":
+                active_irs = await InfoRequestRepo(self._db).fetch_active_by_investigation(inv.investigation_id, uow.conn)
+                if not active_irs:
+                    old_inv_status = inv.status
+                    inv.status = "submitted"
+                    inv.version += 1
+                    inv.updated_at = _now()
+                    await InvestigationRepo(self._db).update(inv, inv.version - 1, uow.conn)
+                    inv_resumed = True
+                    await TimelineRepo(self._db).insert(
+                        _make_timeline("investigation", inv.investigation_id,
+                                       "investigation.submitted", user.user_id,
+                                       {"status": old_inv_status},
+                                       {"status": "submitted", "reason": "ir_accepted"}),
+                        uow.conn)
+                    if inv.assigned_to:
+                        await NotificationRepo(self._db).insert(
+                            _make_notification(inv.assigned_to, "investigation_submitted",
+                                               f"Information received — investigation returned to review",
+                                               f"IR {ir_id} accepted",
+                                               "investigation", inv.investigation_id),
+                            uow.conn)
+                    await OutboxRepo(self._db).insert(
+                        _make_outbox("investigation.submitted", "investigation", inv.investigation_id,
+                                     user.user_id, user.role,
+                                     _audit_payload(
+                                         "investigation.submitted", "investigation", inv.investigation_id,
+                                         user.user_id, user.role,
+                                         before={"status": old_inv_status},
+                                         after={"status": "submitted", "version": inv.version},
+                                         request_id=request_id,
+                                         metadata={"ir_id": ir_id})),
+                        uow.conn)
 
             if ir.assigned_to:
                 await NotificationRepo(self._db).insert(
@@ -622,9 +821,10 @@ class InformationRequestService:
                                         "accepted_by": ir.accepted_by,
                                         "acceptance_note_sha256": (
                                             _sha256(req.acceptance_note) if req.acceptance_note else None),
-                                        "case_resumed_triggered": case.status == "awaiting_information"},
+                                        "case_resumed_triggered": case.status == "awaiting_information" if case else False,
+                                        "investigation_resumed_triggered": inv_resumed},
                                  request_id=request_id,
-                                 metadata={"case_id": ir.case_id})),
+                                 metadata={"case_id": ir.case_id, "investigation_id": ir.investigation_id})),
                 uow.conn)
 
             resp = _mutation_response(ir, user.role)
@@ -651,11 +851,9 @@ class InformationRequestService:
             ir = await InfoRequestRepo(self._db).fetch_by_id(ir_id, uow.conn)
             if ir is None:
                 raise ResourceNotFound("InformationRequest", ir_id)
-            case = await CaseRepo(self._db).fetch_by_id(ir.case_id, uow.conn)
-            if case is None:
-                raise ResourceNotFound("Case", ir.case_id)
+            scope_id, resource, case, inv = await self._resolve_ir_parent(ir, uow.conn)
 
-            await authorise(user, "info_request:return", _resource_from_ir(ir, case.scope_id),
+            await authorise(user, "info_request:return", resource,
                             self._db, RequestContext(request_id=request_id))
 
             if ir.status == "returned":
@@ -699,7 +897,7 @@ class InformationRequestService:
                                         "returned_by": ir.returned_by,
                                         "return_reason_sha256": _sha256(req.return_reason)},
                                  request_id=request_id,
-                                 metadata={"case_id": ir.case_id})),
+                                 metadata={"case_id": ir.case_id, "investigation_id": ir.investigation_id})),
                 uow.conn)
 
             resp = _mutation_response(ir, user.role)
@@ -726,11 +924,9 @@ class InformationRequestService:
             ir = await InfoRequestRepo(self._db).fetch_by_id(ir_id, uow.conn)
             if ir is None:
                 raise ResourceNotFound("InformationRequest", ir_id)
-            case = await CaseRepo(self._db).fetch_by_id(ir.case_id, uow.conn)
-            if case is None:
-                raise ResourceNotFound("Case", ir.case_id)
+            scope_id, resource, case, inv = await self._resolve_ir_parent(ir, uow.conn)
 
-            await authorise(user, "info_request:cancel", _resource_from_ir(ir, case.scope_id),
+            await authorise(user, "info_request:cancel", resource,
                             self._db, RequestContext(request_id=request_id))
 
             if ir.status == "cancelled":
@@ -756,7 +952,23 @@ class InformationRequestService:
                                {"status": "cancelled"}),
                 uow.conn)
 
-            # No notification for cancel (minor lifecycle event per contract).
+            # If inv is awaiting_information and no active IRs remain, resume inv
+            inv_resumed = False
+            if inv and inv.status == "awaiting_information":
+                active_irs = await InfoRequestRepo(self._db).fetch_active_by_investigation(inv.investigation_id, uow.conn)
+                if not active_irs:
+                    old_inv_status = inv.status
+                    inv.status = "submitted"
+                    inv.version += 1
+                    inv.updated_at = _now()
+                    await InvestigationRepo(self._db).update(inv, inv.version - 1, uow.conn)
+                    inv_resumed = True
+                    await TimelineRepo(self._db).insert(
+                        _make_timeline("investigation", inv.investigation_id,
+                                       "investigation.submitted", user.user_id,
+                                       {"status": old_inv_status},
+                                       {"status": "submitted", "reason": "ir_cancelled"}),
+                        uow.conn)
 
             await OutboxRepo(self._db).insert(
                 _make_outbox("ir.cancelled", "information_request", ir_id,
@@ -769,7 +981,7 @@ class InformationRequestService:
                                         "cancelled_by": ir.cancelled_by,
                                         "cancel_reason_sha256": _sha256(req.cancel_reason)},
                                  request_id=request_id,
-                                 metadata={"case_id": ir.case_id})),
+                                 metadata={"case_id": ir.case_id, "investigation_id": ir.investigation_id})),
                 uow.conn)
 
             resp = _mutation_response(ir, user.role)

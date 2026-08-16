@@ -1209,9 +1209,9 @@ class TestRouteRegistration:
         assert "/api/v1/information-requests/{ir_id}/submit" not in paths
         assert "/api/v1/cases/{case_id}/information-requests/{ir_id}" not in paths
 
-    def test_exact_count_nine(self):
+    def test_exact_count_eleven(self):
         from workbench.routers.information_requests import router
-        assert len(router.routes) == 9
+        assert len(router.routes) == 11
 
 
 class TestListAssigned:

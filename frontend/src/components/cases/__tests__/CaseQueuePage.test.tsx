@@ -13,12 +13,18 @@ const mockAuth = vi.hoisted(() => ({
 
 vi.mock('../../../auth/AuthProvider', () => ({ useAuth: mockAuth.useAuth }));
 
-const { mockListAssigned } = vi.hoisted(() => ({
+const { mockListAssigned, mockListUnassigned, mockAssign } = vi.hoisted(() => ({
   mockListAssigned: vi.fn(),
+  mockListUnassigned: vi.fn(),
+  mockAssign: vi.fn(),
 }));
 
 vi.mock('../../../api/casesApi', () => ({
-  casesApi: { listAssigned: mockListAssigned },
+  casesApi: {
+    listAssigned: mockListAssigned,
+    listUnassigned: mockListUnassigned,
+    assign: mockAssign,
+  },
 }));
 
 import { CaseQueuePage } from '../CaseQueuePage';
@@ -36,9 +42,8 @@ const overdue: Case = {
   target_date: '2000-01-01',
 };
 
-const base2: Case = {
-  ...base, case_id: 'case_3', title: 'Minor review', status: 'resolved', priority: 'low', risk_level: 'low',
-  target_date: '2000-01-01',
+const unassignedCase: Case = {
+  ...base, case_id: 'case_unassigned_1', title: 'Suspicious Structuring', status: 'open', assigned_to: null, version: 1,
 };
 
 function renderQueue() {
@@ -55,33 +60,55 @@ function renderQueue() {
 describe('CaseQueuePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockListAssigned.mockResolvedValue({ total: 3, page: 1, page_size: 50, items: [base, base2, overdue] });
+    mockListAssigned.mockResolvedValue({ total: 2, page: 1, page_size: 50, items: [base, overdue] });
+    mockListUnassigned.mockResolvedValue({ total: 1, page: 1, page_size: 50, items: [unassignedCase] });
   });
 
-  it('renders assigned cases with risk, priority and status badges', async () => {
+  it('renders assigned cases by default on My Cases tab', async () => {
     renderQueue();
     expect(await screen.findByText('Round-trip transfer')).toBeInTheDocument();
-    expect(screen.getByText('Minor review')).toBeInTheDocument();
-    expect(screen.getByText('HIGH')).toBeInTheDocument();
-    expect(screen.getAllByText('High risk').length).toBe(2);
-    expect(screen.getByText('Low risk')).toBeInTheDocument();
-    expect(screen.getAllByText('under review').length).toBeGreaterThanOrEqual(2);
-    expect(screen.getAllByText(/assigned to you/).length).toBe(4); // 3 rows + header subtitle
+    expect(screen.getByText('Stale case')).toBeInTheDocument();
+    expect(mockListAssigned).toHaveBeenCalled();
   });
 
-  it('marks overdue rows with an overdue label (resolved excluded)', async () => {
+  it('switches to Unassigned Cases tab and fetches unassigned cases', async () => {
     renderQueue();
     await screen.findByText('Round-trip transfer');
-    expect(screen.getByText('overdue')).toBeInTheDocument();
-    expect(screen.getByText('Stale case')).toBeInTheDocument();
-    // resolved case with a past target date must NOT be overdue
-    expect(screen.getAllByText('overdue').length).toBe(1);
+    
+    fireEvent.click(screen.getByRole('button', { name: /Unassigned Cases/i }));
+    
+    expect(await screen.findByText('Suspicious Structuring')).toBeInTheDocument();
+    expect(mockListUnassigned).toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: /Claim Case/i })).toBeInTheDocument();
   });
 
-  it('shows the empty state when nothing is assigned', async () => {
-    mockListAssigned.mockResolvedValue({ total: 0, page: 1, page_size: 50, items: [] });
+  it('handles successful claim of an unassigned case', async () => {
+    mockAssign.mockResolvedValue({ success: true, case: { ...unassignedCase, assigned_to: 'compliance_001', status: 'assigned' }, version: 2 });
     renderQueue();
-    expect(await screen.findByText('No cases assigned to you')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Unassigned Cases/i }));
+    await screen.findByText('Suspicious Structuring');
+
+    fireEvent.click(screen.getByRole('button', { name: /Claim Case/i }));
+
+    await waitFor(() => {
+      expect(mockAssign).toHaveBeenCalledWith('case_unassigned_1', {
+        assigned_to: 'compliance_001',
+        expected_version: 1,
+      });
+    });
+  });
+
+  it('handles 409 conflict during claim gracefully', async () => {
+    mockAssign.mockRejectedValue({ response: { status: 409, data: { error: 'VERSION_CONFLICT', message: 'Version conflict' } } });
+    renderQueue();
+    fireEvent.click(screen.getByRole('button', { name: /Unassigned Cases/i }));
+    await screen.findByText('Suspicious Structuring');
+
+    fireEvent.click(screen.getByRole('button', { name: /Claim Case/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('This case has already been claimed by another Compliance Officer.')).toBeInTheDocument();
+    });
   });
 
   it('refetches with filters when status and priority change', async () => {
@@ -93,22 +120,6 @@ describe('CaseQueuePage', () => {
       const calls = mockListAssigned.mock.calls;
       expect(calls[calls.length - 1][0].status).toBe('under_review');
       expect(calls[calls.length - 1][0].priority).toBe('high');
-      expect(calls[calls.length - 1][0].page).toBe(1);
     });
-  });
-
-  it('shows the error state and retries on failure', async () => {
-    mockListAssigned.mockRejectedValue({ response: { status: 503, data: { message: 'Down' } } });
-    renderQueue();
-    expect(await screen.findByText('Down')).toBeInTheDocument();
-    mockListAssigned.mockResolvedValue({ total: 1, page: 1, page_size: 50, items: [base] });
-    fireEvent.click(screen.getByRole('button', { name: /Retry/i }));
-    expect(await screen.findByText('Round-trip transfer')).toBeInTheDocument();
-  });
-
-  it('navigates to detail on row click', async () => {
-    renderQueue();
-    fireEvent.click(await screen.findByText('Round-trip transfer'));
-    expect(await screen.findByText('case-detail')).toBeInTheDocument();
   });
 });

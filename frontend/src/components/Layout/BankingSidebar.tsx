@@ -3,51 +3,18 @@ import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   Building2,
-  LayoutDashboard,
-  GitBranch,
-  Bot,
-  BarChart3,
-  ShieldAlert,
-  Scale,
-  FileText,
   Settings2,
-  Shield,
-  BellRing,
-  FileSearch,
-  MessageSquare,
-  ClipboardCheck,
   ChevronsLeft,
   ChevronsRight,
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { useAuth } from '../../auth/AuthProvider';
 import { useUIStore } from '../../stores/uiStore';
+import { usePermissions } from '../../lib/permissions';
+import { NAV_GROUPS, BOTTOM_NAV_ITEMS } from '../../lib/navigation';
 import { env } from '../../config/env';
 import { Avatar } from '../ui/Avatar';
 import { clsx } from 'clsx';
-
-const NAV_ITEMS = [
-  { to: '/dashboard',       icon: LayoutDashboard, label: 'Dashboard',      roles: ['analyst', 'manager', 'compliance', 'admin'] },
-  { to: '/branches',        icon: GitBranch,       label: 'Branches',       roles: ['analyst', 'manager', 'compliance', 'admin'] },
-  { to: '/assistant',       icon: Bot,             label: 'AI Assistant',   roles: ['analyst', 'manager', 'compliance', 'admin'] },
-  { to: '/kpi',             icon: BarChart3,       label: 'KPI Analytics',  roles: ['analyst', 'manager', 'compliance', 'admin'] },
-  { to: '/kpi-governance',  icon: Shield,          label: 'KPI Governance', roles: ['analyst', 'manager', 'compliance', 'admin'] },
-  { to: '/risk',            icon: ShieldAlert,     label: 'Risk Monitor',   roles: ['analyst', 'manager', 'compliance', 'admin'] },
-  { to: '/workbench/alerts', icon: BellRing,       label: 'Alert Queue',    roles: ['analyst', 'compliance', 'admin'] },
-  { to: '/workbench/investigations', icon: FileSearch, label: 'Investigations', roles: ['analyst', 'compliance', 'admin'] },
-  { to: '/workbench/cases', icon: Scale,           label: 'Cases',          roles: ['analyst', 'compliance', 'admin'] },
-  { to: '/workbench/information-requests', icon: MessageSquare, label: 'Information Requests', roles: ['analyst', 'compliance', 'admin'] },
-  { to: '/workbench/approvals', icon: ClipboardCheck, label: 'Approvals', roles: ['analyst', 'compliance', 'admin'] },
-  { to: '/workbench/admin/outbox', icon: FileText, label: 'Outbox Monitor', roles: ['admin'] },
-  { to: '/compliance',      icon: Shield,           label: 'Compliance',     roles: ['compliance', 'manager', 'admin'] },
-  { to: '/reports',         icon: FileText,        label: 'Reports',        roles: ['manager', 'admin'] },
-  { to: '/admin',           icon: Settings2,       label: 'Admin',          roles: ['admin'] },
-];
-
-const BOTTOM_ITEMS = [
-  { to: '/profile',  label: 'Profile' },
-  { to: '/settings', label: 'Settings' },
-];
 
 interface SidebarUser {
   name: string;
@@ -56,8 +23,17 @@ interface SidebarUser {
 
 function SidebarShell({ user, onLogout }: { user: SidebarUser | null; onLogout: () => void }) {
   const { sidebarCollapsed, toggleSidebar } = useUIStore();
-  const userRole = user?.role ?? 'analyst';
-  const visibleNavItems = NAV_ITEMS.filter((item) => item.roles.includes(userRole));
+  const { canAccess, userRole } = usePermissions();
+
+  const visibleGroups = NAV_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter((item) =>
+      canAccess({
+        requiredPermissions: item.requiredPermissions,
+        requiredRoles: item.requiredRoles,
+      })
+    ),
+  })).filter((group) => group.items.length > 0);
 
   return (
     <aside className={clsx(
@@ -79,40 +55,49 @@ function SidebarShell({ user, onLogout }: { user: SidebarUser | null; onLogout: 
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
-        {visibleNavItems.map(({ to, icon: Icon, label }) => (
-          <NavLink
-            key={to}
-            to={to}
-            className={({ isActive }) => clsx(
-              'flex items-center gap-2.5 rounded-lg transition-colors duration-150 text-sm font-medium group relative',
-              sidebarCollapsed ? 'justify-center p-2' : 'px-2.5 py-2',
+      <nav className="flex-1 px-2 py-3 space-y-4 overflow-y-auto">
+        {visibleGroups.map((group) => (
+          <div key={group.id} className="space-y-0.5">
+            {!sidebarCollapsed && group.title && (
+              <p className="px-2.5 pb-1 text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-subtle)' }}>
+                {group.title}
+              </p>
             )}
-            style={({ isActive }) => ({
-              background: isActive ? 'rgba(37,99,235,0.1)' : undefined,
-              color: isActive ? 'var(--accent-blue)' : 'var(--text-muted)',
-            })}
-          >
-            {({ isActive }) => (
-              <>
-                <Icon size={16} className="flex-shrink-0" />
-                {!sidebarCollapsed && <span className="truncate">{label}</span>}
-                {sidebarCollapsed && (
-                  <div className="absolute left-full ml-2 px-2 py-1 rounded text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 border"
-                    style={{ background: 'var(--bg-card)', borderColor: 'var(--bg-border)', color: 'var(--text-primary)' }}>
-                    {label}
-                  </div>
+            {group.items.map(({ to, icon: Icon, label }) => (
+              <NavLink
+                key={to}
+                to={to}
+                className={({ isActive }) => clsx(
+                  'flex items-center gap-2.5 rounded-lg transition-colors duration-150 text-sm font-medium group relative',
+                  sidebarCollapsed ? 'justify-center p-2' : 'px-2.5 py-2',
                 )}
-              </>
-            )}
-          </NavLink>
+                style={({ isActive }) => ({
+                  background: isActive ? 'rgba(37,99,235,0.1)' : undefined,
+                  color: isActive ? 'var(--accent-blue)' : 'var(--text-muted)',
+                })}
+              >
+                {({ isActive }) => (
+                  <>
+                    <Icon size={16} className="flex-shrink-0" />
+                    {!sidebarCollapsed && <span className="truncate">{label}</span>}
+                    {sidebarCollapsed && (
+                      <div className="absolute left-full ml-2 px-2 py-1 rounded text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 border"
+                        style={{ background: 'var(--bg-card)', borderColor: 'var(--bg-border)', color: 'var(--text-primary)' }}>
+                        {label}
+                      </div>
+                    )}
+                  </>
+                )}
+              </NavLink>
+            ))}
+          </div>
         ))}
       </nav>
 
       {/* Bottom section */}
       <div className="border-t p-2 space-y-0.5 flex-shrink-0" style={{ borderColor: 'var(--bg-border)' }}>
         {/* Bottom nav items (Profile, Settings) */}
-        {BOTTOM_ITEMS.map(({ to, label }) => (
+        {BOTTOM_NAV_ITEMS.map(({ to, label }) => (
           <NavLink
             key={to}
             to={to}
@@ -130,7 +115,7 @@ function SidebarShell({ user, onLogout }: { user: SidebarUser | null; onLogout: 
         ))}
 
         {/* Dev monitor (admin only) */}
-        {!sidebarCollapsed && user?.role === 'admin' && (
+        {!sidebarCollapsed && userRole === 'admin' && (
           <NavLink
             to="/dev"
             className="flex items-center gap-2.5 rounded-lg px-2.5 py-2 transition-colors duration-150 text-xs"
@@ -199,3 +184,4 @@ export function BankingSidebar() {
   const isKeycloak = env.AUTH_PROVIDER === 'keycloak';
   return isKeycloak ? <BankingSidebarKeycloak /> : <BankingSidebarLegacy />;
 }
+

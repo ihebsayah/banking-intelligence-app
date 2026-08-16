@@ -589,6 +589,6 @@ class TestRouteRegistration:
         assert "/api/v1/investigations/{investigation_id}/status" not in paths
         assert "/api/v1/investigations/{investigation_id}/findings" not in paths
 
-    def test_exact_count_five(self):
+    def test_exact_count_twelve(self):
         from workbench.routers.investigations import router
-        assert len(router.routes) == 5
+        assert len(router.routes) == 12

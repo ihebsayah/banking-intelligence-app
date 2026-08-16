@@ -60,6 +60,22 @@ async def create_information_request(
                         headers={"X-Version": str(result.version)})
 
 
+# ── IR1.5 — POST /investigations/{investigation_id}/information-requests ──────
+
+@router.post("/investigations/{investigation_id}/information-requests",
+             response_model=InformationRequestMutationResponse)
+async def create_investigation_information_request(
+    investigation_id: str, req: CreateInformationRequest, request: Request,
+    x_idempotency_key: Optional[str] = Header(None, alias="X-Idempotency-Key"),
+    x_request_id: Optional[str] = Header(None, alias="X-Request-ID"),
+):
+    u = _get_user(request)
+    svc = _service(request)
+    result = await svc.create_for_investigation(u, investigation_id, req, x_idempotency_key, x_request_id or "")
+    return JSONResponse(content=result.model_dump(mode="json"), status_code=201,
+                        headers={"X-Version": str(result.version)})
+
+
 # ── IR2 — GET /cases/{case_id}/information-requests ───────────────────────────
 
 @router.get("/cases/{case_id}/information-requests",
@@ -73,6 +89,22 @@ async def list_information_requests(
     u = _get_user(request)
     svc = _service(request)
     items, total = await svc.list_for_case(u, case_id, status_filter, page, per_page)
+    return InformationRequestListResponse(total=total, page=page, page_size=per_page, items=items)
+
+
+# ── IR2.1 — GET /investigations/{investigation_id}/information-requests ──────
+
+@router.get("/investigations/{investigation_id}/information-requests",
+            response_model=InformationRequestListResponse)
+async def list_investigation_information_requests(
+    investigation_id: str, request: Request,
+    status_filter: Optional[str] = Query(None, alias="status"),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=100),
+):
+    u = _get_user(request)
+    svc = _service(request)
+    items, total = await svc.list_for_investigation(u, investigation_id, status_filter, page, per_page)
     return InformationRequestListResponse(total=total, page=page, page_size=per_page, items=items)
 
 

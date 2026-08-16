@@ -20,7 +20,10 @@ class CreateInformationRequest(BaseModel):
     assigned_to: str
     question: str = Field(min_length=1)
     due_date: Optional[date] = None
-    expected_case_version: int = Field(ge=1)
+    expected_case_version: Optional[int] = Field(default=None, ge=1)
+    expected_investigation_version: Optional[int] = Field(default=None, ge=1)
+    case_id: Optional[str] = None
+    investigation_id: Optional[str] = None
 
 
 class AcknowledgeInformationRequest(BaseModel):
@@ -49,7 +52,7 @@ class CancelInformationRequest(BaseModel):
 
 class InformationRequestResponse(BaseModel):
     ir_id: str
-    case_id: str
+    case_id: Optional[str] = None
     investigation_id: Optional[str] = None
     created_by: str
     assigned_to: str
@@ -80,7 +83,7 @@ class InformationRequestAdminView(BaseModel):
     """
 
     ir_id: str
-    case_id: str
+    case_id: Optional[str] = None
     investigation_id: Optional[str] = None
     created_by: str
     due_date: Optional[date] = None

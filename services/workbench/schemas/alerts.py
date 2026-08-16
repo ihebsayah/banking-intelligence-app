@@ -69,6 +69,7 @@ class AlertResponse(BaseModel):
     source_rule_id: Optional[str] = None
     related_entity_type: Optional[str] = None
     related_entity_id: Optional[str] = None
+    resolved_customer_id: Optional[str] = None
     scope_id: str
     status: str
     assigned_to: Optional[str] = None

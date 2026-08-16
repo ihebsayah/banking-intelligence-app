@@ -425,9 +425,141 @@ describe('Customer360Page', () => {
       </MemoryRouter>,
     );
 
-    const link = await screen.findByRole('link', { name: 'Open Customer 360' });
-    expect(link).toHaveAttribute('href', '/workbench/customers/CUST_00001');
-    fireEvent.click(link);
+    const links = await screen.findAllByRole('link', { name: /Open Customer 360/i });
+    expect(links.length).toBe(2); // Related-row link + customer-context panel link
+    for (const link of links) expect(link).toHaveAttribute('href', '/workbench/customers/CUST_00001');
+    fireEvent.click(links[0]);
     expect(await screen.findByText('customer:CUST_00001')).toBeInTheDocument();
+  });
+
+  it('renders the profile header and executive summary strip with banking KPIs', async () => {
+    mockGetOverview.mockResolvedValue(analystOverview);
+    renderPage();
+
+    await screen.findByText('Fouad Ben Salah');
+    expect(screen.getByText('MEDIUM')).toBeInTheDocument();
+    expect(screen.getByText('KYC VERIFIED')).toBeInTheDocument();
+    expect(screen.getByText('Risk')).toBeInTheDocument();
+    expect(screen.getByText('2 active')).toBeInTheDocument();
+    expect(screen.getByText('Deposits · TND')).toBeInTheDocument();
+    expect(screen.getByText('1 past due')).toBeInTheDocument();
+    expect(screen.getByText('Loans out · TND')).toBeInTheDocument();
+    expect(screen.getByText('Active flags')).toBeInTheDocument();
+    expect(screen.getByText('AML alerts')).toBeInTheDocument();
+  });
+
+  it('groups accounts by product family with per-group subtotals and highlights non-active statuses', async () => {
+    mockGetOverview.mockResolvedValue({
+      ...analystOverview,
+      accounts: [
+        { account_id: 'ACC-0001', account_type: 'current', status: 'active', balance: '100000.00', available_balance: '99000.00', currency: 'TND', branch: 'Tunis', opened_at: '2019-04-12T00:00:00Z' },
+        { account_id: 'ACC-0003', account_type: 'checking', status: 'frozen', balance: '5000.00', available_balance: '0.00', currency: 'TND', branch: 'Tunis', opened_at: '2022-01-01T00:00:00Z' },
+        { account_id: 'ACC-0002', account_type: 'savings', status: 'active', balance: '5000.00', available_balance: '5000.00', currency: 'USD', branch: 'Sfax', opened_at: '2020-01-05T00:00:00Z' },
+      ],
+    });
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('tab', { name: 'Accounts & Loans' }));
+    expect(await screen.findByText('Checking · 2 accounts')).toBeInTheDocument();
+    expect(screen.getByText('Savings · 1 account')).toBeInTheDocument();
+    expect(screen.getAllByText('105,000.00 TND').length).toBe(1);
+    expect(screen.getByText('frozen')).toBeInTheDocument();
+  });
+
+  it('classifies loan operational risk (past due vs current)', async () => {
+    mockGetOverview.mockResolvedValue({
+      ...analystOverview,
+      loans: [
+        { loan_id: 'LOAN-001', loan_type: 'mortgage', product: 'Home Loan', principal: '120000.00', outstanding_balance: '80000.00', currency: 'TND', interest_rate: '6.5', maturity_date: '2035-06-01T00:00:00Z', status: 'active', days_past_due: 12 },
+        { loan_id: 'LOAN-002', loan_type: 'consumer', product: 'Auto Loan', principal: '20000.00', outstanding_balance: '5000.00', currency: 'TND', interest_rate: '8.0', maturity_date: '2028-01-01T00:00:00Z', status: 'actif', days_past_due: 0 },
+      ],
+    });
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('tab', { name: 'Accounts & Loans' }));
+    expect(await screen.findByText('Past due')).toBeInTheDocument();
+    expect(screen.getByText('Current')).toBeInTheDocument();
+  });
+
+  it('shows a professional empty state for a customer with no accounts or loans', async () => {
+    mockGetOverview.mockResolvedValue({ ...analystOverview, accounts: [], loans: [] });
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('tab', { name: 'Accounts & Loans' }));
+    expect(await screen.findByText('No accounts or loans on record')).toBeInTheDocument();
+    expect(screen.getByText(/no accounts or loans within your permitted scope/)).toBeInTheDocument();
+  });
+
+  it('splits data quality into attention and informational boxes', async () => {
+    mockGetOverview.mockResolvedValue({
+      ...analystOverview,
+      data_quality: { ...dq, missing_relationship_manager: true, unresolved_workbench_reference: true },
+    });
+    renderPage();
+
+    await screen.findByText('Fouad Ben Salah');
+    expect(screen.getByText('Needs attention')).toBeInTheDocument();
+    expect(screen.getByText('Some operational records could not be linked to this customer.')).toBeInTheDocument();
+    expect(screen.getByText('Profile notes')).toBeInTheDocument();
+    expect(screen.getByText('No relationship manager is currently assigned.')).toBeInTheDocument();
+  });
+
+  it('caches transactions across tab switches instead of refetching', async () => {
+    mockGetOverview.mockResolvedValue(analystOverview);
+    mockGetTransactions.mockResolvedValue({
+      transaction_summary: txSummary,
+      recent_transactions: Array.from({ length: 20 }, (_, i) => txRow(i + 1)),
+      total_count: 45,
+      limit: 20,
+      offset: 0,
+      data_quality: { ...dq },
+      generated_at: '2026-08-01T00:00:00Z',
+    });
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('tab', { name: 'Transactions' }));
+    expect(await screen.findByText('Showing 1–20 of 45')).toBeInTheDocument();
+    expect(mockGetTransactions).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Overview' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Transactions' }));
+    expect(await screen.findByText('Showing 1–20 of 45')).toBeInTheDocument();
+    expect(mockGetTransactions).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks transaction direction (IN/OUT) from the signed amount', async () => {
+    mockGetOverview.mockResolvedValue(analystOverview);
+    const rows = Array.from({ length: 20 }, (_, i) => txRow(i + 1));
+    rows[0] = { ...rows[0], amount: '-322.00' };
+    mockGetTransactions.mockResolvedValue({
+      transaction_summary: txSummary,
+      recent_transactions: rows,
+      total_count: 20,
+      limit: 20,
+      offset: 0,
+      data_quality: { ...dq },
+      generated_at: '2026-08-01T00:00:00Z',
+    });
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('tab', { name: 'Transactions' }));
+    expect(await screen.findByText('OUT')).toBeInTheDocument();
+    expect(screen.getAllByText('IN').length).toBeGreaterThan(0);
+  });
+
+  it('groups workbench records by entity type', async () => {
+    mockUseAuth.mockReturnValue({
+      applicationUser: { user_id: 'comp_1', role: 'compliance' },
+      hasPermission: (p: string) => COMPLIANCE_PERMS.includes(p),
+      hasRole: () => false,
+    });
+    mockGetOverview.mockResolvedValue(complianceOverview);
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('tab', { name: 'Workbench' }));
+    expect(await screen.findByText('Alerts (1)')).toBeInTheDocument();
+    expect(screen.getByText('Investigations (1)')).toBeInTheDocument();
+    expect(screen.getByText('Compliance cases (1)')).toBeInTheDocument();
+    expect(screen.getByText('Information requests (1)')).toBeInTheDocument();
   });
 });

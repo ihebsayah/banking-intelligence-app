@@ -11,6 +11,36 @@ REPORT_FILE="${REPORT_FILE:-/tmp/staging-smoke-report.txt}"
 PASS_COUNT=0
 FAIL_COUNT=0
 
+ALERT_ID=""
+DISMISS_ID=""
+INV_ID=""
+CASE_ID=""
+IR_CASE_ID=""
+
+cleanup_smoke_data() {
+  python3 -c "
+import psycopg2
+conn = psycopg2.connect('postgresql://integration_user:integrationpass123@localhost:5435/banking_integration')
+cur = conn.cursor()
+ids = [x for x in ['$ALERT_ID', '$DISMISS_ID', '$INV_ID', '$CASE_ID', '$IR_CASE_ID'] if x]
+if ids:
+    cur.execute('DELETE FROM information_requests WHERE case_id = ANY(%s)', (ids,))
+    cur.execute('DELETE FROM approval_decisions WHERE approval_request_id IN (SELECT approval_request_id FROM approval_requests WHERE entity_id = ANY(%s))', (ids,))
+    cur.execute('DELETE FROM approval_requests WHERE entity_id = ANY(%s)', (ids,))
+    cur.execute('DELETE FROM comments WHERE entity_id = ANY(%s)', (ids,))
+    cur.execute('DELETE FROM activity_timeline WHERE entity_id = ANY(%s)', (ids,))
+    cur.execute('DELETE FROM assignment_history WHERE entity_id = ANY(%s)', (ids,))
+    cur.execute('DELETE FROM notifications WHERE entity_id = ANY(%s)', (ids,))
+    cur.execute('DELETE FROM audit_outbox WHERE entity_id = ANY(%s)', (ids,))
+    cur.execute('DELETE FROM compliance_cases WHERE case_id = ANY(%s) OR alert_id = ANY(%s) OR investigation_id = ANY(%s)', (ids, ids, ids))
+    cur.execute('DELETE FROM investigations WHERE investigation_id = ANY(%s) OR alert_id = ANY(%s)', (ids, ids))
+    cur.execute('DELETE FROM alerts WHERE alert_id = ANY(%s)', (ids,))
+conn.commit()
+cur.close(); conn.close()
+" 2>/dev/null || true
+}
+trap cleanup_smoke_data EXIT
+
 BOLD='\033[1m'; GREEN='\033[0;32m'; RED='\033[0;31m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
 
 log() { echo -e "$@" | tee -a "$REPORT_FILE"; }

@@ -68,6 +68,16 @@ export const casesApi = {
     return res.data;
   },
 
+  listUnassigned: async (params: ListAssignedParams = {}): Promise<CaseListResponse> => {
+    const qs = new URLSearchParams();
+    if (params.status) qs.append('status', params.status);
+    if (params.priority) qs.append('priority', params.priority);
+    qs.append('page', String(params.page ?? 1));
+    qs.append('per_page', String(params.perPage ?? 50));
+    const res = await apiClient.get<CaseListResponse>(`/cases/unassigned?${qs.toString()}`);
+    return res.data;
+  },
+
   get: async (caseId: string): Promise<Case> => {
     const res = await apiClient.get<Case>(`/cases/${caseId}`);
     return res.data;
@@ -134,6 +144,18 @@ export const casesApi = {
 
   listTimeline: async (caseId: string, page = 1, perPage = 50): Promise<TimelineListResponse> => {
     const res = await apiClient.get<TimelineListResponse>(`/cases/${caseId}/timeline?page=${page}&per_page=${perPage}`);
+    return res.data;
+  },
+
+  close: async (caseId: string, payload: { resolution?: string; expected_version: number; approval_request_id?: string }): Promise<CaseMutationResponse> => {
+    const res = await apiClient.post<CaseMutationResponse>(`/cases/${caseId}/close`, payload,
+      { headers: { 'X-Request-ID': uuid(), 'X-Idempotency-Key': uuid() } });
+    return res.data;
+  },
+
+  reopen: async (caseId: string, payload: { reopen_reason: string; expected_version: number; approval_request_id?: string }): Promise<CaseMutationResponse> => {
+    const res = await apiClient.post<CaseMutationResponse>(`/cases/${caseId}/reopen`, payload,
+      { headers: { 'X-Request-ID': uuid(), 'X-Idempotency-Key': uuid() } });
     return res.data;
   },
 };

@@ -58,3 +58,14 @@ class IdempotencyMismatch(WorkbenchError):
 class InvalidAssignee(WorkbenchError):
     def __init__(self, detail: str) -> None:
         super().__init__("INVALID_ASSIGNEE", detail, 400)
+
+
+class InvalidFileType(WorkbenchError):
+    def __init__(self, content_type: str, filename: str) -> None:
+        super().__init__("INVALID_FILE_TYPE", f"File type not permitted: {content_type} ({filename})", 400)
+
+
+class FileTooLarge(WorkbenchError):
+    def __init__(self, size_bytes: int, max_bytes: int) -> None:
+        super().__init__("FILE_TOO_LARGE", f"File size {size_bytes} bytes exceeds maximum limit of {max_bytes} bytes", 400)
+

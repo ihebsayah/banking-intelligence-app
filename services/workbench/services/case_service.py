@@ -214,6 +214,27 @@ class CaseService:
             cases = [c for c in cases if c.priority == priority]
         return [CaseResponse(**c.model_dump()) for c in cases], len(cases)
 
+    async def list_unassigned(
+        self, user: ApplicationUser, scope: str,
+        status: Optional[str] = None, priority: Optional[str] = None,
+        page: int = 1, per_page: int = 50,
+    ) -> Tuple[List[CaseResponse], int]:
+        await authorise(
+            user, "case:read_assigned",
+            Resource(id="unassigned", status="active", entity_type="collection"),
+            self._db, RequestContext())
+        limit = min(per_page, 100)
+        offset = (page - 1) * limit
+        repo = CaseRepo(self._db)
+        cases = await repo.list_unassigned(
+            scope_id=scope, status=status, priority=priority,
+            limit=limit, offset=offset,
+        )
+        total = await repo.count_unassigned(
+            scope_id=scope, status=status, priority=priority,
+        )
+        return [CaseResponse(**c.model_dump()) for c in cases], total
+
     async def get_by_id(
         self, user: ApplicationUser, case_id: str,
     ) -> CaseResponse:

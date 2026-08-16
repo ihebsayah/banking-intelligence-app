@@ -211,3 +211,16 @@ class Customer360Overview(BaseModel):
     admin_metadata: Optional[AdminCustomerMetadata] = None
     data_quality: DataQuality = Field(default_factory=DataQuality)
     generated_at: str = ""
+
+
+class CustomerSearchResultItem(BaseModel):
+    customer_id: str
+    name: str
+    segment: Optional[str] = None
+
+
+class CustomerSearchResponse(BaseModel):
+    items: List[CustomerSearchResultItem] = Field(default_factory=list)
+    total: int = 0
+    limit: int = 20
+    offset: int = 0

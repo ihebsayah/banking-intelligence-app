@@ -58,6 +58,21 @@ async def list_assigned(
     return CaseListResponse(total=total, page=page, page_size=per_page, items=items)
 
 
+@router.get("/unassigned", response_model=CaseListResponse)
+async def list_unassigned(
+    request: Request,
+    status_filter: Optional[str] = Query(None, alias="status"),
+    priority: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=100),
+):
+    u = _get_user(request)
+    svc = _service(request)
+    items, total = await svc.list_unassigned(
+        u, _get_scope(request), status_filter, priority, page, per_page)
+    return CaseListResponse(total=total, page=page, page_size=per_page, items=items)
+
+
 @router.get("/{case_id}", response_model=CaseResponse)
 async def get_case(case_id: str, request: Request):
     u = _get_user(request)

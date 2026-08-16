@@ -909,6 +909,7 @@ class TestRouteRegistration:
         from workbench.routers.cases import router
         routes = {(r.path, tuple(sorted(r.methods))) for r in router.routes}
         assert ("/api/v1/cases/assigned", ("GET",)) in routes
+        assert ("/api/v1/cases/unassigned", ("GET",)) in routes
         assert ("/api/v1/cases/{case_id}", ("GET",)) in routes
         assert ("/api/v1/cases/{case_id}/assign", ("PATCH",)) in routes
         assert ("/api/v1/cases/{case_id}/transition", ("PATCH",)) in routes
@@ -922,6 +923,67 @@ class TestRouteRegistration:
         paths = {r.path for r in router.routes}
         assert "/api/v1/cases/{case_id}/status" not in paths
 
-    def test_exact_count_eight(self):
+    def test_exact_count_nine(self):
         from workbench.routers.cases import router
-        assert len(router.routes) == 8
+        assert len(router.routes) == 9
+
+
+class TestListUnassigned:
+    @pytest.mark.asyncio
+    async def test_list_unassigned_compliance_success(self, mock_db):
+        cases = [make_case(assigned_to=None, scope_id="hq_main")]
+        with patch("workbench.services.case_service.CaseRepo.list_unassigned", AsyncMock(return_value=cases)), \
+             patch("workbench.services.case_service.CaseRepo.count_unassigned", AsyncMock(return_value=1)), \
+             patch("workbench.services.case_service.authorise", AsyncMock()):
+            items, total = await CaseService(mock_db).list_unassigned(
+                MOCK_USER, "hq_main")
+            assert total == 1
+            assert len(items) == 1
+            assert items[0].assigned_to is None
+
+    @pytest.mark.asyncio
+    async def test_list_unassigned_analyst_denied(self, mock_db):
+        from shared.authorise import PermissionDeniedError
+        with patch("workbench.services.case_service.authorise",
+                   AsyncMock(side_effect=PermissionDeniedError("case:read_assigned"))):
+            with pytest.raises(PermissionDeniedError):
+                await CaseService(mock_db).list_unassigned(NO_PERM_USER, "hq_main")
+
+
+class TestClaimCase:
+    @pytest.mark.asyncio
+    async def test_claim_unassigned_case_success(self, mock_db):
+        case_unassigned = make_case(assigned_to=None, status="open", version=1, scope_id="hq_main")
+        uow = make_uow_mock()
+        with patch("workbench.services.case_service.UnitOfWork", return_value=uow), \
+             patch("workbench.services.case_service.IdempotencyRepo.lookup", AsyncMock(return_value=None)), \
+             patch("workbench.services.case_service.IdempotencyRepo.store", AsyncMock()), \
+             patch("workbench.services.case_service.CaseRepo.fetch_by_id", AsyncMock(return_value=case_unassigned)), \
+             patch("workbench.services.case_service.authorise", AsyncMock()), \
+             patch("workbench.services.case_service._validate_assignee", AsyncMock()), \
+             patch("workbench.services.case_service.CaseRepo.update", AsyncMock(return_value=case_unassigned)), \
+             patch("workbench.services.case_service.TimelineRepo.insert", AsyncMock()), \
+             patch("workbench.services.case_service.AssignmentHistoryRepo.insert", AsyncMock()), \
+             patch("workbench.services.case_service.NotificationRepo.insert", AsyncMock()), \
+             patch("workbench.services.case_service.OutboxRepo.insert", AsyncMock()):
+            req = AssignCaseRequest(assigned_to="user1", expected_version=1)
+            res = await CaseService(mock_db).assign(MOCK_USER, case_unassigned.case_id, req)
+            assert res.case.assigned_to == "user1"
+            assert res.case.status == "assigned"
+            assert res.version == 2
+
+    @pytest.mark.asyncio
+    async def test_claim_case_concurrency_conflict(self, mock_db):
+        case_unassigned = make_case(assigned_to=None, status="open", version=1)
+        uow = make_uow_mock()
+        with patch("workbench.services.case_service.UnitOfWork", return_value=uow), \
+             patch("workbench.services.case_service.IdempotencyRepo.lookup", AsyncMock(return_value=None)), \
+             patch("workbench.services.case_service.CaseRepo.fetch_by_id", AsyncMock(return_value=case_unassigned)), \
+             patch("workbench.services.case_service.authorise", AsyncMock()), \
+             patch("workbench.services.case_service._validate_assignee", AsyncMock()), \
+             patch("workbench.services.case_service.CaseRepo.update", AsyncMock(return_value=None)):
+            req = AssignCaseRequest(assigned_to="user1", expected_version=1)
+            with pytest.raises(VersionConflict):
+                await CaseService(mock_db).assign(MOCK_USER, case_unassigned.case_id, req)
+
+

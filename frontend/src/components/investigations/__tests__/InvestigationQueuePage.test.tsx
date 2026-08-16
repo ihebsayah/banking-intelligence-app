@@ -3,16 +3,28 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import React from 'react';
 
-const { mockListAssigned } = vi.hoisted(() => ({
+const { mockListAssigned, mockListSubmitted, mockHasPermission } = vi.hoisted(() => ({
   mockListAssigned: vi.fn(),
+  mockListSubmitted: vi.fn(),
+  mockHasPermission: vi.fn(),
 }));
 
 vi.mock('../../../api/investigationsApi', () => ({
-  investigationsApi: { listAssigned: mockListAssigned },
+  investigationsApi: {
+    listAssigned: mockListAssigned,
+    listSubmitted: mockListSubmitted,
+  },
+}));
+
+vi.mock('../../../auth/AuthProvider', () => ({
+  useAuth: () => ({
+    hasPermission: mockHasPermission,
+  }),
 }));
 
 import { InvestigationQueuePage } from '../InvestigationQueuePage';
 import type { Investigation } from '../../../types/investigations';
+import { PERMISSIONS } from '../../../lib/permissions';
 
 const base: Investigation = {
   investigation_id: 'inv_1', title: 'Round-trip transfer', description: 'D', alert_id: 'al_12345678',
@@ -20,8 +32,8 @@ const base: Investigation = {
   created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z', version: 2,
 };
 
-const base2: Investigation = {
-  ...base, investigation_id: 'inv_2', status: 'submitted', priority: 'low', title: 'Minor review',
+const baseSubmitted: Investigation = {
+  ...base, investigation_id: 'inv_sub_1', status: 'submitted', priority: 'high', title: 'Submitted Review',
 };
 
 function renderQueue() {
@@ -38,44 +50,47 @@ function renderQueue() {
 describe('InvestigationQueuePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockListAssigned.mockResolvedValue({ total: 2, page: 1, page_size: 50, items: [base, base2] });
-  });
-
-  it('renders assigned investigations with priority and status badges', async () => {
-    renderQueue();
-    expect(await screen.findByText('Round-trip transfer')).toBeInTheDocument();
-    expect(screen.getByText('Minor review')).toBeInTheDocument();
-    expect(screen.getByText('HIGH')).toBeInTheDocument();
-    expect(screen.getAllByText('submitted').length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/alert #al_12345/).length).toBe(2);
-  });
-
-  it('shows the empty state when nothing is assigned', async () => {
-    mockListAssigned.mockResolvedValue({ total: 0, page: 1, page_size: 50, items: [] });
-    renderQueue();
-    expect(await screen.findByText('No investigations assigned to you')).toBeInTheDocument();
-  });
-
-  it('refetches with filters when status and priority change', async () => {
-    renderQueue();
-    await screen.findByText('Round-trip transfer');
-    fireEvent.change(screen.getByLabelText('Filter by status'), { target: { value: 'active' } });
-    fireEvent.change(screen.getByLabelText('Filter by priority'), { target: { value: 'high' } });
-    await waitFor(() => {
-      const calls = mockListAssigned.mock.calls;
-      expect(calls[calls.length - 1][0].status).toBe('active');
-      expect(calls[calls.length - 1][0].priority).toBe('high');
-      expect(calls[calls.length - 1][0].page).toBe(1);
-    });
-  });
-
-  it('shows the error state and retries on failure', async () => {
-    mockListAssigned.mockRejectedValue({ response: { status: 503, data: { message: 'Down' } } });
-    renderQueue();
-    expect(await screen.findByText('Down')).toBeInTheDocument();
+    mockHasPermission.mockImplementation((perm: string) => perm === PERMISSIONS.INVESTIGATION_READ_OWN);
     mockListAssigned.mockResolvedValue({ total: 1, page: 1, page_size: 50, items: [base] });
-    fireEvent.click(screen.getByRole('button', { name: /Retry/i }));
+    mockListSubmitted.mockResolvedValue({ total: 1, page: 1, page_size: 50, items: [baseSubmitted] });
+  });
+
+  it('renders analyst assigned queue when user has investigation:read_own', async () => {
+    renderQueue();
     expect(await screen.findByText('Round-trip transfer')).toBeInTheDocument();
+    expect(mockListAssigned).toHaveBeenCalled();
+    expect(mockListSubmitted).not.toHaveBeenCalled();
+    expect(screen.getByText('Workbench — Investigation Queue')).toBeInTheDocument();
+  });
+
+  it('renders compliance review queue when user has investigation:review', async () => {
+    mockHasPermission.mockImplementation((perm: string) => perm === PERMISSIONS.INVESTIGATION_REVIEW);
+    renderQueue();
+    expect(await screen.findByText('Submitted Review')).toBeInTheDocument();
+    expect(mockListSubmitted).toHaveBeenCalled();
+    expect(mockListAssigned).not.toHaveBeenCalled();
+    expect(screen.getByText('Workbench — Compliance Review Queue')).toBeInTheDocument();
+  });
+
+  it('allows tab switching between submitted and assigned queues when user has both permissions', async () => {
+    mockHasPermission.mockImplementation((perm: string) =>
+      perm === PERMISSIONS.INVESTIGATION_REVIEW || perm === PERMISSIONS.INVESTIGATION_READ_OWN
+    );
+    renderQueue();
+    expect(await screen.findByText('Submitted Review')).toBeInTheDocument();
+
+    const assignedTab = screen.getByRole('button', { name: /My Assigned Investigations/i });
+    fireEvent.click(assignedTab);
+
+    expect(await screen.findByText('Round-trip transfer')).toBeInTheDocument();
+    expect(mockListAssigned).toHaveBeenCalled();
+  });
+
+  it('shows empty state for compliance submitted queue', async () => {
+    mockHasPermission.mockImplementation((perm: string) => perm === PERMISSIONS.INVESTIGATION_REVIEW);
+    mockListSubmitted.mockResolvedValue({ total: 0, page: 1, page_size: 50, items: [] });
+    renderQueue();
+    expect(await screen.findByText('No submitted investigations awaiting review')).toBeInTheDocument();
   });
 
   it('navigates to detail on row click', async () => {

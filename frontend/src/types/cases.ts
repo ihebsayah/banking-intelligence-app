@@ -101,7 +101,7 @@ export type InformationRequestStatus =
  * optional content fields tolerate the metadata-only admin shape. */
 export interface InformationRequest {
   ir_id: string;
-  case_id: string;
+  case_id?: string | null;
   investigation_id?: string | null;
   created_by: string;
   assigned_to?: string | null;

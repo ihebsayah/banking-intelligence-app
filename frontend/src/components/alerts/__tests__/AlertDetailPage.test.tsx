@@ -3,7 +3,7 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import React from 'react';
 
-const { mockGet, mockAcknowledge, mockDismiss, mockEscalate, mockInvestigate, mockCreateApproval } =
+const { mockGet, mockAcknowledge, mockDismiss, mockEscalate, mockInvestigate, mockCreateApproval, mockGetOverview } =
   vi.hoisted(() => ({
     mockGet: vi.fn(),
     mockAcknowledge: vi.fn(),
@@ -11,6 +11,7 @@ const { mockGet, mockAcknowledge, mockDismiss, mockEscalate, mockInvestigate, mo
     mockEscalate: vi.fn(),
     mockInvestigate: vi.fn(),
     mockCreateApproval: vi.fn(),
+    mockGetOverview: vi.fn(),
   }));
 
 vi.mock('../../../auth/AuthProvider', () => {
@@ -43,6 +44,18 @@ vi.mock('../../../api/approvalsApi', () => ({
     create: mockCreateApproval,
     get: vi.fn(),
   },
+}));
+
+vi.mock('../../../api/customer360Api', () => ({
+  customer360Api: { getOverview: mockGetOverview, getTransactions: vi.fn() },
+  parseCustomer360Error: (err: unknown) => ({
+    kind: (err as { response?: { status?: number } })?.response?.status === 403 ? 'forbidden'
+      : (err as { response?: { status?: number } })?.response?.status === 404 ? 'not_found'
+      : (err as { response?: { status?: number } })?.response?.status === 503 ? 'unavailable'
+      : 'unknown',
+    status: (err as { response?: { status?: number } })?.response?.status,
+    message: 'mock',
+  }),
 }));
 
 import { AlertDetailPage } from '../AlertDetailPage';
@@ -88,6 +101,13 @@ describe('AlertDetailPage', () => {
     mockGet.mockResolvedValue(makeAlert());
     mockAcknowledge.mockResolvedValue({ success: true });
     mockDismiss.mockResolvedValue({ success: true });
+    mockGetOverview.mockResolvedValue({
+      customer: { customer_id: 'CUST_00001', name: 'Fouad Ben Salah', customer_type: 'corporate', segment: 'CORP-A', status: 'active', onboarding_date: '2019-04-12T00:00:00Z', email: null, phone: null, nationality: null, date_of_birth: null, employment_status: null, employer_name: null, national_id: null, passport_number: null, tax_id: null, annual_income: null, net_worth_band: null, pep: false },
+      relationship: null, financial_summary: null, accounts: [], loans: [], transaction_summary: null, recent_transactions: [],
+      kyc_aml: null, risk: null, analytics_alerts: [], workbench_links: [], admin_metadata: null,
+      data_quality: { missing_profile: false, missing_branch: false, missing_relationship_manager: false, stale_kyc: false, unresolved_workbench_reference: false, unavailable_sections: [] },
+      generated_at: '2026-08-01T00:00:00Z',
+    });
   });
 
   it('renders alert fields, badges and version', async () => {
@@ -102,14 +122,38 @@ describe('AlertDetailPage', () => {
   it('links to Customer 360 only when the alert carries a validated customer reference', async () => {
     mockGet.mockResolvedValue(makeAlert({ related_entity_type: 'customer', related_entity_id: 'CUST_00001' }));
     const { unmount } = renderDetail();
-    const link = await screen.findByRole('link', { name: 'Open Customer 360' });
-    expect(link).toHaveAttribute('href', '/workbench/customers/CUST_00001');
+    const links = await screen.findAllByRole('link', { name: 'Open Customer 360' });
+    expect(links.length).toBe(2); // Related-row link + panel header link
+    for (const link of links) expect(link).toHaveAttribute('href', '/workbench/customers/CUST_00001');
+    expect(screen.getByTestId('customer-context-panel')).toBeInTheDocument();
+    expect(await screen.findByText('Fouad Ben Salah')).toBeInTheDocument();
 
     unmount();
     mockGet.mockResolvedValue(makeAlert({ related_entity_type: 'customer', related_entity_id: null }));
     renderDetail();
     await screen.findByText('Suspicious transfer');
     expect(screen.queryByRole('link', { name: 'Open Customer 360' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('customer-context-panel')).not.toBeInTheDocument();
+  });
+
+  it('shows no customer context panel for a non-customer related entity without resolved_customer_id', async () => {
+    mockGet.mockResolvedValue(makeAlert({ related_entity_type: 'account', related_entity_id: 'ACC-1' }));
+    renderDetail();
+    await screen.findByText('Suspicious transfer');
+    expect(screen.queryByTestId('customer-context-panel')).not.toBeInTheDocument();
+  });
+
+  it('renders CustomerContextPanel for an account-linked alert when resolved_customer_id is provided', async () => {
+    mockGet.mockResolvedValue(makeAlert({
+      related_entity_type: 'account',
+      related_entity_id: 'ACC_00412',
+      resolved_customer_id: 'CUST_00141',
+    }));
+    renderDetail();
+    const links = await screen.findAllByRole('link', { name: 'Open Customer 360' });
+    expect(links.length).toBe(2);
+    for (const link of links) expect(link).toHaveAttribute('href', '/workbench/customers/CUST_00141');
+    expect(screen.getByTestId('customer-context-panel')).toBeInTheDocument();
   });
 
   it('acknowledges an assigned alert and refetches', async () => {

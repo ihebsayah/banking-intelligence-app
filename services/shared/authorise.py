@@ -230,7 +230,7 @@ INVESTIGATION_TRANSITIONS: Dict[str, set] = {
                "investigation:read_own", "investigation:read"} | COMMENT_ACTIONS,
     "awaiting_information": {"investigation:transition", "investigation:read_own",
                              "investigation:read", "investigation:assign"} | COMMENT_ACTIONS,
-    "submitted": {"investigation:review", "investigation:assign",
+    "submitted": {"investigation:review", "info_request:create", "case:create", "investigation:assign",
                   "investigation:read_own", "investigation:read"} | COMMENT_ACTIONS,
     "returned": {"investigation:update", "investigation:modify_findings",
                  "investigation:transition", "investigation:assign",
@@ -240,7 +240,8 @@ INVESTIGATION_TRANSITIONS: Dict[str, set] = {
 }
 
 CASE_TRANSITIONS: Dict[str, set] = {
-    "open": {"case:assign", "case:read_assigned", "case:read",
+    "new": {"case:create", "case:read"} | COMMENT_ACTIONS,
+    "open": {"case:create", "case:assign", "case:read_assigned", "case:read",
              "info_request:read_assigned", "info_request:read"} | COMMENT_ACTIONS,
     "assigned": {"case:transition", "case:read_assigned", "case:read",
                  "info_request:read_assigned", "info_request:read"} | COMMENT_ACTIONS,
@@ -321,7 +322,7 @@ ORPHAN_TRANSITIONS: Dict[str, set] = {
 # gated by the real entity's status map (an empty status still 409s).
 COLLECTION_TRANSITIONS: Dict[str, set] = {
     "active": {
-        "alert:read_assigned", "investigation:read_own",
+        "alert:read_assigned", "investigation:read_own", "investigation:review",
         "case:read_assigned", "info_request:read_assigned",
     },
 }
@@ -380,7 +381,9 @@ async def authorise(
 
     # Step 5 — Ownership/assignment check
     if action in OWNERSHIP_ACTIONS:
-        if resource.assigned_to != user.user_id:
+        if action == "info_request:create" and resource.entity_type == "investigation" and resource.status == "submitted":
+            pass
+        elif resource.assigned_to != user.user_id:
             raise OwnershipDeniedError()
     if action in CREATOR_ACTIONS:
         if resource.created_by != user.user_id:

@@ -62,6 +62,68 @@ class Customer360Repository:
             [customer_id],
         )
 
+    async def search_customers(
+        self,
+        query: str,
+        limit: int = 20,
+        offset: int = 0,
+        allowed_branches: Optional[List[str]] = None,
+    ) -> Tuple[List[Dict[str, Any]], int]:
+        """Search authorized customers matching query string within allowed branches.
+
+        Returns (rows, total_count). If allowed_branches is [] (empty list),
+        returns ([], 0). If allowed_branches is None, query is unrestricted.
+        """
+        if allowed_branches is not None and not allowed_branches:
+            return [], 0
+
+        pattern_prefix = f"{query}%"
+        pattern_contains = f"%{query}%"
+
+        if allowed_branches is None:
+            items_query = """
+                SELECT c.customer_id, c.name, c.segment
+                  FROM customers c
+                 WHERE (c.customer_id ILIKE $1 OR c.name ILIKE $2)
+                 ORDER BY c.customer_id
+                 LIMIT $3 OFFSET $4
+            """
+            count_query = """
+                SELECT COUNT(*) AS total
+                  FROM customers c
+                 WHERE (c.customer_id ILIKE $1 OR c.name ILIKE $2)
+            """
+            rows = await self._db.fetch_all(items_query, [pattern_prefix, pattern_contains, limit, offset])
+            total_row = await self._db.fetch_one(count_query, [pattern_prefix, pattern_contains])
+        else:
+            items_query = """
+                SELECT DISTINCT c.customer_id, c.name, c.segment
+                  FROM customers c
+                  JOIN accounts a ON a.customer_id = c.customer_id
+                 WHERE a.branch_id = ANY($1)
+                   AND (c.customer_id ILIKE $2 OR c.name ILIKE $3)
+                 ORDER BY c.customer_id
+                 LIMIT $4 OFFSET $5
+            """
+            count_query = """
+                SELECT COUNT(DISTINCT c.customer_id) AS total
+                  FROM customers c
+                  JOIN accounts a ON a.customer_id = c.customer_id
+                 WHERE a.branch_id = ANY($1)
+                   AND (c.customer_id ILIKE $2 OR c.name ILIKE $3)
+            """
+            rows = await self._db.fetch_all(items_query, [allowed_branches, pattern_prefix, pattern_contains, limit, offset])
+            total_row = await self._db.fetch_one(count_query, [allowed_branches, pattern_prefix, pattern_contains])
+
+        total = int(total_row.get("total", 0) if total_row else 0)
+        return rows, total
+
+    async def fetch_branches_for_regions(self, region_scopes: List[str]) -> List[Dict[str, Any]]:
+        return await self._db.fetch_all(
+            "SELECT branch_id FROM branches WHERE region_id = ANY($1)",
+            [region_scopes],
+        )
+
     async def fetch_profile(self, customer_id: str) -> Optional[Dict[str, Any]]:
         return await self._db.fetch_one(
             """
@@ -397,8 +459,37 @@ class WorkbenchLinkRepository:
     No linkage is inferred from free text, descriptions, or findings.
     """
 
-    def __init__(self, db: DatabaseConnector) -> None:
+    def __init__(self, db: DatabaseConnector, main_db: Optional[DatabaseConnector] = None) -> None:
         self._db = db
+        self._main_db = main_db
+
+    async def resolve_customer_id_for_account(self, account_id: str) -> Optional[str]:
+        if not account_id:
+            return None
+        db = self._main_db or self._db
+        try:
+            row = await db.fetch_one(
+                "SELECT customer_id FROM accounts WHERE account_id = $1",
+                [account_id],
+            )
+            if row and row.get("customer_id"):
+                return str(row["customer_id"])
+        except Exception:
+            return None
+        return None
+
+    async def resolve_customer_id(
+        self, related_entity_type: Optional[str], related_entity_id: Optional[str]
+    ) -> Optional[str]:
+        if not related_entity_type or not related_entity_id:
+            return None
+        et = related_entity_type.strip().lower()
+        ei = related_entity_id.strip()
+        if et == "customer":
+            return ei
+        elif et == "account":
+            return await self.resolve_customer_id_for_account(ei)
+        return None
 
     async def fetch_user_scopes(self, user_id: str) -> List[Dict[str, Any]]:
         return await self._db.fetch_all(

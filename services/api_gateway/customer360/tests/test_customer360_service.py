@@ -124,6 +124,15 @@ class FakeMainRepo:
         self.analytics = ANALYTICS_ALERTS
         self.tx_count = 42
         self.fail_core = False
+        self.search_rows = [{"customer_id": "CUST_00001", "name": "Fouad Ben Salah", "segment": "PART_PREM"}]
+
+    async def search_customers(self, query, limit=20, offset=0, allowed_branches=None):
+        if allowed_branches is not None and not allowed_branches:
+            return [], 0
+        return self.search_rows, len(self.search_rows)
+
+    async def fetch_branches_for_regions(self, region_scopes):
+        return []
 
     async def fetch_customer_core(self, customer_id):
         if self.fail_core:
@@ -523,3 +532,90 @@ async def test_audit_payload_has_no_raw_pii(monkeypatch):
     assert "sections_denied" in audit
     for raw in _RAW_PII_VALUES:
         assert raw not in str(audit), f"raw PII in audit: {raw}"
+
+
+@pytest.mark.asyncio
+async def test_workbench_link_repo_resolve_customer_id():
+    from customer360.repos import WorkbenchLinkRepository
+
+    class FakeDbConnector:
+        def __init__(self, account_map=None):
+            self.account_map = account_map or {}
+
+        async def fetch_one(self, query, params=None):
+            if "FROM accounts" in query and params:
+                acc_id = params[0]
+                if acc_id in self.account_map:
+                    return {"customer_id": self.account_map[acc_id]}
+            return None
+
+    db = FakeDbConnector(account_map={"ACC_00412": "CUST_00141"})
+    repo = WorkbenchLinkRepository(db)
+
+    # Account resolution (ACC_00412 -> CUST_00141)
+    res_acc = await repo.resolve_customer_id("account", "ACC_00412")
+    assert res_acc == "CUST_00141"
+
+    # Direct customer resolution
+    res_cust = await repo.resolve_customer_id("customer", "CUST_00001")
+    assert res_cust == "CUST_00001"
+
+    # Unknown account
+    res_unknown = await repo.resolve_customer_id("account", "ACC_UNKNOWN")
+    assert res_unknown is None
+
+    # Unsupported entity type
+    res_unsupported = await repo.resolve_customer_id("transaction", "TXN_001")
+    assert res_unsupported is None
+
+    # Null / empty entity fields
+    assert await repo.resolve_customer_id(None, None) is None
+    assert await repo.resolve_customer_id("customer", None) is None
+    assert await repo.resolve_customer_id(None, "CUST_00001") is None
+
+
+@pytest.mark.asyncio
+async def test_search_customers_short_query_returns_empty(monkeypatch):
+    service = _make_service(monkeypatch, wb=FakeWbRepo())
+    res, audit = await service.search_customers(_user("analyst", ANALYST_PERMISSIONS), query="a")
+    assert res.items == []
+    assert res.total == 0
+
+
+@pytest.mark.asyncio
+async def test_search_customers_pii_masking(monkeypatch):
+    main = FakeMainRepo()
+    main.search_rows = [{"customer_id": "CUST_00001", "name": "Fouad Ben Salah", "segment": "PART_PREM"}]
+    service = _make_service(monkeypatch, main=main, wb=FakeWbRepo())
+
+    # Without PII permission -> masked
+    res_no_pii, _ = await service.search_customers(_user("analyst", ANALYST_PERMISSIONS), query="Fouad")
+    assert res_no_pii.items[0].name == "F**** B** S****"
+    assert res_no_pii.items[0].customer_id == "CUST_00001"
+    assert res_no_pii.items[0].segment == "PART_PREM"
+
+    # With PII permission -> unmasked
+    res_pii, _ = await service.search_customers(_user("analyst", ANALYST_PERMISSIONS + ["customer:read_pii"]), query="Fouad")
+    assert res_pii.items[0].name == "Fouad Ben Salah"
+
+
+@pytest.mark.asyncio
+async def test_search_customers_out_of_scope_returns_zero(monkeypatch):
+    main = FakeMainRepo()
+    main.search_rows = [{"customer_id": "CUST_99999", "name": "Secret Person", "segment": "RETAIL"}]
+
+    class ScopeFakeWb:
+        async def fetch_user_scopes(self, user_id):
+            return [{"scope_id": "branch_a", "scope_type": "branch"}]
+
+    async def fake_search(query, limit=20, offset=0, allowed_branches=None):
+        if allowed_branches == ["branch_a"]:
+            return [], 0
+        return main.search_rows, 1
+
+    main.search_customers = fake_search
+    service = _make_service(monkeypatch, main=main, wb=ScopeFakeWb())
+
+    res, _ = await service.search_customers(_user("analyst", ANALYST_PERMISSIONS), query="CUST_99999")
+    assert res.items == []
+    assert res.total == 0

@@ -13,6 +13,7 @@ import { BankingHeader } from '../components/Layout/BankingHeader';
 import { dashboardApi } from '../api/dashboard';
 import { ServiceUnavailable } from '../components/ui/ServiceUnavailable';
 import { formatCurrency, formatNumber, formatDateTime } from '../utils/formatters';
+import { usePermissions, PERMISSIONS } from '../lib/permissions';
 import type { DashboardOverview, RecentActivity, ChartResponse } from '../types/api';
 import type { ChartData } from '../types/dashboard';
 import {
@@ -29,6 +30,9 @@ function toChartData(r: ChartResponse): ChartData {
 }
 
 export function BankingDashboard() {
+  const { hasPermission } = usePermissions();
+  const canReadCustomer = hasPermission(PERMISSIONS.CUSTOMER_READ_BASIC);
+
   const {
     kpis,
     charts,
@@ -217,10 +221,14 @@ export function BankingDashboard() {
                               {tx.transaction_id.slice(0, 8)}...
                             </td>
                             <td className="py-3 font-mono text-[10px] font-semibold" style={{ color: 'var(--text-muted)' }}>
-                              <Link to={`/workbench/customers/${tx.customer_id}`}
-                                className="underline decoration-dotted hover:brightness-125" style={{ color: 'var(--accent-blue)' }}>
-                                {tx.customer_id.slice(0, 8)}...
-                              </Link>
+                              {canReadCustomer ? (
+                                <Link to={`/workbench/customers/${tx.customer_id}`}
+                                  className="underline decoration-dotted hover:brightness-125" style={{ color: 'var(--accent-blue)' }}>
+                                  {tx.customer_id.slice(0, 8)}...
+                                </Link>
+                              ) : (
+                                <span>{tx.customer_id.slice(0, 8)}...</span>
+                              )}
                             </td>
                             <td className="py-3" style={{ color: 'var(--text-secondary)' }}>{tx.description}</td>
                             <td className="py-3">

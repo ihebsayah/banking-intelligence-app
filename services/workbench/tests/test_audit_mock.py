@@ -52,7 +52,15 @@ def get_received_events():
 
 def start_audit_mock(port=18008):
     """Start the audit mock server in a background thread."""
-    server = HTTPServer(('0.0.0.0', port), AuditMockHandler)
+    class ReusableHTTPServer(HTTPServer):
+        allow_reuse_address = True
+
+    try:
+        server = ReusableHTTPServer(('0.0.0.0', port), AuditMockHandler)
+    except OSError:
+        # If server is already running on port, reuse existing
+        return None, None
+
     thread = threading.Thread(target=server.serve_forever)
     thread.daemon = True
     thread.start()

@@ -8,6 +8,8 @@ import { investigationsApi } from '../../api/investigationsApi';
 import { InvestigationPriorityBadge, InvestigationStatusBadge } from './InvestigationBadges';
 import { parseInvestigationError } from './investigationErrors';
 import { formatDateTime } from '../../utils/formatters';
+import { useAuth } from '../../auth/AuthProvider';
+import { PERMISSIONS } from '../../lib/permissions';
 import type { Investigation } from '../../types/investigations';
 
 const PER_PAGE = 50;
@@ -15,9 +17,16 @@ const PER_PAGE = 50;
 const STATUSES = ['open', 'active', 'awaiting_information', 'submitted', 'returned', 'completed', 'cancelled'];
 const PRIORITIES = ['critical', 'high', 'medium', 'low'];
 
+type QueueMode = 'submitted' | 'assigned';
+
 export function InvestigationQueuePage() {
   const navigate = useNavigate();
+  const { hasPermission } = useAuth();
 
+  const canReview = hasPermission(PERMISSIONS.INVESTIGATION_REVIEW);
+  const canViewAssigned = hasPermission(PERMISSIONS.INVESTIGATION_READ_OWN);
+
+  const [queueMode, setQueueMode] = useState<QueueMode>(canReview ? 'submitted' : 'assigned');
   const [items, setItems] = useState<Investigation[]>([]);
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState('');
@@ -25,58 +34,110 @@ export function InvestigationQueuePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Sync initial queueMode if permissions resolve asynchronously
+  useEffect(() => {
+    if (canReview && queueMode === 'assigned' && !canViewAssigned) {
+      setQueueMode('submitted');
+    }
+  }, [canReview, canViewAssigned, queueMode]);
+
   const fetchItems = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await investigationsApi.listAssigned({
-        status: status || undefined,
-        priority: priority || undefined,
-        page,
-        perPage: PER_PAGE,
-      });
-      setItems(res.items);
+      if (queueMode === 'submitted') {
+        const res = await investigationsApi.listSubmitted({
+          priority: priority || undefined,
+          page,
+          perPage: PER_PAGE,
+        });
+        setItems(res.items);
+      } else {
+        const res = await investigationsApi.listAssigned({
+          status: status || undefined,
+          priority: priority || undefined,
+          page,
+          perPage: PER_PAGE,
+        });
+        setItems(res.items);
+      }
     } catch (err) {
       setError(parseInvestigationError(err).message);
       setItems([]);
     } finally {
       setLoading(false);
     }
-  }, [page, status, priority]);
+  }, [queueMode, page, status, priority]);
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
 
   const hasNext = items.length === PER_PAGE;
 
+  const headerTitle = queueMode === 'submitted'
+    ? 'Workbench — Compliance Review Queue'
+    : 'Workbench — Investigation Queue';
+
+  const headerSubtitle = queueMode === 'submitted'
+    ? 'Submitted investigations awaiting compliance review'
+    : 'Investigations assigned to you';
+
   return (
     <div className="min-h-screen flex flex-col" style={{ background: 'var(--bg-primary)' }}>
       <BankingHeader
-        title="Workbench — Investigation Queue"
-        subtitle="Investigations assigned to you"
+        title={headerTitle}
+        subtitle={headerSubtitle}
         onRefresh={fetchItems}
         isRefreshing={loading}
       />
 
       <div className="flex-1 p-6 space-y-6 overflow-y-auto max-w-[1600px] mx-auto w-full">
+        {/* Queue mode selector tabs if user has multiple review/assigned permissions */}
+        {canReview && (
+          <div className="flex items-center gap-2 border-b pb-3" style={{ borderColor: 'var(--bg-border)' }}>
+            <button
+              onClick={() => { setQueueMode('submitted'); setPage(1); }}
+              className={clsx('px-3.5 py-1.5 rounded-lg text-xs font-semibold border transition-all',
+                queueMode === 'submitted'
+                  ? 'border-[var(--accent-blue)] bg-[var(--accent-blue)]/10 text-[var(--accent-blue)]'
+                  : 'border-[var(--bg-border)] text-[var(--text-secondary)] hover:bg-white/5')}
+            >
+              Submitted for Review
+            </button>
+            {canViewAssigned && (
+              <button
+                onClick={() => { setQueueMode('assigned'); setPage(1); }}
+                className={clsx('px-3.5 py-1.5 rounded-lg text-xs font-semibold border transition-all',
+                  queueMode === 'assigned'
+                    ? 'border-[var(--accent-blue)] bg-[var(--accent-blue)]/10 text-[var(--accent-blue)]'
+                    : 'border-[var(--bg-border)] text-[var(--text-secondary)] hover:bg-white/5')}
+              >
+                My Assigned Investigations
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Filter bar */}
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
-              Status
-            </span>
-            <select
-              value={status}
-              onChange={(e) => { setStatus(e.target.value); setPage(1); }}
-              aria-label="Filter by status"
-              className="rounded-lg px-2.5 py-1.5 text-xs outline-none border focus:border-[var(--accent-blue)]"
-              style={{ background: 'var(--bg-tertiary)', borderColor: 'var(--bg-border)', color: 'var(--text-secondary)' }}
-            >
-              <option value="">All statuses</option>
-              {STATUSES.map((s) => (
-                <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
-              ))}
-            </select>
-          </div>
+          {queueMode === 'assigned' && (
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+                Status
+              </span>
+              <select
+                value={status}
+                onChange={(e) => { setStatus(e.target.value); setPage(1); }}
+                aria-label="Filter by status"
+                className="rounded-lg px-2.5 py-1.5 text-xs outline-none border focus:border-[var(--accent-blue)]"
+                style={{ background: 'var(--bg-tertiary)', borderColor: 'var(--bg-border)', color: 'var(--text-secondary)' }}
+              >
+                <option value="">All statuses</option>
+                {STATUSES.map((s) => (
+                  <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="flex items-center gap-2">
             <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
@@ -129,10 +190,14 @@ export function InvestigationQueuePage() {
             style={{ background: 'var(--bg-card)', borderColor: 'var(--bg-border)' }}>
             <FolderSearch size={28} style={{ color: 'var(--text-muted)' }} />
             <p className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>
-              No investigations assigned to you
+              {queueMode === 'submitted'
+                ? 'No submitted investigations awaiting review'
+                : 'No investigations assigned to you'}
             </p>
             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-              {status || priority ? 'Try adjusting the filters.' : 'Investigations created from your alerts will appear here.'}
+              {queueMode === 'submitted'
+                ? (priority ? 'Try adjusting the priority filter.' : 'Investigations submitted by Analysts will appear here.')
+                : (status || priority ? 'Try adjusting the filters.' : 'Investigations created from your alerts will appear here.')}
             </p>
           </div>
         ) : (
@@ -145,6 +210,7 @@ export function InvestigationQueuePage() {
                     <th className="pl-5 pb-3 font-semibold">Investigation</th>
                     <th className="pb-3 font-semibold w-28">Priority</th>
                     <th className="pb-3 font-semibold w-40">Status</th>
+                    {queueMode === 'submitted' && <th className="pb-3 font-semibold w-36">Analyst</th>}
                     <th className="pb-3 font-semibold w-36">Started</th>
                     <th className="pb-3 font-semibold w-36">Submitted</th>
                     <th className="pr-5 pb-3 font-semibold text-right w-36">Updated</th>
@@ -179,6 +245,11 @@ export function InvestigationQueuePage() {
                       <td className="py-3.5">
                         <InvestigationStatusBadge status={inv.status} />
                       </td>
+                      {queueMode === 'submitted' && (
+                        <td className="py-3.5 font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                          {inv.assigned_to ?? '—'}
+                        </td>
+                      )}
                       <td className="py-3.5 font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
                         {inv.started_at ? formatDateTime(inv.started_at) : '—'}
                       </td>

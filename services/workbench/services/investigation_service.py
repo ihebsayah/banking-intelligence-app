@@ -21,18 +21,20 @@ from workbench.exceptions import (
 )
 from workbench.models import (
     ActivityTimelineEntry, AssignmentHistoryEntry, AuditOutboxEvent,
-    Comment, IdempotencyRecord, Investigation, Notification,
+    Comment, ComplianceCase, IdempotencyRecord, Investigation, Notification,
 )
 from workbench.repos import (
-    AssignmentHistoryRepo, CommentRepo, IdempotencyRepo,
+    AssignmentHistoryRepo, CaseRepo, CommentRepo, IdempotencyRepo,
     InvestigationRepo, NotificationRepo, OutboxRepo, TimelineRepo,
 )
 from workbench.schemas.investigations import (
-    CancelInvestigationRequest, InvestigationMutationResponse,
-    InvestigationResponse, TransitionInvestigationRequest,
-    UpdateInvestigationRequest,
+    CancelInvestigationRequest, EscalateInvestigationRequest,
+    EscalateInvestigationResponse, InvestigationMutationResponse,
+    InvestigationResponse, ReviewNotHarmfulRequest,
+    TransitionInvestigationRequest, UpdateInvestigationRequest,
 )
 from workbench.uow import UnitOfWork
+
 
 
 ALLOWED_TRANSITIONS: Dict[str, List[str]] = {
@@ -181,6 +183,24 @@ class InvestigationService:
         if priority:
             investigations = [i for i in investigations if i.priority == priority]
         return [InvestigationResponse(**i.model_dump()) for i in investigations], len(investigations)
+
+    async def list_submitted(
+        self, user: ApplicationUser, scope: str,
+        priority: Optional[str] = None,
+        page: int = 1, per_page: int = 50,
+    ) -> Tuple[List[InvestigationResponse], int]:
+        await authorise(
+            user, "investigation:review",
+            Resource(id="submitted", status="active", entity_type="collection"),
+            self._db, RequestContext())
+        investigations = await InvestigationRepo(self._db).list(
+            scope_id=scope, status="submitted",
+            limit=min(per_page, 100), offset=(page - 1) * min(per_page, 100),
+        )
+        if priority:
+            investigations = [i for i in investigations if i.priority == priority]
+        return [InvestigationResponse(**i.model_dump()) for i in investigations], len(investigations)
+
 
     async def get_by_id(
         self, user: ApplicationUser, investigation_id: str,
@@ -450,3 +470,203 @@ class InvestigationService:
                 IdempotencyRepo(self._db), idempotency_key, "POST", path,
                 req.model_dump(), 200, resp.model_dump_json(), uow.conn)
             return resp
+
+    async def review_not_harmful(
+        self, user: ApplicationUser, investigation_id: str,
+        req: ReviewNotHarmfulRequest,
+        idempotency_key: Optional[str] = None,
+        request_id: str = "",
+    ) -> InvestigationMutationResponse:
+        path = f"/api/v1/investigations/{investigation_id}/review/not-harmful"
+        async with UnitOfWork(self._db) as uow:
+            idem = await _check_idempotency(
+                IdempotencyRepo(self._db), idempotency_key, "POST", path,
+                req.model_dump(), uow.conn)
+            if idem:
+                return InvestigationMutationResponse.model_validate_json(idem[1])
+
+            inv = await InvestigationRepo(self._db).fetch_by_id(investigation_id, uow.conn)
+            if inv is None:
+                raise ResourceNotFound("Investigation", investigation_id)
+
+            await authorise(user, "investigation:review",
+                            _resource_from_inv(inv), self._db,
+                            RequestContext(request_id=request_id))
+
+            if inv.status != "submitted":
+                raise InvalidTransition(inv.status, "review_not_harmful")
+
+            # Persist rationale as internal comment
+            comment = Comment(
+                comment_id=_uuid(), entity_type="investigation",
+                entity_id=investigation_id,
+                content=f"[Not Harmful] {req.rationale}",
+                author_id=user.user_id, is_internal=True, is_redacted=False,
+                version=1, created_at=_now(), updated_at=_now(),
+            )
+            await CommentRepo(self._db).create(comment, uow.conn)
+
+            old_status = inv.status
+            inv.status = "completed"
+            inv.completed_at = _now()
+            inv.version += 1
+            inv.updated_at = _now()
+
+            updated = await InvestigationRepo(self._db).update(
+                inv, req.expected_version, uow.conn)
+            if updated is None:
+                raise VersionConflict()
+
+            await TimelineRepo(self._db).insert(
+                _make_timeline("investigation", investigation_id,
+                              "investigation.review_not_harmful", user.user_id,
+                              {"status": old_status},
+                              {"status": "completed",
+                               "outcome": "not_harmful",
+                               "reviewer": user.user_id,
+                               "rationale_comment_id": comment.comment_id}),
+                uow.conn)
+
+            await OutboxRepo(self._db).insert(
+                _make_outbox("investigation.review_not_harmful", "investigation",
+                            investigation_id, user.user_id, user.role,
+                            {"investigation_id": investigation_id,
+                             "outcome": "not_harmful",
+                             "reviewer": user.user_id,
+                             "rationale_comment_id": comment.comment_id,
+                             "old_status": old_status,
+                             "new_status": "completed"}),
+                uow.conn)
+
+            resp = InvestigationMutationResponse(
+                investigation=InvestigationResponse(**inv.model_dump()),
+                version=inv.version)
+            await _store_idempotency(
+                IdempotencyRepo(self._db), idempotency_key, "POST", path,
+                req.model_dump(), 200, resp.model_dump_json(), uow.conn)
+            return resp
+
+    async def escalate_to_case(
+        self, user: ApplicationUser, investigation_id: str,
+        req: EscalateInvestigationRequest,
+        idempotency_key: Optional[str] = None,
+        request_id: str = "",
+    ) -> EscalateInvestigationResponse:
+        path = f"/api/v1/investigations/{investigation_id}/review/escalate"
+        async with UnitOfWork(self._db) as uow:
+            idem = await _check_idempotency(
+                IdempotencyRepo(self._db), idempotency_key, "POST", path,
+                req.model_dump(), uow.conn)
+            if idem:
+                return EscalateInvestigationResponse.model_validate_json(idem[1])
+
+            inv = await InvestigationRepo(self._db).fetch_by_id(investigation_id, uow.conn)
+            if inv is None:
+                raise ResourceNotFound("Investigation", investigation_id)
+
+            # Requires both investigation:review AND case:create
+            await authorise(user, "investigation:review",
+                            _resource_from_inv(inv), self._db,
+                            RequestContext(request_id=request_id))
+            await authorise(user, "case:create",
+                            _resource_from_inv(inv), self._db,
+                            RequestContext(request_id=request_id))
+
+            if inv.status != "submitted":
+                raise InvalidTransition(inv.status, "escalate_to_case")
+
+            # Duplicate escalation guard (app-level)
+            existing_case = await CaseRepo(self._db).fetch_active_for_investigation(
+                investigation_id, uow.conn)
+            if existing_case:
+                raise WorkbenchError(
+                    "DUPLICATE_ESCALATION",
+                    f"An active Compliance Case already exists for this investigation: {existing_case.case_id}",
+                    409,
+                )
+
+            # Create the Compliance Case
+            case = ComplianceCase(
+                case_id=_uuid(),
+                title=req.title,
+                alert_id=inv.alert_id,
+                investigation_id=investigation_id,
+                scope_id=inv.scope_id,
+                priority=req.priority,
+                created_by=user.user_id,
+                version=1, created_at=_now(), updated_at=_now(),
+            )
+            await CaseRepo(self._db).create(case, uow.conn)
+
+            # Persist rationale as internal comment on the investigation
+            comment = Comment(
+                comment_id=_uuid(), entity_type="investigation",
+                entity_id=investigation_id,
+                content=f"[Escalated to Case {case.case_id}] {req.rationale}",
+                author_id=user.user_id, is_internal=True, is_redacted=False,
+                version=1, created_at=_now(), updated_at=_now(),
+            )
+            await CommentRepo(self._db).create(comment, uow.conn)
+
+            # Finalize investigation
+            old_status = inv.status
+            inv.status = "completed"
+            inv.completed_at = _now()
+            inv.version += 1
+            inv.updated_at = _now()
+
+            updated = await InvestigationRepo(self._db).update(
+                inv, req.expected_version, uow.conn)
+            if updated is None:
+                raise VersionConflict()
+
+            # Timeline on investigation
+            await TimelineRepo(self._db).insert(
+                _make_timeline("investigation", investigation_id,
+                              "investigation.escalated_to_case", user.user_id,
+                              {"status": old_status},
+                              {"status": "completed",
+                               "outcome": "escalated_to_case",
+                               "case_id": case.case_id,
+                               "reviewer": user.user_id,
+                               "rationale_comment_id": comment.comment_id}),
+                uow.conn)
+
+            # Timeline on case
+            await TimelineRepo(self._db).insert(
+                _make_timeline("compliance_case", case.case_id,
+                              "case.created", user.user_id,
+                              None,
+                              {"title": req.title, "priority": req.priority,
+                               "investigation_id": investigation_id}),
+                uow.conn)
+
+            # Outbox events
+            await OutboxRepo(self._db).insert(
+                _make_outbox("investigation.escalated_to_case", "investigation",
+                            investigation_id, user.user_id, user.role,
+                            {"investigation_id": investigation_id,
+                             "outcome": "escalated_to_case",
+                             "case_id": case.case_id,
+                             "reviewer": user.user_id,
+                             "rationale_comment_id": comment.comment_id,
+                             "old_status": old_status,
+                             "new_status": "completed"}),
+                uow.conn)
+            await OutboxRepo(self._db).insert(
+                _make_outbox("case.created", "compliance_case",
+                            case.case_id, user.user_id, user.role,
+                            {"case_id": case.case_id,
+                             "investigation_id": investigation_id,
+                             "alert_id": inv.alert_id}),
+                uow.conn)
+
+            resp = EscalateInvestigationResponse(
+                investigation=InvestigationResponse(**inv.model_dump()),
+                case_id=case.case_id,
+                version=inv.version)
+            await _store_idempotency(
+                IdempotencyRepo(self._db), idempotency_key, "POST", path,
+                req.model_dump(), 200, resp.model_dump_json(), uow.conn)
+            return resp
+

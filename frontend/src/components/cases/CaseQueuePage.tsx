@@ -1,13 +1,14 @@
 // src/components/cases/CaseQueuePage.tsx
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, RefreshCw, Scale, AlertTriangle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, RefreshCw, Scale, AlertTriangle, UserCheck, CheckCircle2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { BankingHeader } from '../Layout/BankingHeader';
 import { casesApi } from '../../api/casesApi';
 import { CasePriorityBadge, CaseRiskBadge, CaseStatusBadge } from './CaseBadges';
 import { parseCaseError } from './caseErrors';
 import { useAuth } from '../../auth/AuthProvider';
+import { PERMISSIONS } from '../../lib/permissions';
 import { formatDateTime } from '../../utils/formatters';
 import type { Case } from '../../types/cases';
 
@@ -15,6 +16,8 @@ const PER_PAGE = 50;
 
 const STATUSES = ['open', 'assigned', 'under_review', 'awaiting_information', 'decision_pending', 'awaiting_compliance_action', 'resolved', 'closed', 'cancelled'];
 const PRIORITIES = ['critical', 'high', 'medium', 'low'];
+
+type QueueMode = 'assigned' | 'unassigned';
 
 function isOverdue(c: Case): boolean {
   if (!c.target_date) return false;
@@ -24,20 +27,26 @@ function isOverdue(c: Case): boolean {
 
 export function CaseQueuePage() {
   const navigate = useNavigate();
-  const { applicationUser } = useAuth();
+  const { applicationUser, hasPermission } = useAuth();
 
+  const [queueMode, setQueueMode] = useState<QueueMode>('assigned');
   const [items, setItems] = useState<Case[]>([]);
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState('');
   const [priority, setPriority] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [claimingCaseId, setClaimingCaseId] = useState<string | null>(null);
+
+  const canClaim = hasPermission(PERMISSIONS.CASE_ASSIGN);
 
   const fetchItems = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await casesApi.listAssigned({
+      const apiFn = queueMode === 'unassigned' ? casesApi.listUnassigned : casesApi.listAssigned;
+      const res = await apiFn({
         status: status || undefined,
         priority: priority || undefined,
         page,
@@ -50,9 +59,34 @@ export function CaseQueuePage() {
     } finally {
       setLoading(false);
     }
-  }, [page, status, priority]);
+  }, [queueMode, page, status, priority]);
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
+
+  const handleClaimCase = async (c: Case, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!applicationUser?.user_id) return;
+    setClaimingCaseId(c.case_id);
+    setError(null);
+    setSuccessMessage(null);
+    try {
+      await casesApi.assign(c.case_id, {
+        assigned_to: applicationUser.user_id,
+        expected_version: c.version,
+      });
+      setSuccessMessage(`Successfully claimed case "${c.title}"`);
+      await fetchItems();
+    } catch (err) {
+      const parsed = parseCaseError(err);
+      const msg = parsed.kind === 'conflict'
+        ? 'This case has already been claimed by another Compliance Officer.'
+        : parsed.message;
+      await fetchItems();
+      setError(msg);
+    } finally {
+      setClaimingCaseId(null);
+    }
+  };
 
   const hasNext = items.length === PER_PAGE;
 
@@ -60,12 +94,43 @@ export function CaseQueuePage() {
     <div className="min-h-screen flex flex-col" style={{ background: 'var(--bg-primary)' }}>
       <BankingHeader
         title="Workbench — Case Queue"
-        subtitle="Compliance cases assigned to you"
+        subtitle={queueMode === 'assigned' ? 'Compliance cases assigned to you' : 'Unassigned compliance cases awaiting claim'}
         onRefresh={fetchItems}
         isRefreshing={loading}
       />
 
       <div className="flex-1 p-6 space-y-6 overflow-y-auto max-w-[1600px] mx-auto w-full">
+        {/* Queue mode tabs */}
+        <div className="flex items-center gap-2 border-b" style={{ borderColor: 'var(--bg-border)' }}>
+          <button
+            onClick={() => { setQueueMode('assigned'); setPage(1); setError(null); setSuccessMessage(null); }}
+            className={clsx(
+              'px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)]',
+              queueMode === 'assigned' ? 'text-[var(--accent-blue)] border-[var(--accent-blue)]' : 'text-[var(--text-muted)] border-transparent hover:text-[var(--text-secondary)]'
+            )}
+          >
+            My Cases
+          </button>
+          <button
+            onClick={() => { setQueueMode('unassigned'); setPage(1); setError(null); setSuccessMessage(null); }}
+            className={clsx(
+              'px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)]',
+              queueMode === 'unassigned' ? 'text-[var(--accent-blue)] border-[var(--accent-blue)]' : 'text-[var(--text-muted)] border-transparent hover:text-[var(--text-secondary)]'
+            )}
+          >
+            Unassigned Cases
+          </button>
+        </div>
+
+        {/* Feedback banners */}
+        {successMessage && (
+          <div className="flex items-center gap-2.5 px-4 py-3 rounded-xl border"
+            style={{ background: 'rgba(16,185,129,0.08)', borderColor: 'rgba(16,185,129,0.25)' }}>
+            <CheckCircle2 size={16} style={{ color: 'var(--accent-green)' }} />
+            <p className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>{successMessage}</p>
+          </div>
+        )}
+
         {/* Filter bar */}
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2">
@@ -115,7 +180,7 @@ export function CaseQueuePage() {
           <div className="rounded-2xl border p-10 flex flex-col items-center gap-4"
             style={{ background: 'var(--bg-card)', borderColor: 'var(--bg-border)' }}>
             <AlertTriangle size={28} style={{ color: 'var(--accent-red)' }} />
-            <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>{error}</p>
+            <p className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>{error}</p>
             <button
               onClick={fetchItems}
               className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold shadow-md hover:brightness-90 transition-all"
@@ -137,10 +202,10 @@ export function CaseQueuePage() {
             style={{ background: 'var(--bg-card)', borderColor: 'var(--bg-border)' }}>
             <Scale size={28} style={{ color: 'var(--text-muted)' }} />
             <p className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>
-              No cases assigned to you
+              {queueMode === 'assigned' ? 'No cases assigned to you' : 'No unassigned cases available'}
             </p>
             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-              {status || priority ? 'Try adjusting the filters.' : 'Cases escalated from your alerts will appear here.'}
+              {status || priority ? 'Try adjusting the filters.' : queueMode === 'assigned' ? 'Unassigned cases can be claimed from the Unassigned Cases queue tab.' : 'New cases escalated from compliance reviews will appear here.'}
             </p>
           </div>
         ) : (
@@ -155,12 +220,16 @@ export function CaseQueuePage() {
                     <th className="pb-3 font-semibold w-24">Priority</th>
                     <th className="pb-3 font-semibold w-32">Status</th>
                     <th className="pb-3 font-semibold w-36">Target date</th>
-                    <th className="pr-5 pb-3 font-semibold text-right w-36">Updated</th>
+                    <th className="pb-3 font-semibold text-right w-36">Updated</th>
+                    {queueMode === 'unassigned' && canClaim && (
+                      <th className="pr-5 pb-3 font-semibold text-right w-32">Action</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--bg-border)]">
                   {items.map((c) => {
                     const overdue = isOverdue(c);
+                    const isClaiming = claimingCaseId === c.case_id;
                     return (
                       <tr
                         key={c.case_id}
@@ -187,7 +256,7 @@ export function CaseQueuePage() {
                               )}
                             </span>
                             <span className="font-mono text-[10px]" style={{ color: 'var(--text-subtle)' }}>
-                              {c.assigned_to === applicationUser?.user_id ? 'assigned to you' : `assigned ${c.assigned_to ?? '—'}`} · v{c.version}
+                              {c.assigned_to ? (c.assigned_to === applicationUser?.user_id ? 'assigned to you' : `assigned ${c.assigned_to}`) : 'unassigned'} · v{c.version}
                             </span>
                           </div>
                         </td>
@@ -203,9 +272,22 @@ export function CaseQueuePage() {
                         <td className="py-3.5 font-mono text-[10px]" style={{ color: overdue ? 'var(--accent-red)' : 'var(--text-muted)' }}>
                           {c.target_date ?? '—'}
                         </td>
-                        <td className="pr-5 py-3.5 text-right font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                        <td className="py-3.5 text-right font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
                           {formatDateTime(c.updated_at)}
                         </td>
+                        {queueMode === 'unassigned' && canClaim && (
+                          <td className="pr-5 py-3.5 text-right">
+                            <button
+                              onClick={(e) => handleClaimCase(c, e)}
+                              disabled={isClaiming}
+                              className="px-3 py-1 rounded-lg text-xs font-semibold shadow-sm transition-all hover:brightness-90 flex items-center gap-1 ml-auto"
+                              style={{ background: 'var(--accent-blue)', color: 'var(--text-primary)' }}
+                            >
+                              <UserCheck size={13} />
+                              {isClaiming ? 'Claiming…' : 'Claim Case'}
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     );
                   })}

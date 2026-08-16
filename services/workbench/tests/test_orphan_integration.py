@@ -68,8 +68,9 @@ async def _run(pool, stmt, params):
 
 
 CLEANUP = [
+    ("DELETE FROM information_requests WHERE case_id::text LIKE '88888888%' OR case_id::text LIKE '99999999%' OR investigation_id::text LIKE '55555555%' OR investigation_id::text LIKE '66666666%' OR investigation_id::text LIKE '77777777%'", None),
     ("DELETE FROM compliance_cases WHERE case_id::text LIKE '88888888%' OR case_id::text LIKE '99999999%'", None),
-    ("DELETE FROM investigations WHERE investigation_id::text LIKE '55555555%' OR investigation_id::text LIKE '66666666%' OR investigation_id::text LIKE '77777777%'", None),
+    ("DELETE FROM investigations WHERE investigation_id::text LIKE '55555555%' OR investigation_id::text LIKE '66666666%' OR investigation_id::text LIKE '77777777%' OR alert_id::text LIKE '11111111%' OR alert_id::text LIKE '22222222%' OR alert_id::text LIKE '33333333%' OR alert_id::text LIKE '44444444%'", None),
     ("DELETE FROM alerts WHERE alert_id::text LIKE '11111111%' OR alert_id::text LIKE '22222222%' OR alert_id::text LIKE '33333333%' OR alert_id::text LIKE '44444444%'", None),
     ("DELETE FROM user_scopes WHERE user_id LIKE 'orphan%'", None),
     ("DELETE FROM users WHERE user_id LIKE 'orphan%'", None),

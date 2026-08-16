@@ -59,12 +59,81 @@ export const PERMISSIONS = {
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
 
-export function usePermissions() {
-  const { user } = { user: undefined as { permissions?: string[] } | undefined };
-  return {
-    hasPermission: (p: Permission): boolean =>
-      user?.permissions?.includes(p) ?? false,
-    hasAnyPermission: (ps: Permission[]): boolean =>
-      ps.some(p => user?.permissions?.includes(p) ?? false),
-  };
+import { useCallback } from 'react';
+import { useAuth } from '../auth/AuthProvider';
+import { useAuthStore } from '../stores/authStore';
+import { env } from '../config/env';
+
+export interface CanAccessOptions {
+  requiredPermissions?: Permission | Permission[] | string | string[];
+  requiredRoles?: string | string[];
 }
+
+export function usePermissions() {
+  const isKeycloak = env.AUTH_PROVIDER === 'keycloak';
+
+  let keycloakAuth: ReturnType<typeof useAuth> | null = null;
+  if (isKeycloak) {
+    try {
+      keycloakAuth = useAuth();
+    } catch {
+      keycloakAuth = null;
+    }
+  }
+
+  const legacyUser = useAuthStore((s) => s.user);
+
+  const permissions = isKeycloak && keycloakAuth
+    ? (keycloakAuth.permissions ?? [])
+    : (legacyUser?.permissions ?? []);
+
+  const userRole = isKeycloak && keycloakAuth
+    ? keycloakAuth.applicationUser?.role
+    : legacyUser?.role;
+
+  const hasPermission = useCallback(
+    (p: Permission | string): boolean => permissions.includes(p),
+    [permissions]
+  );
+
+  const hasAnyPermission = useCallback(
+    (ps: (Permission | string)[]): boolean => ps.some((p) => permissions.includes(p)),
+    [permissions]
+  );
+
+  const hasAllPermissions = useCallback(
+    (ps: (Permission | string)[]): boolean => ps.every((p) => permissions.includes(p)),
+    [permissions]
+  );
+
+  const canAccess = useCallback(
+    (opts: CanAccessOptions): boolean => {
+      // 1. Permission evaluation: if specified, user must possess at least one of the required permissions
+      if (opts.requiredPermissions) {
+        const reqs = Array.isArray(opts.requiredPermissions)
+          ? opts.requiredPermissions
+          : [opts.requiredPermissions];
+        if (reqs.length > 0) {
+          const hasPerm = reqs.some((p) => permissions.includes(p));
+          if (!hasPerm) return false;
+        }
+      }
+
+      // 2. Role evaluation: if specified
+      if (opts.requiredRoles && userRole) {
+        const roles = Array.isArray(opts.requiredRoles)
+          ? opts.requiredRoles
+          : [opts.requiredRoles];
+        if (roles.length > 0 && !roles.includes(userRole)) {
+          return false;
+        }
+      }
+
+      return true;
+    },
+    [permissions, userRole]
+  );
+
+  return { permissions, userRole, hasPermission, hasAnyPermission, hasAllPermissions, canAccess };
+}
+

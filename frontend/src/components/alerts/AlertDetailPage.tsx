@@ -13,6 +13,7 @@ import { parseAlertError } from './alertErrors';
 import { useAuth } from '../../auth/AuthProvider';
 import { PERMISSIONS } from '../../lib/permissions';
 import { formatDateTime } from '../../utils/formatters';
+import { CustomerContextPanel } from '../customers/CustomerContextPanel';
 import type { Alert, AlertAdminView } from '../../types/alerts';
 import { InvestigateAlertDialog } from './dialogs/InvestigateAlertDialog';
 import { DismissAlertDialog } from './dialogs/DismissAlertDialog';
@@ -247,15 +248,20 @@ export function AlertDetailPage() {
             <span className="font-mono text-xs" style={{ color: 'var(--text-secondary)' }}>
               {alert.related_entity_type} · {alert.related_entity_id}
             </span>
-            {alert.related_entity_type === 'customer' && alert.related_entity_id && (
+            {(alert.resolved_customer_id || (alert.related_entity_type === 'customer' && alert.related_entity_id)) && (
               <Link
-                to={`/workbench/customers/${encodeURIComponent(alert.related_entity_id)}`}
+                to={`/workbench/customers/${encodeURIComponent(alert.resolved_customer_id || alert.related_entity_id!)}`}
                 className="text-[10px] font-semibold underline decoration-dotted hover:brightness-125"
                 style={{ color: 'var(--accent-blue)' }}>
                 Open Customer 360
               </Link>
             )}
           </div>
+        )}
+
+        {/* Customer context (authorized, read-only) */}
+        {!isAdminView && (alert.resolved_customer_id || (alert.related_entity_type === 'customer' && alert.related_entity_id)) && (
+          <CustomerContextPanel customerId={alert.resolved_customer_id || alert.related_entity_id!} />
         )}
 
         {/* Meta grid */}
