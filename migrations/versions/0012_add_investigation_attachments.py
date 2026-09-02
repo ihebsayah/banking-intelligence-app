@@ -1,14 +1,18 @@
 """Add investigation_attachments table for secure evidence file persistence (Phase 3A.9D).
 
-Revision ID: 0012_add_investigation_attachments
+Revision ID: 0012_investigation_attachments
 Revises: 0011_allow_investigation_irs
 Create Date: 2026-08-16
+
+NOTE: revision id shortened to <=32 chars so it fits the varchar(32)
+alembic_version.version_num column (0011_allow_investigation_irs is the longest
+identifier the column can hold; this id is 29 chars).
 """
 from typing import Sequence, Union
 from alembic import op
 from sqlalchemy import text
 
-revision: str = "0012_add_investigation_attachments"
+revision: str = "0012_investigation_attachments"
 down_revision: Union[str, None] = "0011_allow_investigation_irs"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

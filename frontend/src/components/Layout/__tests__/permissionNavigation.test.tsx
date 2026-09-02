@@ -75,8 +75,9 @@ describe('Phase 3A.7 Permission-Aware Platform Navigation', () => {
     expect(screen.getByText('Customer 360')).toBeInTheDocument();
     expect(screen.getByText('Alert Queue')).toBeInTheDocument();
     expect(screen.getByText('Investigations')).toBeInTheDocument();
-    expect(screen.getByText('Cases')).toBeInTheDocument();
     expect(screen.getByText('Information Requests')).toBeInTheDocument();
+    // C2 segregation: analyst has NO standalone Compliance Cases module
+    expect(screen.queryByText('Cases')).not.toBeInTheDocument();
 
     // Approvals workbench is reviewer-only (approval:approve); analyst lacks it
     expect(screen.queryByText('Approvals')).not.toBeInTheDocument();
@@ -103,7 +104,8 @@ describe('Phase 3A.7 Permission-Aware Platform Navigation', () => {
     expect(screen.getByText('Dashboard')).toBeInTheDocument();
     expect(screen.getByText('Compliance')).toBeInTheDocument();
     expect(screen.getByText('Customer 360')).toBeInTheDocument();
-    expect(screen.getByText('Alert Queue')).toBeInTheDocument();
+    // C2 segregation: compliance has NO standalone Alerts module
+    expect(screen.queryByText('Alert Queue')).not.toBeInTheDocument();
     expect(screen.getByText('Investigations')).toBeInTheDocument();
     expect(screen.getByText('Cases')).toBeInTheDocument();
 

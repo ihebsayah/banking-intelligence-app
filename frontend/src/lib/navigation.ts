@@ -65,6 +65,7 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: BellRing,
         category: 'Navigate',
         requiredPermissions: [PERMISSIONS.ALERT_READ_ASSIGNED, PERMISSIONS.ALERT_READ],
+        requiredRoles: ['analyst', 'admin'],
       },
       {
         id: 'investigations',
@@ -81,6 +82,7 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: Scale,
         category: 'Navigate',
         requiredPermissions: [PERMISSIONS.CASE_READ_ASSIGNED, PERMISSIONS.CASE_READ],
+        requiredRoles: ['compliance', 'admin'],
       },
       {
         id: 'information-requests',
@@ -89,6 +91,7 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: MessageSquare,
         category: 'Navigate',
         requiredPermissions: [PERMISSIONS.INFO_REQUEST_READ_ASSIGNED, PERMISSIONS.INFO_REQUEST_READ],
+        requiredRoles: ['analyst', 'admin'],
       },
       {
         id: 'approvals',

@@ -79,6 +79,16 @@ SENSITIVE_PERMISSIONS = {
     "remediation:verify", "evidence:destroy",
 }
 
+# Explicit allowlist: which roles may receive each sensitive permission.
+# Only roles listed here are seeded; all others are skipped.
+SENSITIVE_PERMISSION_ROLES: dict[str, set[str]] = {
+    "case:decision": {"compliance"},
+    "case:close": {"compliance"},
+    "investigation:modify_findings": {"analyst"},
+    "remediation:verify": set(),  # reserved, not seeded
+    "evidence:destroy": set(),    # reserved, not seeded
+}
+
 ROLE_PERMISSIONS: dict[str, list[str]] = {
     "analyst": [
         "workbench:access",
@@ -86,7 +96,6 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
         "alert:investigate", "alert:transition",
         "investigation:read_own", "investigation:update",
         "investigation:modify_findings", "investigation:transition",
-        "case:read_assigned",
         "info_request:read_assigned", "info_request:respond",
         "approval:request", "approval:read",
         "comment:create", "comment:read",
@@ -94,7 +103,6 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
     ],
     "compliance": [
         "workbench:access",
-        "alert:read_assigned", "alert:transition",
         "investigation:read", "investigation:review",
         "case:create", "case:read_assigned", "case:transition",
         "case:decision", "case:close",
@@ -152,7 +160,16 @@ def upgrade() -> None:
 
     for role, perms in ROLE_PERMISSIONS.items():
         for perm in perms:
-            if perm not in SENSITIVE_PERMISSIONS or role == "analyst":
+            if perm not in SENSITIVE_PERMISSIONS:
+                conn.execute(
+                    text("""
+                        INSERT INTO role_permissions (role_id, permission_key)
+                        VALUES (:role, :perm)
+                        ON CONFLICT DO NOTHING
+                    """),
+                    {"role": role, "perm": perm},
+                )
+            elif role in SENSITIVE_PERMISSION_ROLES.get(perm, set()):
                 conn.execute(
                     text("""
                         INSERT INTO role_permissions (role_id, permission_key)

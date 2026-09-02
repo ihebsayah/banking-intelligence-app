@@ -73,7 +73,6 @@ INSERT INTO role_permissions (role_id, permission_key) VALUES
     ('analyst', 'investigation:update'),
     ('analyst', 'investigation:modify_findings'),
     ('analyst', 'investigation:transition'),
-    ('analyst', 'case:read_assigned'),
     ('analyst', 'info_request:read_assigned'),
     ('analyst', 'info_request:respond'),
     ('analyst', 'approval:request'),
@@ -86,10 +85,11 @@ INSERT INTO role_permissions (role_id, permission_key) VALUES
 ON CONFLICT DO NOTHING;
 
 -- Seed role_permissions for compliance
+-- Note: compliance has NO alert:read_assigned or alert:transition —
+-- standalone Alerts module is forbidden. Alert context is available
+-- through authorized Investigations.
 INSERT INTO role_permissions (role_id, permission_key) VALUES
     ('compliance', 'workbench:access'),
-    ('compliance', 'alert:read_assigned'),
-    ('compliance', 'alert:transition'),
     ('compliance', 'investigation:read'),
     ('compliance', 'investigation:review'),
     ('compliance', 'case:create'),
