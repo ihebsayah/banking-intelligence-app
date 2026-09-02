@@ -89,7 +89,7 @@ services:
     ports:
       - "8001:8001"
     environment:
-      - MISTRAL_API_URL=${MISTRAL_API_URL:-http://ollama:11434}
+      - MISTRAL_API_URL=${MISTRAL_API_URL:-http://host.docker.internal:11434}
       - MISTRAL_MODEL=${MISTRAL_MODEL:-mistral}
       - ORCHESTRATOR_LLM=${ORCHESTRATOR_LLM:-mistral}
       - DATABASE_URL=postgresql://${POSTGRES_MAIN_USER:-banking_user}:${POSTGRES_MAIN_PASSWORD:-securepass123}@postgres-main:5432/${POSTGRES_MAIN_DB:-banking_dev}
@@ -455,12 +455,22 @@ services:
       - "8013:8013"
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_MAIN_USER:-banking_user}:${POSTGRES_MAIN_PASSWORD:-securepass123}@postgres-main:5432/${POSTGRES_MAIN_DB:-banking_dev}
-      - MISTRAL_API_URL=${MISTRAL_API_URL:-http://ollama:11434}
-      - MISTRAL_MODEL=${INSIGHTS_LLM_MODEL:-tinyllama}
+      # Native macOS Ollama (outside Docker) is the default development target.
+      # Docker Desktop reaches the host via host.docker.internal.
+      - MISTRAL_API_URL=${MISTRAL_API_URL:-http://host.docker.internal:11434}
+      - MISTRAL_MODEL=${INSIGHTS_LLM_MODEL:-mistral}
+      # INSIGHTS_LLM_MODEL is the single source of truth for the model the
+      # Insights Agent uses. MISTRAL_MODEL above is kept in sync ONLY for
+      # services that still read the legacy variable; it never silently wins.
+      - INSIGHTS_LLM_MODEL=${INSIGHTS_LLM_MODEL:-mistral}
+      - INSIGHTS_LLM_TIMEOUT=${INSIGHTS_LLM_TIMEOUT:-30}
+      - INSIGHTS_LLM_TEMPERATURE=${INSIGHTS_LLM_TEMPERATURE:-0.1}
+      - INSIGHTS_LLM_MAX_TOKENS=${INSIGHTS_LLM_MAX_TOKENS:-512}
+      - ENABLE_LLM_INSIGHTS=${ENABLE_LLM_INSIGHTS:-false}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    # The deterministic Insights pipeline must start with NO Ollama container.
     depends_on:
       - postgres-main
-      - ollama
     networks:
       - banking-network
     healthcheck:
@@ -713,13 +723,25 @@ services:
       retries: 5
 
   # ============================================================================
-  # LOCAL LLM (FALLBACK)
+  # LOCAL LLM (FALLBACK / LEGACY CONTAINER MODE)
   # ============================================================================
+  # Normal macOS development uses NATIVE Ollama (outside Docker) via
+  # host.docker.internal:11434 — so this service is OPTIONAL and only started
+  # with an explicit profile:
+  #
+  #   docker compose --profile docker-llm up -d
+  #
+  # `docker compose up -d` (no profile) does NOT start containerized Ollama.
+  # The deterministic pipeline requires no Ollama container at all.
+  # When_enable: if you need the legacy in-Docker runtime for CI or a
+  # non-macOS host, add --profile docker-llm. Kept (not deleted) for that path.
 
   ollama:
     container_name: banking_ollama
     image: ollama/ollama:latest
     restart: unless-stopped
+    profiles:
+      - docker-llm
     ports:
       - "11434:11434"
     volumes:

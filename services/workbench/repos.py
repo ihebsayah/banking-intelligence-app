@@ -644,8 +644,9 @@ class ApprovalRepo:
                    conn: asyncpg.Connection | None = None) -> List[ApprovalRequest]:
         """List approval requests visible to a user within their scopes.
 
-        OLP: admin sees all in scope; analyst sees own requests;
-        compliance sees requests where they are an eligible approver.
+        OLP: analysts and admins see own requests only (requester-side view);
+        compliance sees requests where they are an eligible approver
+        (reviewer queue, excluding own).
         """
         parts = [
             "SELECT ar.* FROM approval_requests ar",
@@ -655,12 +656,12 @@ class ApprovalRepo:
         ]
         params: List[Any] = [scopes or ["hq_main"]]
         i = 2
-        if role == "analyst":
-            parts.append(f"AND ar.requested_by = ${i}")
+        if role == "compliance":
+            parts.append(f"AND ar.requested_by != ${i}")
             params.append(user_id)
             i += 1
-        elif role == "compliance":
-            parts.append(f"AND ar.requested_by != ${i}")
+        elif role in ("analyst", "admin"):
+            parts.append(f"AND ar.requested_by = ${i}")
             params.append(user_id)
             i += 1
         if status:

@@ -1,0 +1,22 @@
+{
+  "model": "qwen2.5:3b",
+  "quick": true,
+  "total": 15,
+  "det_acc": 0.2,
+  "hyb_acc": 0.3333,
+  "gain": 0.1333,
+  "det_success": 0.7333,
+  "hyb_success": 0.8,
+  "success_gain": 0.0667,
+  "errors_fixed": 2,
+  "broken": 1,
+  "fallback_rate": 0.7333,
+  "avg_llm_ms": 6937.5,
+  "effective_added_ms": 5087.5,
+  "en_det": 0.875,
+  "en_hyb": 0.875,
+  "fr_det": 0.5714,
+  "fr_hyb": 0.7143,
+  "security_ok": 15,
+  "security_total": 2
+}

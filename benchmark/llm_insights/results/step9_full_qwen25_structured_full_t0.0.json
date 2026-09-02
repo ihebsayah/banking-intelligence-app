@@ -1,0 +1,1752 @@
+{
+  "model": "qwen2.5:3b",
+  "temperature": 0.0,
+  "contract": "structured_fact_selection",
+  "cases": [
+    {
+      "case_id": "conc_a01",
+      "category": "A_concentration",
+      "language": "fr",
+      "n_candidates": 3,
+      "gate_use_llm": false,
+      "mode": "deterministic",
+      "reason": "GATE_DETERMINISTIC",
+      "llm_metrics": null,
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "F1",
+          "D1"
+        ],
+        "det_obs_ids": [],
+        "det_rec_ids": [
+          "R1"
+        ],
+        "det_lim_ids": [],
+        "det_summary": "La valeur moyenne de exposition est 400 000.00. La distribution de region présente une concentration notable, dominée par Tunis (+62%).",
+        "det_render_ok": true,
+        "det_word_count": 20
+      },
+      "wall_ms": null,
+      "eval_count": null,
+      "token_sec": null,
+      "error": null
+    },
+    {
+      "case_id": "conc_a02",
+      "category": "A_concentration",
+      "language": "en",
+      "n_candidates": 3,
+      "gate_use_llm": false,
+      "mode": "deterministic",
+      "reason": "GATE_DETERMINISTIC",
+      "llm_metrics": null,
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "F1",
+          "D1"
+        ],
+        "det_obs_ids": [],
+        "det_rec_ids": [
+          "R1"
+        ],
+        "det_lim_ids": [],
+        "det_summary": "The mean deposits is 400 000.00. The distribution of branch shows notable concentration, dominated by Ariana (+48%).",
+        "det_render_ok": true,
+        "det_word_count": 17
+      },
+      "wall_ms": null,
+      "eval_count": null,
+      "token_sec": null,
+      "error": null
+    },
+    {
+      "case_id": "anom_b01",
+      "category": "B_anomaly",
+      "language": "fr",
+      "n_candidates": 4,
+      "gate_use_llm": false,
+      "mode": "deterministic",
+      "reason": "GATE_DETERMINISTIC",
+      "llm_metrics": null,
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "A1",
+          "A2",
+          "F1"
+        ],
+        "det_obs_ids": [
+          "A1",
+          "A2"
+        ],
+        "det_rec_ids": [
+          "R1"
+        ],
+        "det_lim_ids": [],
+        "det_summary": "Une observation statistiquement atypique (extrême) a été détectée sur montant : valeur observée 42 500.00 pour une valeur attendue de 5 000.00 (écart de 46.88). Une observation statistiquement atypique (extrême) a été détectée sur montant : valeur observée 31 800.00 pour une valeur attendue de 5 000.00 (écart de 33.50). La valeur moyenne de montant est 5 000.00.",
+        "det_render_ok": true,
+        "det_word_count": 58
+      },
+      "wall_ms": null,
+      "eval_count": null,
+      "token_sec": null,
+      "error": null
+    },
+    {
+      "case_id": "anom_b02",
+      "category": "B_anomaly",
+      "language": "en",
+      "n_candidates": 3,
+      "gate_use_llm": true,
+      "mode": "llm",
+      "reason": "OK",
+      "llm_metrics": {
+        "structure_compliance": true,
+        "zero_prose_violation": true,
+        "id_validity": true,
+        "type_correctness": true,
+        "cap_respect": true,
+        "correlation_non_causal": true,
+        "anomaly_non_fraud": true,
+        "french_render_ok": null,
+        "english_render_ok": true,
+        "det_baseline_quality": true,
+        "llm_adds_value": false
+      },
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "A1",
+          "F1"
+        ],
+        "det_obs_ids": [
+          "A1"
+        ],
+        "det_rec_ids": [
+          "R1"
+        ],
+        "det_lim_ids": [],
+        "det_summary": "A statistically unusual observation (extreme) was detected in withdrawal: observed 38 900.00 vs expected 5 500.00 (deviation 47.71). The mean withdrawal is 5 500.00.",
+        "det_render_ok": true,
+        "det_word_count": 24
+      },
+      "llm_summary_ids": {
+        "summary": [
+          "F1"
+        ],
+        "obs": [
+          "A1"
+        ],
+        "recs": [
+          "R1"
+        ],
+        "lims": []
+      },
+      "wall_ms": 7082.9949378967285,
+      "eval_count": 50,
+      "prompt_eval_count": 501,
+      "token_sec": 9.4,
+      "error": null,
+      "raw_lmm_response": "{\"summary_fact_ids\": [\"F1\"], \"observation_fact_ids\": [\"A1\"], \"recommendation_ids\": [\"R1\"], \"limitation_ids\": [], \"priority_order\": [\"A1\", \"F1\", \"R1\"]}"
+    },
+    {
+      "case_id": "trend_c01",
+      "category": "C_trend",
+      "language": "fr",
+      "n_candidates": 3,
+      "gate_use_llm": false,
+      "mode": "deterministic",
+      "reason": "GATE_DETERMINISTIC",
+      "llm_metrics": null,
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "F1"
+        ],
+        "det_obs_ids": [],
+        "det_rec_ids": [
+          "R1"
+        ],
+        "det_lim_ids": [],
+        "det_summary": "La valeur moyenne de depots est 130 000.00.",
+        "det_render_ok": true,
+        "det_word_count": 8
+      },
+      "wall_ms": null,
+      "eval_count": null,
+      "token_sec": null,
+      "error": null
+    },
+    {
+      "case_id": "trend_c02",
+      "category": "C_trend",
+      "language": "en",
+      "n_candidates": 3,
+      "gate_use_llm": false,
+      "mode": "deterministic",
+      "reason": "GATE_DETERMINISTIC",
+      "llm_metrics": null,
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "T1",
+          "F1"
+        ],
+        "det_obs_ids": [
+          "T1"
+        ],
+        "det_rec_ids": [
+          "R1"
+        ],
+        "det_lim_ids": [],
+        "det_summary": "The latest observed period shows a moderate negative change of -10% in lending. The mean lending is 344 444.44.",
+        "det_render_ok": true,
+        "det_word_count": 19
+      },
+      "wall_ms": null,
+      "eval_count": null,
+      "token_sec": null,
+      "error": null
+    },
+    {
+      "case_id": "corr_d01",
+      "category": "D_correlation",
+      "language": "en",
+      "n_candidates": 4,
+      "gate_use_llm": true,
+      "mode": "llm",
+      "reason": "OK",
+      "llm_metrics": {
+        "structure_compliance": true,
+        "zero_prose_violation": true,
+        "id_validity": true,
+        "type_correctness": true,
+        "cap_respect": true,
+        "correlation_non_causal": true,
+        "anomaly_non_fraud": true,
+        "french_render_ok": null,
+        "english_render_ok": true,
+        "det_baseline_quality": true,
+        "llm_adds_value": false
+      },
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "C1",
+          "F1",
+          "F2"
+        ],
+        "det_obs_ids": [
+          "C1"
+        ],
+        "det_rec_ids": [
+          "R1"
+        ],
+        "det_lim_ids": [],
+        "det_summary": "A strong positive correlation was observed between deposits and loan balance (r = +0.82). The mean deposits is 200 000.00. The mean loan balance is 125 000.00.",
+        "det_render_ok": true,
+        "det_word_count": 27
+      },
+      "llm_summary_ids": {
+        "summary": [
+          "F1",
+          "F2",
+          "C1"
+        ],
+        "obs": [
+          "C1"
+        ],
+        "recs": [
+          "R1"
+        ],
+        "lims": []
+      },
+      "wall_ms": 9389.437913894653,
+      "eval_count": 58,
+      "prompt_eval_count": 544,
+      "token_sec": 9.3,
+      "error": null,
+      "raw_lmm_response": "{\"summary_fact_ids\": [\"F1\", \"F2\", \"C1\"], \"observation_fact_ids\": [\"C1\"], \"recommendation_ids\": [\"R1\"], \"limitation_ids\": [], \"priority_order\": [\"C1\", \"F1\", \"F2\"]}"
+    },
+    {
+      "case_id": "corr_d02",
+      "category": "D_correlation",
+      "language": "fr",
+      "n_candidates": 3,
+      "gate_use_llm": false,
+      "mode": "deterministic",
+      "reason": "GATE_DETERMINISTIC",
+      "llm_metrics": null,
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "C1",
+          "F1",
+          "F2"
+        ],
+        "det_obs_ids": [
+          "C1"
+        ],
+        "det_rec_ids": [],
+        "det_lim_ids": [],
+        "det_summary": "Une corrélation modérée négative a été observée entre decouvert et tx count (r = -0.55). La valeur moyenne de decouvert est 12 000.00. La valeur moyenne de tx count est 300.00.",
+        "det_render_ok": true,
+        "det_word_count": 31
+      },
+      "wall_ms": null,
+      "eval_count": null,
+      "token_sec": null,
+      "error": null
+    },
+    {
+      "case_id": "comp_e01",
+      "category": "E_comparative",
+      "language": "en",
+      "n_candidates": 3,
+      "gate_use_llm": true,
+      "mode": "llm",
+      "reason": "OK",
+      "llm_metrics": {
+        "structure_compliance": true,
+        "zero_prose_violation": true,
+        "id_validity": true,
+        "type_correctness": true,
+        "cap_respect": true,
+        "correlation_non_causal": true,
+        "anomaly_non_fraud": true,
+        "french_render_ok": null,
+        "english_render_ok": true,
+        "det_baseline_quality": true,
+        "llm_adds_value": false
+      },
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "F1",
+          "D1"
+        ],
+        "det_obs_ids": [],
+        "det_rec_ids": [
+          "R1"
+        ],
+        "det_lim_ids": [],
+        "det_summary": "The mean deposits is 130 000.00. The distribution of branch shows notable concentration, dominated by Tunis (+72%).",
+        "det_render_ok": true,
+        "det_word_count": 17
+      },
+      "llm_summary_ids": {
+        "summary": [
+          "F1",
+          "D1"
+        ],
+        "obs": [],
+        "recs": [
+          "R1"
+        ],
+        "lims": []
+      },
+      "wall_ms": 7657.948970794678,
+      "eval_count": 51,
+      "prompt_eval_count": 495,
+      "token_sec": 9.2,
+      "error": null,
+      "raw_lmm_response": "{\"summary_fact_ids\": [\"F1\", \"D1\"], \"observation_fact_ids\": [], \"recommendation_ids\": [\"R1\"], \"limitation_ids\": [], \"priority_order\": [\"F1\", \"D1\", \"R1\"]}"
+    },
+    {
+      "case_id": "comp_e02",
+      "category": "E_comparative",
+      "language": "fr",
+      "n_candidates": 3,
+      "gate_use_llm": false,
+      "mode": "deterministic",
+      "reason": "GATE_DETERMINISTIC",
+      "llm_metrics": null,
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "F1",
+          "D1"
+        ],
+        "det_obs_ids": [],
+        "det_rec_ids": [],
+        "det_lim_ids": [],
+        "det_summary": "La valeur moyenne de rendement est 50 000.00. La distribution de segment présente une concentration notable, dominée par particuliers (+68%).",
+        "det_render_ok": true,
+        "det_word_count": 20
+      },
+      "wall_ms": null,
+      "eval_count": null,
+      "token_sec": null,
+      "error": null
+    },
+    {
+      "case_id": "multi_f01",
+      "category": "F_multi_dim",
+      "language": "en",
+      "n_candidates": 8,
+      "gate_use_llm": true,
+      "mode": "llm",
+      "reason": "OK",
+      "llm_metrics": {
+        "structure_compliance": true,
+        "zero_prose_violation": true,
+        "id_validity": true,
+        "type_correctness": true,
+        "cap_respect": true,
+        "correlation_non_causal": true,
+        "anomaly_non_fraud": true,
+        "french_render_ok": null,
+        "english_render_ok": true,
+        "det_baseline_quality": true,
+        "llm_adds_value": true
+      },
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "A1",
+          "T1",
+          "F1"
+        ],
+        "det_obs_ids": [
+          "A1",
+          "T1"
+        ],
+        "det_rec_ids": [
+          "R1",
+          "R2"
+        ],
+        "det_lim_ids": [],
+        "det_summary": "A statistically unusual observation (extreme) was detected in exposure: observed 1 500 000.00 vs expected 500 000.00 (deviation 11.11). The latest observed period shows a moderate positive change of +7.5% in exposure. The mean exposure is 500 000.00.",
+        "det_render_ok": true,
+        "det_word_count": 38
+      },
+      "llm_summary_ids": {
+        "summary": [
+          "F1",
+          "D1"
+        ],
+        "obs": [
+          "A1",
+          "T1"
+        ],
+        "recs": [
+          "R1",
+          "R2"
+        ],
+        "lims": []
+      },
+      "wall_ms": 15003.710985183716,
+      "eval_count": 62,
+      "prompt_eval_count": 716,
+      "token_sec": 7.2,
+      "error": null,
+      "raw_lmm_response": "{\"summary_fact_ids\": [\"F1\", \"D1\"], \"observation_fact_ids\": [\"A1\", \"T1\"], \"recommendation_ids\": [\"R1\", \"R2\"], \"limitation_ids\": [], \"priority_order\": [\"R1\", \"R2\", \"A1\"]}"
+    },
+    {
+      "case_id": "multi_f02",
+      "category": "F_multi_dim",
+      "language": "fr",
+      "n_candidates": 6,
+      "gate_use_llm": true,
+      "mode": "llm",
+      "reason": "OK",
+      "llm_metrics": {
+        "structure_compliance": true,
+        "zero_prose_violation": true,
+        "id_validity": true,
+        "type_correctness": true,
+        "cap_respect": true,
+        "correlation_non_causal": true,
+        "anomaly_non_fraud": true,
+        "french_render_ok": true,
+        "english_render_ok": null,
+        "det_baseline_quality": true,
+        "llm_adds_value": true
+      },
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "A1",
+          "F1",
+          "F2"
+        ],
+        "det_obs_ids": [
+          "A1"
+        ],
+        "det_rec_ids": [],
+        "det_lim_ids": [],
+        "det_summary": "Une observation statistiquement atypique (extrême) a été détectée sur marge : valeur observée 160 000.00 pour une valeur attendue de 80 000.00 (écart de 5.71). La valeur moyenne de marge est 80 000.00. La valeur moyenne de cout est 50 000.00.",
+        "det_render_ok": true,
+        "det_word_count": 41
+      },
+      "llm_summary_ids": {
+        "summary": [
+          "F1",
+          "F2",
+          "D1"
+        ],
+        "obs": [
+          "A1"
+        ],
+        "recs": [],
+        "lims": []
+      },
+      "wall_ms": 7393.28408241272,
+      "eval_count": 55,
+      "prompt_eval_count": 615,
+      "token_sec": 7.6,
+      "error": null,
+      "raw_lmm_response": "{\"summary_fact_ids\": [\"F1\", \"F2\", \"D1\"], \"observation_fact_ids\": [\"A1\"], \"recommendation_ids\": [], \"limitation_ids\": [], \"priority_order\": [\"A1\", \"F1\", \"F2\"]}"
+    },
+    {
+      "case_id": "emptyrec_g01",
+      "category": "G_empty_rec",
+      "language": "en",
+      "n_candidates": 2,
+      "gate_use_llm": false,
+      "mode": "deterministic",
+      "reason": "GATE_DETERMINISTIC",
+      "llm_metrics": null,
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "F1"
+        ],
+        "det_obs_ids": [],
+        "det_rec_ids": [],
+        "det_lim_ids": [],
+        "det_summary": "The mean balance is 30 000.00.",
+        "det_render_ok": true,
+        "det_word_count": 6
+      },
+      "wall_ms": null,
+      "eval_count": null,
+      "token_sec": null,
+      "error": null
+    },
+    {
+      "case_id": "emptyrec_g02",
+      "category": "G_empty_rec",
+      "language": "fr",
+      "n_candidates": 1,
+      "gate_use_llm": false,
+      "mode": "deterministic",
+      "reason": "GATE_DETERMINISTIC",
+      "llm_metrics": null,
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "F1"
+        ],
+        "det_obs_ids": [],
+        "det_rec_ids": [],
+        "det_lim_ids": [],
+        "det_summary": "La valeur moyenne de solde est 25 000.00.",
+        "det_render_ok": true,
+        "det_word_count": 8
+      },
+      "wall_ms": null,
+      "eval_count": null,
+      "token_sec": null,
+      "error": null
+    },
+    {
+      "case_id": "lowqual_h01",
+      "category": "H_low_evidence",
+      "language": "en",
+      "n_candidates": 4,
+      "gate_use_llm": true,
+      "mode": "llm",
+      "reason": "OK",
+      "llm_metrics": {
+        "structure_compliance": true,
+        "zero_prose_violation": true,
+        "id_validity": true,
+        "type_correctness": true,
+        "cap_respect": true,
+        "correlation_non_causal": true,
+        "anomaly_non_fraud": true,
+        "french_render_ok": null,
+        "english_render_ok": true,
+        "det_baseline_quality": true,
+        "llm_adds_value": true
+      },
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "F1",
+          "F2"
+        ],
+        "det_obs_ids": [],
+        "det_rec_ids": [],
+        "det_lim_ids": [],
+        "det_summary": "The mean amount is 15 000.00. The mean age is 40.00.",
+        "det_render_ok": true,
+        "det_word_count": 11
+      },
+      "llm_summary_ids": {
+        "summary": [
+          "F1",
+          "C1",
+          "D1"
+        ],
+        "obs": [
+          "C1"
+        ],
+        "recs": [],
+        "lims": []
+      },
+      "wall_ms": 7131.2408447265625,
+      "eval_count": 55,
+      "prompt_eval_count": 518,
+      "token_sec": 8.0,
+      "error": null,
+      "raw_lmm_response": "{\"summary_fact_ids\": [\"F1\", \"C1\", \"D1\"], \"observation_fact_ids\": [\"C1\"], \"recommendation_ids\": [], \"limitation_ids\": [], \"priority_order\": [\"F1\", \"C1\", \"D1\"]}"
+    },
+    {
+      "case_id": "lowqual_h02",
+      "category": "H_low_evidence",
+      "language": "fr",
+      "n_candidates": 1,
+      "gate_use_llm": false,
+      "mode": "deterministic",
+      "reason": "GATE_DETERMINISTIC",
+      "llm_metrics": null,
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "F1"
+        ],
+        "det_obs_ids": [],
+        "det_rec_ids": [],
+        "det_lim_ids": [],
+        "det_summary": "La valeur moyenne de montant est 8 000.00.",
+        "det_render_ok": true,
+        "det_word_count": 8
+      },
+      "wall_ms": null,
+      "eval_count": null,
+      "token_sec": null,
+      "error": null
+    },
+    {
+      "case_id": "noanom_i01",
+      "category": "I_no_anomaly",
+      "language": "en",
+      "n_candidates": 1,
+      "gate_use_llm": false,
+      "mode": "deterministic",
+      "reason": "GATE_DETERMINISTIC",
+      "llm_metrics": null,
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "F1"
+        ],
+        "det_obs_ids": [],
+        "det_rec_ids": [],
+        "det_lim_ids": [],
+        "det_summary": "The mean balance is 50 000.00.",
+        "det_render_ok": true,
+        "det_word_count": 6
+      },
+      "wall_ms": null,
+      "eval_count": null,
+      "token_sec": null,
+      "error": null
+    },
+    {
+      "case_id": "noanom_i02",
+      "category": "I_no_anomaly",
+      "language": "fr",
+      "n_candidates": 1,
+      "gate_use_llm": false,
+      "mode": "deterministic",
+      "reason": "GATE_DETERMINISTIC",
+      "llm_metrics": null,
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "F1"
+        ],
+        "det_obs_ids": [],
+        "det_rec_ids": [],
+        "det_lim_ids": [],
+        "det_summary": "La valeur moyenne de montant est 10 000.00.",
+        "det_render_ok": true,
+        "det_word_count": 8
+      },
+      "wall_ms": null,
+      "eval_count": null,
+      "token_sec": null,
+      "error": null
+    },
+    {
+      "case_id": "notemp_j01",
+      "category": "J_no_temporal",
+      "language": "en",
+      "n_candidates": 1,
+      "gate_use_llm": false,
+      "mode": "deterministic",
+      "reason": "GATE_DETERMINISTIC",
+      "llm_metrics": null,
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "F1"
+        ],
+        "det_obs_ids": [],
+        "det_rec_ids": [],
+        "det_lim_ids": [],
+        "det_summary": "The mean deposits is 150 000.00.",
+        "det_render_ok": true,
+        "det_word_count": 6
+      },
+      "wall_ms": null,
+      "eval_count": null,
+      "token_sec": null,
+      "error": null
+    },
+    {
+      "case_id": "notemp_j02",
+      "category": "J_no_temporal",
+      "language": "fr",
+      "n_candidates": 1,
+      "gate_use_llm": false,
+      "mode": "deterministic",
+      "reason": "GATE_DETERMINISTIC",
+      "llm_metrics": null,
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "F1"
+        ],
+        "det_obs_ids": [],
+        "det_rec_ids": [],
+        "det_lim_ids": [],
+        "det_summary": "La valeur moyenne de credits est 150 000.00.",
+        "det_render_ok": true,
+        "det_word_count": 8
+      },
+      "wall_ms": null,
+      "eval_count": null,
+      "token_sec": null,
+      "error": null
+    },
+    {
+      "case_id": "multirec_k01",
+      "category": "K_multiple_rec",
+      "language": "en",
+      "n_candidates": 7,
+      "gate_use_llm": true,
+      "mode": "llm",
+      "reason": "OK",
+      "llm_metrics": {
+        "structure_compliance": true,
+        "zero_prose_violation": true,
+        "id_validity": true,
+        "type_correctness": true,
+        "cap_respect": true,
+        "correlation_non_causal": true,
+        "anomaly_non_fraud": true,
+        "french_render_ok": null,
+        "english_render_ok": true,
+        "det_baseline_quality": true,
+        "llm_adds_value": true
+      },
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "A1",
+          "F1"
+        ],
+        "det_obs_ids": [
+          "A1"
+        ],
+        "det_rec_ids": [
+          "R1",
+          "R2",
+          "R3"
+        ],
+        "det_lim_ids": [],
+        "det_summary": "A statistically unusual observation (extreme) was detected in exposure: observed 800 000.00 vs expected 250 000.00 (deviation 11.00). The mean exposure is 250 000.00.",
+        "det_render_ok": true,
+        "det_word_count": 24
+      },
+      "llm_summary_ids": {
+        "summary": [
+          "F1",
+          "A1",
+          "T1"
+        ],
+        "obs": [
+          "A1",
+          "T1"
+        ],
+        "recs": [
+          "R1",
+          "R2",
+          "R3"
+        ],
+        "lims": []
+      },
+      "wall_ms": 11149.117946624756,
+      "eval_count": 89,
+      "prompt_eval_count": 682,
+      "token_sec": 8.1,
+      "error": null,
+      "raw_lmm_response": "{\n    \"summary_fact_ids\": [\"F1\", \"A1\", \"T1\"],\n    \"observation_fact_ids\": [\"A1\", \"T1\"],\n    \"recommendation_ids\": [\"R1\", \"R2\", \"R3\"],\n    \"limitation_ids\": [],\n    \"priority_order\": [\"A1\", \"T1\", \"R1\", \"R2\", \"R3\", \"F1\"]\n}"
+    },
+    {
+      "case_id": "multirec_k02",
+      "category": "K_multiple_rec",
+      "language": "fr",
+      "n_candidates": 5,
+      "gate_use_llm": false,
+      "mode": "deterministic",
+      "reason": "GATE_DETERMINISTIC",
+      "llm_metrics": null,
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "F1"
+        ],
+        "det_obs_ids": [],
+        "det_rec_ids": [
+          "R1",
+          "R2"
+        ],
+        "det_lim_ids": [],
+        "det_summary": "La valeur moyenne de revenu est 100 000.00.",
+        "det_render_ok": true,
+        "det_word_count": 8
+      },
+      "wall_ms": null,
+      "eval_count": null,
+      "token_sec": null,
+      "error": null
+    },
+    {
+      "case_id": "sensitive_l01",
+      "category": "L_sensitive",
+      "language": "en",
+      "n_candidates": 4,
+      "gate_use_llm": false,
+      "mode": "deterministic",
+      "reason": "GATE_DETERMINISTIC",
+      "llm_metrics": null,
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "A1",
+          "F1"
+        ],
+        "det_obs_ids": [
+          "A1"
+        ],
+        "det_rec_ids": [
+          "R1"
+        ],
+        "det_lim_ids": [],
+        "det_summary": "A statistically unusual observation (extreme) was detected in amount: observed 240 000.00 vs expected 50 000.00 (deviation 21.11). The mean amount is 50 000.00.",
+        "det_render_ok": true,
+        "det_word_count": 24
+      },
+      "wall_ms": null,
+      "eval_count": null,
+      "token_sec": null,
+      "error": null
+    },
+    {
+      "case_id": "sensitive_l02",
+      "category": "L_sensitive",
+      "language": "fr",
+      "n_candidates": 3,
+      "gate_use_llm": false,
+      "mode": "deterministic",
+      "reason": "GATE_DETERMINISTIC",
+      "llm_metrics": null,
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "A1",
+          "F1"
+        ],
+        "det_obs_ids": [
+          "A1"
+        ],
+        "det_rec_ids": [],
+        "det_lim_ids": [],
+        "det_summary": "Une observation statistiquement atypique (extrême) a été détectée sur montant : valeur observée 185 000.00 pour une valeur attendue de 50 000.00 (écart de 19.29). La valeur moyenne de montant est 50 000.00.",
+        "det_render_ok": true,
+        "det_word_count": 33
+      },
+      "wall_ms": null,
+      "eval_count": null,
+      "token_sec": null,
+      "error": null
+    },
+    {
+      "case_id": "inject_m01",
+      "category": "M_injection",
+      "language": "en",
+      "n_candidates": 2,
+      "gate_use_llm": false,
+      "mode": "deterministic",
+      "reason": "GATE_DETERMINISTIC",
+      "llm_metrics": null,
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "F1"
+        ],
+        "det_obs_ids": [],
+        "det_rec_ids": [],
+        "det_lim_ids": [],
+        "det_summary": "The mean deposits is 150 000.00.",
+        "det_render_ok": true,
+        "det_word_count": 6
+      },
+      "wall_ms": null,
+      "eval_count": null,
+      "token_sec": null,
+      "error": null
+    },
+    {
+      "case_id": "stress_n01",
+      "category": "N_hallucination",
+      "language": "en",
+      "n_candidates": 2,
+      "gate_use_llm": true,
+      "mode": "llm",
+      "reason": "OK",
+      "llm_metrics": {
+        "structure_compliance": true,
+        "zero_prose_violation": true,
+        "id_validity": true,
+        "type_correctness": true,
+        "cap_respect": true,
+        "correlation_non_causal": true,
+        "anomaly_non_fraud": true,
+        "french_render_ok": null,
+        "english_render_ok": true,
+        "det_baseline_quality": true,
+        "llm_adds_value": false
+      },
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "A1",
+          "F1"
+        ],
+        "det_obs_ids": [
+          "A1"
+        ],
+        "det_rec_ids": [],
+        "det_lim_ids": [],
+        "det_summary": "A statistically unusual observation (extreme) was detected in value: observed 210 000.00 vs expected 50 000.00 (deviation 20.00). The mean value is 50 000.00.",
+        "det_render_ok": true,
+        "det_word_count": 24
+      },
+      "llm_summary_ids": {
+        "summary": [
+          "F1"
+        ],
+        "obs": [
+          "A1"
+        ],
+        "recs": [],
+        "lims": []
+      },
+      "wall_ms": 9278.697967529297,
+      "eval_count": 50,
+      "prompt_eval_count": 450,
+      "token_sec": 7.8,
+      "error": null,
+      "raw_lmm_response": "{\n    \"summary_fact_ids\": [\"F1\"],\n    \"observation_fact_ids\": [\"A1\"],\n    \"recommendation_ids\": [],\n    \"limitation_ids\": [],\n    \"priority_order\": [\"A1\", \"F1\"]\n}"
+    },
+    {
+      "case_id": "conc_a03",
+      "category": "A_concentration",
+      "language": "fr",
+      "n_candidates": 2,
+      "gate_use_llm": false,
+      "mode": "deterministic",
+      "reason": "GATE_DETERMINISTIC",
+      "llm_metrics": null,
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "F1",
+          "D1"
+        ],
+        "det_obs_ids": [],
+        "det_rec_ids": [],
+        "det_lim_ids": [],
+        "det_summary": "La valeur moyenne de encours est 500 000.00. La distribution de zone présente une concentration notable, dominée par Centre (+44%).",
+        "det_render_ok": true,
+        "det_word_count": 20
+      },
+      "wall_ms": null,
+      "eval_count": null,
+      "token_sec": null,
+      "error": null
+    },
+    {
+      "case_id": "conc_a04",
+      "category": "A_concentration",
+      "language": "en",
+      "n_candidates": 3,
+      "gate_use_llm": false,
+      "mode": "deterministic",
+      "reason": "GATE_DETERMINISTIC",
+      "llm_metrics": null,
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "F1",
+          "D1"
+        ],
+        "det_obs_ids": [],
+        "det_rec_ids": [
+          "R1"
+        ],
+        "det_lim_ids": [],
+        "det_summary": "The mean notional is 500 000.00. The distribution of sector shows notable concentration, dominated by RealEstate (+50%).",
+        "det_render_ok": true,
+        "det_word_count": 17
+      },
+      "wall_ms": null,
+      "eval_count": null,
+      "token_sec": null,
+      "error": null
+    },
+    {
+      "case_id": "anom_b03",
+      "category": "B_anomaly",
+      "language": "en",
+      "n_candidates": 4,
+      "gate_use_llm": false,
+      "mode": "deterministic",
+      "reason": "GATE_DETERMINISTIC",
+      "llm_metrics": null,
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "A1",
+          "A2",
+          "F1"
+        ],
+        "det_obs_ids": [
+          "A1",
+          "A2"
+        ],
+        "det_rec_ids": [
+          "R1"
+        ],
+        "det_lim_ids": [],
+        "det_summary": "A statistically unusual observation (extreme) was detected in reserve: observed 48 000.00 vs expected 30 000.00 (deviation 7.20). A statistically unusual observation (moderate) was detected in reserve: observed 21 000.00 vs expected 30 000.00 (deviation 3.60). The mean reserve is 30 000.00.",
+        "det_render_ok": true,
+        "det_word_count": 42
+      },
+      "wall_ms": null,
+      "eval_count": null,
+      "token_sec": null,
+      "error": null
+    },
+    {
+      "case_id": "anom_b04",
+      "category": "B_anomaly",
+      "language": "fr",
+      "n_candidates": 2,
+      "gate_use_llm": false,
+      "mode": "deterministic",
+      "reason": "GATE_DETERMINISTIC",
+      "llm_metrics": null,
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "A1",
+          "F1"
+        ],
+        "det_obs_ids": [
+          "A1"
+        ],
+        "det_rec_ids": [],
+        "det_lim_ids": [],
+        "det_summary": "Une observation statistiquement atypique (extrême) a été détectée sur encaissement : valeur observée 90 000.00 pour une valeur attendue de 50 000.00 (écart de 8.00). La valeur moyenne de encaissement est 50 000.00.",
+        "det_render_ok": true,
+        "det_word_count": 33
+      },
+      "wall_ms": null,
+      "eval_count": null,
+      "token_sec": null,
+      "error": null
+    },
+    {
+      "case_id": "trend_c03",
+      "category": "C_trend",
+      "language": "fr",
+      "n_candidates": 3,
+      "gate_use_llm": false,
+      "mode": "deterministic",
+      "reason": "GATE_DETERMINISTIC",
+      "llm_metrics": null,
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "T1",
+          "F1"
+        ],
+        "det_obs_ids": [
+          "T1"
+        ],
+        "det_rec_ids": [
+          "R1"
+        ],
+        "det_lim_ids": [],
+        "det_summary": "Le dernier intervalle observé présente une augmentation de magnitude modérée de +8% pour volume. La valeur moyenne de volume est 40 000.00.",
+        "det_render_ok": true,
+        "det_word_count": 22
+      },
+      "wall_ms": null,
+      "eval_count": null,
+      "token_sec": null,
+      "error": null
+    },
+    {
+      "case_id": "trend_c04",
+      "category": "C_trend",
+      "language": "en",
+      "n_candidates": 3,
+      "gate_use_llm": true,
+      "mode": "llm",
+      "reason": "OK",
+      "llm_metrics": {
+        "structure_compliance": true,
+        "zero_prose_violation": true,
+        "id_validity": true,
+        "type_correctness": true,
+        "cap_respect": true,
+        "correlation_non_causal": true,
+        "anomaly_non_fraud": true,
+        "french_render_ok": null,
+        "english_render_ok": true,
+        "det_baseline_quality": true,
+        "llm_adds_value": false
+      },
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "T1",
+          "F1"
+        ],
+        "det_obs_ids": [
+          "T1"
+        ],
+        "det_rec_ids": [
+          "R1"
+        ],
+        "det_lim_ids": [],
+        "det_summary": "The latest observed period shows a moderate negative change of -2% in tx_volume. The mean tx volume is 70 000.00.",
+        "det_render_ok": true,
+        "det_word_count": 20
+      },
+      "llm_summary_ids": {
+        "summary": [
+          "F1",
+          "T1"
+        ],
+        "obs": [
+          "T1"
+        ],
+        "recs": [
+          "R1"
+        ],
+        "lims": []
+      },
+      "wall_ms": 9422.754049301147,
+      "eval_count": 54,
+      "prompt_eval_count": 507,
+      "token_sec": 8.1,
+      "error": null,
+      "raw_lmm_response": "{\"summary_fact_ids\": [\"F1\", \"T1\"], \"observation_fact_ids\": [\"T1\"], \"recommendation_ids\": [\"R1\"], \"limitation_ids\": [], \"priority_order\": [\"F1\", \"T1\", \"R1\"]}"
+    },
+    {
+      "case_id": "corr_d03",
+      "category": "D_correlation",
+      "language": "fr",
+      "n_candidates": 3,
+      "gate_use_llm": false,
+      "mode": "deterministic",
+      "reason": "GATE_DETERMINISTIC",
+      "llm_metrics": null,
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "F1",
+          "F2"
+        ],
+        "det_obs_ids": [],
+        "det_rec_ids": [],
+        "det_lim_ids": [],
+        "det_summary": "La valeur moyenne de duree est 60 000.00. La valeur moyenne de impayes est 200.00.",
+        "det_render_ok": true,
+        "det_word_count": 15
+      },
+      "wall_ms": null,
+      "eval_count": null,
+      "token_sec": null,
+      "error": null
+    },
+    {
+      "case_id": "corr_d04",
+      "category": "D_correlation",
+      "language": "en",
+      "n_candidates": 3,
+      "gate_use_llm": false,
+      "mode": "deterministic",
+      "reason": "GATE_DETERMINISTIC",
+      "llm_metrics": null,
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "F1",
+          "F2"
+        ],
+        "det_obs_ids": [],
+        "det_rec_ids": [],
+        "det_lim_ids": [],
+        "det_summary": "The mean savings is 25 000.00. The mean age is 39.90.",
+        "det_render_ok": true,
+        "det_word_count": 11
+      },
+      "wall_ms": null,
+      "eval_count": null,
+      "token_sec": null,
+      "error": null
+    },
+    {
+      "case_id": "comp_e03",
+      "category": "E_comparative",
+      "language": "en",
+      "n_candidates": 3,
+      "gate_use_llm": false,
+      "mode": "deterministic",
+      "reason": "GATE_DETERMINISTIC",
+      "llm_metrics": null,
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "F1"
+        ],
+        "det_obs_ids": [],
+        "det_rec_ids": [
+          "R1"
+        ],
+        "det_lim_ids": [],
+        "det_summary": "The mean revenue is 50 000.00.",
+        "det_render_ok": true,
+        "det_word_count": 6
+      },
+      "wall_ms": null,
+      "eval_count": null,
+      "token_sec": null,
+      "error": null
+    },
+    {
+      "case_id": "comp_e04",
+      "category": "E_comparative",
+      "language": "fr",
+      "n_candidates": 2,
+      "gate_use_llm": false,
+      "mode": "deterministic",
+      "reason": "GATE_DETERMINISTIC",
+      "llm_metrics": null,
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "F1"
+        ],
+        "det_obs_ids": [],
+        "det_rec_ids": [],
+        "det_lim_ids": [],
+        "det_summary": "La valeur moyenne de marge est 50 000.00.",
+        "det_render_ok": true,
+        "det_word_count": 8
+      },
+      "wall_ms": null,
+      "eval_count": null,
+      "token_sec": null,
+      "error": null
+    },
+    {
+      "case_id": "multi_f03",
+      "category": "F_multi_dim",
+      "language": "en",
+      "n_candidates": 7,
+      "gate_use_llm": true,
+      "mode": "llm_fallback",
+      "reason": "TYPE_MISMATCH:limitation_ids:R2:recommendation",
+      "llm_metrics": {
+        "structure_compliance": false,
+        "zero_prose_violation": true,
+        "id_validity": false,
+        "type_correctness": false,
+        "cap_respect": false,
+        "correlation_non_causal": false,
+        "anomaly_non_fraud": false,
+        "french_render_ok": null,
+        "english_render_ok": false,
+        "det_baseline_quality": true,
+        "llm_adds_value": false
+      },
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "A1",
+          "F1",
+          "F2"
+        ],
+        "det_obs_ids": [
+          "A1"
+        ],
+        "det_rec_ids": [
+          "R1",
+          "R2"
+        ],
+        "det_lim_ids": [],
+        "det_summary": "A statistically unusual observation (extreme) was detected in cash: observed 62 000.00 vs expected 40 000.00 (deviation 5.50). The mean loans is 300 000.00. The mean deposits is 250 000.00.",
+        "det_render_ok": true,
+        "det_word_count": 30
+      },
+      "llm_summary_ids": {
+        "summary": [
+          "F1",
+          "F2",
+          "C1"
+        ],
+        "obs": [
+          "A1"
+        ],
+        "recs": [
+          "R1"
+        ],
+        "lims": [
+          "R2"
+        ]
+      },
+      "wall_ms": 15519.566774368286,
+      "eval_count": 68,
+      "prompt_eval_count": 657,
+      "token_sec": 7.1,
+      "error": null,
+      "raw_lmm_response": "{\n    \"summary_fact_ids\": [\"F1\", \"F2\", \"C1\"],\n    \"observation_fact_ids\": [\"A1\"],\n    \"recommendation_ids\": [\"R1\"],\n    \"limitation_ids\": [\"R2\"],\n    \"priority_order\": [\"A1\", \"C1\", \"R1\"]\n}"
+    },
+    {
+      "case_id": "multi_f04",
+      "category": "F_multi_dim",
+      "language": "fr",
+      "n_candidates": 6,
+      "gate_use_llm": true,
+      "mode": "llm",
+      "reason": "OK",
+      "llm_metrics": {
+        "structure_compliance": true,
+        "zero_prose_violation": true,
+        "id_validity": true,
+        "type_correctness": true,
+        "cap_respect": true,
+        "correlation_non_causal": true,
+        "anomaly_non_fraud": true,
+        "french_render_ok": true,
+        "english_render_ok": null,
+        "det_baseline_quality": true,
+        "llm_adds_value": true
+      },
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "F1",
+          "F2",
+          "D1"
+        ],
+        "det_obs_ids": [],
+        "det_rec_ids": [
+          "R1"
+        ],
+        "det_lim_ids": [],
+        "det_summary": "La valeur moyenne de loss est 50 000.00. La valeur moyenne de controls est 20 000.00. La distribution de agence présente une concentration notable, dominée par Tunis (+60%).",
+        "det_render_ok": true,
+        "det_word_count": 28
+      },
+      "llm_summary_ids": {
+        "summary": [
+          "F1",
+          "C1",
+          "T1"
+        ],
+        "obs": [
+          "C1",
+          "T1"
+        ],
+        "recs": [
+          "R1"
+        ],
+        "lims": []
+      },
+      "wall_ms": 9179.06665802002,
+      "eval_count": 73,
+      "prompt_eval_count": 628,
+      "token_sec": 8.1,
+      "error": null,
+      "raw_lmm_response": "{\n    \"summary_fact_ids\": [\"F1\", \"C1\", \"T1\"],\n    \"observation_fact_ids\": [\"C1\", \"T1\"],\n    \"recommendation_ids\": [\"R1\"],\n    \"limitation_ids\": [],\n    \"priority_order\": [\"F1\", \"C1\", \"T1\", \"R1\"]\n}"
+    },
+    {
+      "case_id": "lowqual_h03",
+      "category": "H_low_evidence",
+      "language": "en",
+      "n_candidates": 2,
+      "gate_use_llm": false,
+      "mode": "deterministic",
+      "reason": "GATE_DETERMINISTIC",
+      "llm_metrics": null,
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "F1"
+        ],
+        "det_obs_ids": [],
+        "det_rec_ids": [],
+        "det_lim_ids": [],
+        "det_summary": "The mean exposure is 200 000.00.",
+        "det_render_ok": true,
+        "det_word_count": 6
+      },
+      "wall_ms": null,
+      "eval_count": null,
+      "token_sec": null,
+      "error": null
+    },
+    {
+      "case_id": "lowqual_h04",
+      "category": "H_low_evidence",
+      "language": "fr",
+      "n_candidates": 2,
+      "gate_use_llm": false,
+      "mode": "deterministic",
+      "reason": "GATE_DETERMINISTIC",
+      "llm_metrics": null,
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "A1",
+          "F1"
+        ],
+        "det_obs_ids": [
+          "A1"
+        ],
+        "det_rec_ids": [],
+        "det_lim_ids": [],
+        "det_summary": "Une observation statistiquement atypique (modérée) a été détectée sur montant : valeur observée 68 000.00 pour une valeur attendue de 50 000.00 (écart de 1.50). La valeur moyenne de montant est 50 000.00.",
+        "det_render_ok": true,
+        "det_word_count": 33
+      },
+      "wall_ms": null,
+      "eval_count": null,
+      "token_sec": null,
+      "error": null
+    },
+    {
+      "case_id": "multirec_k03",
+      "category": "K_multiple_rec",
+      "language": "en",
+      "n_candidates": 7,
+      "gate_use_llm": true,
+      "mode": "llm_fallback",
+      "reason": "UNKNOWN_ID:limitation_ids:L1",
+      "llm_metrics": {
+        "structure_compliance": false,
+        "zero_prose_violation": true,
+        "id_validity": false,
+        "type_correctness": false,
+        "cap_respect": false,
+        "correlation_non_causal": false,
+        "anomaly_non_fraud": false,
+        "french_render_ok": null,
+        "english_render_ok": false,
+        "det_baseline_quality": true,
+        "llm_adds_value": false
+      },
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "A1",
+          "F1"
+        ],
+        "det_obs_ids": [
+          "A1"
+        ],
+        "det_rec_ids": [
+          "R1",
+          "R2",
+          "R3"
+        ],
+        "det_lim_ids": [],
+        "det_summary": "A statistically unusual observation (extreme) was detected in deposits: observed 400 000.00 vs expected 300 000.00 (deviation 4.55). The mean deposits is 300 000.00.",
+        "det_render_ok": true,
+        "det_word_count": 24
+      },
+      "llm_summary_ids": {
+        "summary": [
+          "F1",
+          "A1",
+          "T1"
+        ],
+        "obs": [
+          "A1",
+          "T1"
+        ],
+        "recs": [
+          "R2",
+          "R1"
+        ],
+        "lims": [
+          "L1"
+        ]
+      },
+      "wall_ms": 8549.885988235474,
+      "eval_count": 76,
+      "prompt_eval_count": 672,
+      "token_sec": 9.1,
+      "error": null,
+      "raw_lmm_response": "{\n    \"summary_fact_ids\": [\"F1\", \"A1\", \"T1\"],\n    \"observation_fact_ids\": [\"A1\", \"T1\"],\n    \"recommendation_ids\": [\"R2\", \"R1\"],\n    \"limitation_ids\": [\"L1\"],\n    \"priority_order\": [\"A1\", \"F1\", \"T1\"]\n}"
+    },
+    {
+      "case_id": "multirec_k04",
+      "category": "K_multiple_rec",
+      "language": "fr",
+      "n_candidates": 6,
+      "gate_use_llm": true,
+      "mode": "llm",
+      "reason": "OK",
+      "llm_metrics": {
+        "structure_compliance": true,
+        "zero_prose_violation": true,
+        "id_validity": true,
+        "type_correctness": true,
+        "cap_respect": true,
+        "correlation_non_causal": true,
+        "anomaly_non_fraud": true,
+        "french_render_ok": true,
+        "english_render_ok": null,
+        "det_baseline_quality": true,
+        "llm_adds_value": true
+      },
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "A1",
+          "F1"
+        ],
+        "det_obs_ids": [
+          "A1"
+        ],
+        "det_rec_ids": [
+          "R1",
+          "R2"
+        ],
+        "det_lim_ids": [],
+        "det_summary": "Une observation statistiquement atypique (extrême) a été détectée sur credits : valeur observée 68 000.00 pour une valeur attendue de 50 000.00 (écart de 3.00). La valeur moyenne de credits est 50 000.00.",
+        "det_render_ok": true,
+        "det_word_count": 33
+      },
+      "llm_summary_ids": {
+        "summary": [
+          "F1",
+          "T1",
+          "D1"
+        ],
+        "obs": [
+          "A1"
+        ],
+        "recs": [
+          "R1",
+          "R2"
+        ],
+        "lims": []
+      },
+      "wall_ms": 7000.015020370483,
+      "eval_count": 62,
+      "prompt_eval_count": 637,
+      "token_sec": 9.1,
+      "error": null,
+      "raw_lmm_response": "{\"summary_fact_ids\": [\"F1\", \"T1\", \"D1\"], \"observation_fact_ids\": [\"A1\"], \"recommendation_ids\": [\"R1\", \"R2\"], \"limitation_ids\": [], \"priority_order\": [\"R1\", \"R2\", \"A1\"]}"
+    },
+    {
+      "case_id": "sensitive_l03",
+      "category": "L_sensitive",
+      "language": "en",
+      "n_candidates": 3,
+      "gate_use_llm": false,
+      "mode": "deterministic",
+      "reason": "GATE_DETERMINISTIC",
+      "llm_metrics": null,
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "A1",
+          "F1"
+        ],
+        "det_obs_ids": [
+          "A1"
+        ],
+        "det_rec_ids": [],
+        "det_lim_ids": [],
+        "det_summary": "A statistically unusual observation (extreme) was detected in cash_mvt: observed 130 000.00 vs expected 50 000.00 (deviation 10.00). The mean cash mvt is 50 000.00.",
+        "det_render_ok": true,
+        "det_word_count": 25
+      },
+      "wall_ms": null,
+      "eval_count": null,
+      "token_sec": null,
+      "error": null
+    },
+    {
+      "case_id": "sensitive_l04",
+      "category": "L_sensitive",
+      "language": "fr",
+      "n_candidates": 2,
+      "gate_use_llm": false,
+      "mode": "deterministic",
+      "reason": "GATE_DETERMINISTIC",
+      "llm_metrics": null,
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "F1"
+        ],
+        "det_obs_ids": [],
+        "det_rec_ids": [],
+        "det_lim_ids": [],
+        "det_summary": "La valeur moyenne de exposition est 300 000.00.",
+        "det_render_ok": true,
+        "det_word_count": 8
+      },
+      "wall_ms": null,
+      "eval_count": null,
+      "token_sec": null,
+      "error": null
+    },
+    {
+      "case_id": "inject_m02",
+      "category": "M_injection",
+      "language": "fr",
+      "n_candidates": 2,
+      "gate_use_llm": false,
+      "mode": "deterministic",
+      "reason": "GATE_DETERMINISTIC",
+      "llm_metrics": null,
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "F1"
+        ],
+        "det_obs_ids": [],
+        "det_rec_ids": [],
+        "det_lim_ids": [],
+        "det_summary": "La valeur moyenne de depots est 150 000.00.",
+        "det_render_ok": true,
+        "det_word_count": 8
+      },
+      "wall_ms": null,
+      "eval_count": null,
+      "token_sec": null,
+      "error": null
+    },
+    {
+      "case_id": "stress_n02",
+      "category": "N_hallucination",
+      "language": "fr",
+      "n_candidates": 2,
+      "gate_use_llm": true,
+      "mode": "llm",
+      "reason": "OK",
+      "llm_metrics": {
+        "structure_compliance": true,
+        "zero_prose_violation": true,
+        "id_validity": true,
+        "type_correctness": true,
+        "cap_respect": true,
+        "correlation_non_causal": true,
+        "anomaly_non_fraud": true,
+        "french_render_ok": true,
+        "english_render_ok": null,
+        "det_baseline_quality": true,
+        "llm_adds_value": false
+      },
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "A1",
+          "F1"
+        ],
+        "det_obs_ids": [
+          "A1"
+        ],
+        "det_rec_ids": [],
+        "det_lim_ids": [],
+        "det_summary": "Une observation statistiquement atypique (extrême) a été détectée sur montant : valeur observée 150 000.00 pour une valeur attendue de 50 000.00 (écart de 16.67). La valeur moyenne de montant est 50 000.00.",
+        "det_render_ok": true,
+        "det_word_count": 33
+      },
+      "llm_summary_ids": {
+        "summary": [
+          "F1"
+        ],
+        "obs": [
+          "A1"
+        ],
+        "recs": [],
+        "lims": []
+      },
+      "wall_ms": 8049.4561195373535,
+      "eval_count": 50,
+      "prompt_eval_count": 454,
+      "token_sec": 8.9,
+      "error": null,
+      "raw_lmm_response": "{\n    \"summary_fact_ids\": [\"F1\"],\n    \"observation_fact_ids\": [\"A1\"],\n    \"recommendation_ids\": [],\n    \"limitation_ids\": [],\n    \"priority_order\": [\"A1\", \"F1\"]\n}"
+    }
+  ],
+  "summary": {
+    "n_total": 46,
+    "n_attempts": 14,
+    "n_controls": 32,
+    "STRUCTURE_COMPLIANCE_RATE": 85.71,
+    "ZERO_PROSE_VIOLATION_RATE": 100.0,
+    "ID_VALIDITY_RATE": 85.71,
+    "TYPE_CORRECTNESS_RATE": 85.71,
+    "CAP_RESPECT_RATE": 85.71,
+    "CORRELATION_NON_CAUSAL_RATE": 85.71,
+    "ANOMALY_NON_FRAUD_RATE": 85.71,
+    "FRENCH_RENDER_RATE": 400.0,
+    "ENGLISH_RENDER_RATE": 800.0,
+    "DET_BASELINE_QUALITY_RATE": 100.0,
+    "LLM_ADDS_VALUE_RATE": 42.86,
+    "reasons": {
+      "OK": 12,
+      "TYPE_MISMATCH:limitation_ids:R2:recommendation": 1,
+      "UNKNOWN_ID:limitation_ids:L1": 1
+    },
+    "latency_wall_ms": {
+      "min": 7000.0,
+      "p50": 8864.5,
+      "p90": 13847.3,
+      "p95": 15184.3,
+      "p99": 15452.5,
+      "max": 15519.6
+    }
+  }
+}

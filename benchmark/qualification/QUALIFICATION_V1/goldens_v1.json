@@ -1,0 +1,219 @@
+{
+  "E2E_001": {
+    "mode": "exact_scalar",
+    "value": 2210
+  },
+  "E2E_002": {
+    "mode": "exact_scalar",
+    "value": 4699
+  },
+  "E2E_003": {
+    "mode": "numeric_tolerance",
+    "value": "24450798.83",
+    "tolerance": 1
+  },
+  "E2E_004": {
+    "mode": "exact_scalar",
+    "value": 2210
+  },
+  "E2E_006": {
+    "mode": "unordered_rows",
+    "rows": [
+      {
+        "count_all": 46,
+        "segment": "CORP_LARGE"
+      },
+      {
+        "count_all": 69,
+        "segment": "standard"
+      },
+      {
+        "count_all": 69,
+        "segment": "high_risk"
+      },
+      {
+        "count_all": 72,
+        "segment": "premium"
+      },
+      {
+        "count_all": 163,
+        "segment": "CORP_SME"
+      },
+      {
+        "count_all": 371,
+        "segment": "PART_PREM"
+      },
+      {
+        "count_all": 1420,
+        "segment": "PART_MASS"
+      }
+    ]
+  },
+  "E2E_007": {
+    "mode": "unordered_rows",
+    "rows": [
+      {
+        "count_all": 42,
+        "status": "frozen"
+      },
+      {
+        "count_all": 147,
+        "status": "closed"
+      },
+      {
+        "count_all": 322,
+        "status": "dormant"
+      },
+      {
+        "count_all": 4699,
+        "status": "active"
+      }
+    ]
+  },
+  "E2E_011": {
+    "mode": "exact_scalar",
+    "value": 1420
+  },
+  "E2E_012": {
+    "mode": "exact_scalar",
+    "value": 0
+  },
+  "E2E_013": {
+    "mode": "row_count",
+    "value": 5
+  },
+  "E2E_014": {
+    "mode": "row_count",
+    "value": 3
+  },
+  "E2E_015": {
+    "mode": "row_count",
+    "value": 5
+  },
+  "E2E_016": {
+    "mode": "row_count",
+    "value": 100
+  },
+  "E2E_021": {
+    "mode": "numeric_tolerance",
+    "value": "3.73",
+    "tolerance": 0.01
+  },
+  "E2E_022": {
+    "mode": "numeric_tolerance",
+    "value": "0.47338477913783927621",
+    "tolerance": 0.001
+  },
+  "E2E_024": {
+    "mode": "row_count",
+    "value": 100
+  },
+  "E2E_029": {
+    "mode": "row_count",
+    "value": 5
+  },
+  "E2E_036": {
+    "mode": "exact_scalar",
+    "value": 1500
+  },
+  "E2E_037": {
+    "mode": "numeric_tolerance",
+    "value": null,
+    "tolerance": 1
+  },
+  "E2E_038": {
+    "mode": "row_count",
+    "value": 30
+  },
+  "E2E_039": {
+    "mode": "unordered_rows",
+    "rows": [
+      {
+        "count_all": 333,
+        "loan_type": "conso"
+      },
+      {
+        "count_all": 379,
+        "loan_type": "auto"
+      },
+      {
+        "count_all": 384,
+        "loan_type": "immo"
+      },
+      {
+        "count_all": 404,
+        "loan_type": "pro"
+      }
+    ]
+  },
+  "E2E_040": {
+    "mode": "exact_scalar",
+    "value": 0
+  },
+  "E2E_041": {
+    "mode": "exact_scalar",
+    "value": 0
+  },
+  "E2E_042": {
+    "mode": "row_count",
+    "value": 4
+  },
+  "E2E_043": {
+    "mode": "row_count",
+    "value": 100
+  },
+  "E2E_044": {
+    "mode": "row_count",
+    "value": 100
+  },
+  "E2E_047": {
+    "mode": "unordered_rows",
+    "rows": [
+      {
+        "count_all": 40,
+        "status": "pending"
+      },
+      {
+        "count_all": 42,
+        "status": "flagged"
+      },
+      {
+        "count_all": 128,
+        "status": "completed"
+      },
+      {
+        "count_all": 50000,
+        "status": "compl\u00e9t\u00e9"
+      }
+    ]
+  },
+  "E2E_048": {
+    "mode": "row_count",
+    "value": 100
+  },
+  "E2E_066": {
+    "mode": "exact_scalar",
+    "value": 238
+  },
+  "E2E_067": {
+    "mode": "row_count",
+    "value": 0
+  },
+  "E2E_068": {
+    "mode": "row_count",
+    "value": 9
+  },
+  "E2E_069": {
+    "mode": "row_count",
+    "value": 16
+  },
+  "E2E_076": {
+    "mode": "exact_scalar",
+    "value": 1879
+  },
+  "E2E_086": {
+    "mode": "numeric_tolerance",
+    "value": "1379.16",
+    "tolerance": 0.1
+  }
+}

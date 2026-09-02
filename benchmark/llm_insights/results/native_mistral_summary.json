@@ -1,0 +1,41 @@
+{
+  "mistral|t=0.1": {
+    "n_llm_attempts": 14,
+    "n_grounded_llm": 0,
+    "n_negative_controls": 32,
+    "unexpected_llm_on_non_useful": [],
+    "valid_json_rate": 100.0,
+    "grounding_pass_rate": 0.0,
+    "unsupported_numeric_rate": 78.57,
+    "unknown_fact_ref_rate": 0.0,
+    "forbidden_claim_rate": 14.29,
+    "recommendation_grounding_rate": 0.0,
+    "avg_fact_coverage": null,
+    "useful_llm_response_rate": 0.0,
+    "timeouts": 0,
+    "transport_failures": 0,
+    "reasons": {
+      "UNSUPPORTED_NUMERIC_CLAIM:5400": 1,
+      "UNSUPPORTED_NUMERIC_CLAIM:60,000.": 1,
+      "OBSERVATION_NO_FACT:1": 1,
+      "UNSUPPORTED_NUMERIC_CLAIM:500": 1,
+      "UNSUPPORTED_NUMERIC_CLAIM:14,000.": 1,
+      "UNSUPPORTED_NUMERIC_CLAIM:12": 1,
+      "CAUSALITY_CLAIM": 2,
+      "UNSUPPORTED_NUMERIC_CLAIM:1": 2,
+      "UNSUPPORTED_NUMERIC_CLAIM:2.0": 1,
+      "UNSUPPORTED_NUMERIC_CLAIM:1.57": 1,
+      "UNSUPPORTED_NUMERIC_CLAIM:60": 1,
+      "UNSUPPORTED_NUMERIC_CLAIM:27": 1
+    },
+    "latency_wall_ms": {
+      "min": 58493.7,
+      "p50": 86034.1,
+      "p90": 116694.8,
+      "p95": 118696.9,
+      "p99": 119531.4,
+      "max": 119740.0
+    },
+    "fallback_count": 14
+  }
+}

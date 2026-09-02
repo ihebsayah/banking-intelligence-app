@@ -45,4 +45,13 @@ class IntentResponse(BaseModel):
     risk_level: Optional[str] = "safe"  # safe | suspicious | adversarial
     rejection_reason: Optional[str] = None
 
+    # Step 11 hardening (additive, backward-compatible)
+    intent_evidence_score: Optional[float] = None  # calibrated certainty, not density
+    ambiguity_codes: Optional[List[str]] = None    # machine-readable reason codes
+    decision: Optional[str] = None                 # AUTO_ACCEPT | CLARIFY | REJECT
+    top1_score: Optional[int] = None
+    top2_score: Optional[int] = None
+    absolute_margin: Optional[int] = None
+    relative_margin: Optional[float] = None
+
 

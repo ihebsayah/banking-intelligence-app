@@ -100,18 +100,18 @@ describe('ApprovalQueuePage', () => {
     });
   });
 
-  it('shows the empty state when nothing is in scope', async () => {
+  it('shows the empty state when nothing is pending for review', async () => {
     mockList.mockResolvedValue({ total: 0, page: 1, page_size: 50, items: [] });
     renderQueue();
-    expect(await screen.findByText('No approval requests in your scope')).toBeInTheDocument();
+    expect(await screen.findByText('No approval requests match the selected filters')).toBeInTheDocument();
   });
 
-  it('shows a filtered empty state when filters match nothing', async () => {
+  it('shows an unfiltered empty state when the status filter is cleared', async () => {
     mockList.mockResolvedValue({ total: 0, page: 1, page_size: 50, items: [] });
     renderQueue();
-    await screen.findByText('No approval requests in your scope');
-    fireEvent.change(screen.getByLabelText('Filter by status'), { target: { value: 'expired' } });
-    expect(await screen.findByText('No approval requests match the selected filters')).toBeInTheDocument();
+    await screen.findByText('No approval requests match the selected filters');
+    fireEvent.change(screen.getByLabelText('Filter by status'), { target: { value: '' } });
+    expect(await screen.findByText('No approval requests in your scope')).toBeInTheDocument();
   });
 
   it('shows an error with retry that refetches', async () => {

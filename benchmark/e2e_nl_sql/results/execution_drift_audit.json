@@ -1,0 +1,187 @@
+{
+  "generated_at": "2026-09-02T06:12:09",
+  "dsn": "postgresql://banking_user:securepass123@localhost:5432/banking_dev",
+  "FROM": "benchmark/e2e_nl_sql/results/E2E_POST_VALIDATION_FIX_V2.json",
+  "execution_failure_count": 19,
+  "classification_counts": {
+    "SQL_ERROR": 0,
+    "FIXTURE_DRIFT": 19,
+    "RECONCILED": 0
+  },
+  "compiler_defects": 0,
+  "fixture_drift_cases": 19,
+  "reconciled_cases": 0,
+  "cases": [
+    {
+      "id": "E2E_001",
+      "classification": "FIXTURE_DRIFT",
+      "detail": "actual=2210 expected=2000 delta=210.0 tol=0.0",
+      "sql_error": false,
+      "fixture_drift": true,
+      "reconciled": false,
+      "question": "How many customers do we have?"
+    },
+    {
+      "id": "E2E_002",
+      "classification": "FIXTURE_DRIFT",
+      "detail": "actual=4699 expected=4571 delta=128.0 tol=0.0",
+      "sql_error": false,
+      "fixture_drift": true,
+      "reconciled": false,
+      "question": "Combien de comptes sont actifs ?"
+    },
+    {
+      "id": "E2E_003",
+      "classification": "FIXTURE_DRIFT",
+      "detail": "actual=24450798.83 expected=12409234.21 delta=12041564.62 tol=1.0",
+      "sql_error": false,
+      "fixture_drift": true,
+      "reconciled": false,
+      "question": "Somme totale des soldes de tous les comptes"
+    },
+    {
+      "id": "E2E_004",
+      "classification": "FIXTURE_DRIFT",
+      "detail": "actual=2210 expected=5416 delta=3206.0 tol=0.0",
+      "sql_error": false,
+      "fixture_drift": true,
+      "reconciled": false,
+      "question": "How many customers have both a loan and an account?"
+    },
+    {
+      "id": "E2E_006",
+      "classification": "FIXTURE_DRIFT",
+      "detail": "mode=unordered_rows rows=7",
+      "sql_error": false,
+      "fixture_drift": true,
+      "reconciled": false,
+      "question": "How many customers are in each segment?"
+    },
+    {
+      "id": "E2E_007",
+      "classification": "FIXTURE_DRIFT",
+      "detail": "mode=unordered_rows rows=4",
+      "sql_error": false,
+      "fixture_drift": true,
+      "reconciled": false,
+      "question": "Nombre de comptes par statut"
+    },
+    {
+      "id": "E2E_012",
+      "classification": "FIXTURE_DRIFT",
+      "detail": "actual=0 expected=6 delta=6.0 tol=0.0",
+      "sql_error": false,
+      "fixture_drift": true,
+      "reconciled": false,
+      "question": "Comptes dormants à la BR_016"
+    },
+    {
+      "id": "E2E_022",
+      "classification": "FIXTURE_DRIFT",
+      "detail": "actual=0.47338477913783927621 expected=0.4763 delta=0.0029 tol=0.001",
+      "sql_error": false,
+      "fixture_drift": true,
+      "reconciled": false,
+      "question": "Quel est le score de risque moyen des clients dont le KYC est vérifié ?"
+    },
+    {
+      "id": "E2E_037",
+      "classification": "FIXTURE_DRIFT",
+      "detail": "non-numeric actual=None expected=259478774.45",
+      "sql_error": false,
+      "fixture_drift": true,
+      "reconciled": false,
+      "question": "Quel est le montant total du capital des prêts actifs ?"
+    },
+    {
+      "id": "E2E_039",
+      "classification": "FIXTURE_DRIFT",
+      "detail": "mode=unordered_rows rows=4",
+      "sql_error": false,
+      "fixture_drift": true,
+      "reconciled": false,
+      "question": "Répartition des prêts par type"
+    },
+    {
+      "id": "E2E_040",
+      "classification": "FIXTURE_DRIFT",
+      "detail": "actual=0 expected=300 delta=300.0 tol=0.0",
+      "sql_error": false,
+      "fixture_drift": true,
+      "reconciled": false,
+      "question": "How many auto loans are currently active?"
+    },
+    {
+      "id": "E2E_041",
+      "classification": "FIXTURE_DRIFT",
+      "detail": "actual=0 expected=82 delta=82.0 tol=0.0",
+      "sql_error": false,
+      "fixture_drift": true,
+      "reconciled": false,
+      "question": "Nombre de prêts en retard dans la branche Tunis"
+    },
+    {
+      "id": "E2E_042",
+      "classification": "FIXTURE_DRIFT",
+      "detail": "rows=4 expected=5",
+      "sql_error": false,
+      "fixture_drift": true,
+      "reconciled": false,
+      "question": "Top 5 des types de prêts par nombre de contrats"
+    },
+    {
+      "id": "E2E_047",
+      "classification": "FIXTURE_DRIFT",
+      "detail": "mode=unordered_rows rows=4",
+      "sql_error": false,
+      "fixture_drift": true,
+      "reconciled": false,
+      "question": "Number of transactions per status"
+    },
+    {
+      "id": "E2E_066",
+      "classification": "FIXTURE_DRIFT",
+      "detail": "actual=238 expected=30 delta=208.0 tol=0.0",
+      "sql_error": false,
+      "fixture_drift": true,
+      "reconciled": false,
+      "question": "How many branches exist in total?"
+    },
+    {
+      "id": "E2E_067",
+      "classification": "FIXTURE_DRIFT",
+      "detail": "rows=0 expected=100",
+      "sql_error": false,
+      "fixture_drift": true,
+      "reconciled": false,
+      "question": "Clients avec prêts dans les branches de Tunis"
+    },
+    {
+      "id": "E2E_069",
+      "classification": "FIXTURE_DRIFT",
+      "detail": "rows=16 expected=9",
+      "sql_error": false,
+      "fixture_drift": true,
+      "reconciled": false,
+      "question": "Nombre de comptes par ville de la branche"
+    },
+    {
+      "id": "E2E_076",
+      "classification": "FIXTURE_DRIFT",
+      "detail": "actual=1879 expected=1711 delta=168.0 tol=0.0",
+      "sql_error": false,
+      "fixture_drift": true,
+      "reconciled": false,
+      "question": "How many customers have verified their KYC?"
+    },
+    {
+      "id": "E2E_086",
+      "classification": "FIXTURE_DRIFT",
+      "detail": "actual=1379.16 expected=2606.31 delta=1227.15 tol=0.1",
+      "sql_error": false,
+      "fixture_drift": true,
+      "reconciled": false,
+      "question": "What is the loan to deposit ratio?"
+    }
+  ]
+}

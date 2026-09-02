@@ -22,9 +22,6 @@ async def lifespan(app: FastAPI):
     await insights_generator.context_gatherer.initialize()
     logger.info("✅ Insights Agent ready on port 8013")
     yield
-    # teardown
-    if insights_generator.context_gatherer.pool:
-        await insights_generator.context_gatherer.pool.close()
 
 
 app = FastAPI(
@@ -57,4 +54,14 @@ async def generate_insights(request: InsightsRequest):
 
 @app.get("/health")
 async def health():
-    return {"status": "healthy", "service": "insights_agent", "port": 8013}
+    # Health reflects the deterministic Insights service, NOT Ollama. The LLM is
+    # optional for correctness: when disabled, Insights is healthy regardless of
+    # whether an LLM provider is reachable. Provider availability is reported
+    # separately below and never blocks startup or health.
+    return {
+        "status": "healthy",
+        "service": "insights_agent",
+        "port": 8013,
+        "llm_enabled": config.ENABLE_LLM_INSIGHTS,
+        "llm_available": "unknown",
+    }

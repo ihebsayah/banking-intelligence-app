@@ -1,0 +1,190 @@
+{
+  "model": "qwen2.5:3b",
+  "temperature": 0.0,
+  "contract": "symbolic",
+  "cases": [
+    {
+      "case_id": "stress_n02",
+      "category": "N_hallucination",
+      "language": "fr",
+      "gate_use_llm": true,
+      "mode": "llm_fallback",
+      "reason": "TOKEN_FACT_MISMATCH:OBSERVATION0:extra=[]:missing=['F1']",
+      "payload_facts": 2,
+      "payload_json_len": 342,
+      "deterministic_summary": "360 records matched the query.",
+      "symbolic_metrics": {
+        "symbolic_grounded": false,
+        "numeric_literal_violation": false,
+        "token_validity_ok": true,
+        "fact_id_token_consistent": false,
+        "unresolved_token": false,
+        "render_success": false,
+        "forbidden_claim": false,
+        "causality_claim": false,
+        "useful": false
+      },
+      "rendered": null,
+      "wall_ms": 19364.354133605957,
+      "eval_count": 69,
+      "prompt_eval_count": 546,
+      "token_sec": 8.2,
+      "error": null
+    },
+    {
+      "case_id": "anom_b02",
+      "category": "B_anomaly",
+      "language": "en",
+      "gate_use_llm": true,
+      "mode": "llm_fallback",
+      "reason": "TOKEN_FACT_MISMATCH:OBSERVATION0:extra=[]:missing=['F1']",
+      "payload_facts": 3,
+      "payload_json_len": 629,
+      "deterministic_summary": "1200 records matched the query.",
+      "symbolic_metrics": {
+        "symbolic_grounded": false,
+        "numeric_literal_violation": false,
+        "token_validity_ok": true,
+        "fact_id_token_consistent": false,
+        "unresolved_token": false,
+        "render_success": false,
+        "forbidden_claim": false,
+        "causality_claim": false,
+        "useful": false
+      },
+      "rendered": null,
+      "wall_ms": 21141.41273498535,
+      "eval_count": 143,
+      "prompt_eval_count": 601,
+      "token_sec": 8.2,
+      "error": null
+    },
+    {
+      "case_id": "multi_f04",
+      "category": "F_multi_dim",
+      "language": "fr",
+      "gate_use_llm": true,
+      "mode": "llm_fallback",
+      "reason": "TOKEN_FACT_MISMATCH:OBSERVATION0:extra=[]:missing=['D1']",
+      "payload_facts": 6,
+      "payload_json_len": 1198,
+      "deterministic_summary": "Loss: 50,000,000.",
+      "symbolic_metrics": {
+        "symbolic_grounded": false,
+        "numeric_literal_violation": false,
+        "token_validity_ok": true,
+        "fact_id_token_consistent": false,
+        "unresolved_token": false,
+        "render_success": false,
+        "forbidden_claim": false,
+        "causality_claim": false,
+        "useful": false
+      },
+      "rendered": null,
+      "wall_ms": 29490.300178527832,
+      "eval_count": 194,
+      "prompt_eval_count": 772,
+      "token_sec": 8.2,
+      "error": null
+    },
+    {
+      "case_id": "multi_f01",
+      "category": "F_multi_dim",
+      "language": "en",
+      "gate_use_llm": true,
+      "mode": "llm",
+      "reason": "OK",
+      "payload_facts": 8,
+      "payload_json_len": 1674,
+      "deterministic_summary": "Exposure: 750,000,000.",
+      "symbolic_metrics": {
+        "symbolic_grounded": true,
+        "numeric_literal_violation": false,
+        "token_validity_ok": true,
+        "fact_id_token_consistent": true,
+        "unresolved_token": false,
+        "render_success": true,
+        "forbidden_claim": false,
+        "causality_claim": false,
+        "useful": true
+      },
+      "rendered": {
+        "ok": true,
+        "reason": null,
+        "summary": "The credit portfolio shows a moderate increase in exposure with a clear trend moving towards a more concentrated region, with 'Tunis' being the dominant region. There is a strong positive correlation between exposure and income, and one extreme anomaly in exposure has been identified.",
+        "observations": [
+          "The mean exposure is 500 000, and there is a significant positive change in exposure over time, moving in the +7.5% direction.",
+          "The dominant region for exposure is 'Tunis' (dominant value of region is Tunis), and there is one extreme anomaly in exposure (1 500 000).",
+          "Exposure is strongly associated with income (+0.71), as indicated by the correlation between these two metrics."
+        ],
+        "recommendations": [
+          "Review the risk associated with the extreme exposure anomaly and the dominance of the 'Tunis' region (One extreme exposure anomaly and Tunis concentration (55%) — review risk.).",
+          "Consider a joint analysis of the strong positive correlation between exposure and income (Strong positive correlation (0.71) between exposure and income — consider joint analysis.)."
+        ],
+        "limitations": [
+          "This summary does not provide details on the specific values of exposure, income, or the exact timeline of the exposure change."
+        ]
+      },
+      "wall_ms": 53294.30294036865,
+      "eval_count": 363,
+      "prompt_eval_count": 884,
+      "token_sec": 8.1,
+      "error": null
+    },
+    {
+      "case_id": "multi_f02",
+      "category": "F_multi_dim",
+      "language": "fr",
+      "gate_use_llm": true,
+      "mode": "llm_fallback",
+      "reason": "TOKEN_FACT_MISMATCH:OBSERVATION0:extra=['A1']:missing=['D1', 'T1']",
+      "payload_facts": 6,
+      "payload_json_len": 1121,
+      "deterministic_summary": "Marge: 57,600,000.",
+      "symbolic_metrics": {
+        "symbolic_grounded": false,
+        "numeric_literal_violation": false,
+        "token_validity_ok": true,
+        "fact_id_token_consistent": false,
+        "unresolved_token": false,
+        "render_success": false,
+        "forbidden_claim": false,
+        "causality_claim": false,
+        "useful": false
+      },
+      "rendered": null,
+      "wall_ms": 33467.60010719299,
+      "eval_count": 225,
+      "prompt_eval_count": 776,
+      "token_sec": 8.2,
+      "error": null
+    }
+  ],
+  "summary": {
+    "n_attempts": 5,
+    "SYMBOLIC_GROUNDING_PASS_RATE": 20.0,
+    "ZERO_NUMERIC_VIOLATION_RATE": 0.0,
+    "TOKEN_VALIDITY_RATE": 100.0,
+    "FACT_ID_TOKEN_CONSISTENCY_RATE": 20.0,
+    "UNRESOLVED_TOKEN_RATE": 0.0,
+    "RENDER_SUCCESS_RATE": 20.0,
+    "FORBIDDEN_CLAIM_RATE": 0.0,
+    "CAUSALITY_CLAIM_RATE": 0.0,
+    "USEFUL_RESPONSE_RATE": 20.0,
+    "reasons": {
+      "TOKEN_FACT_MISMATCH:OBSERVATION0:extra=[]:missing=['F1']": 2,
+      "TOKEN_FACT_MISMATCH:OBSERVATION0:extra=[]:missing=['D1']": 1,
+      "OK": 1,
+      "TOKEN_FACT_MISMATCH:OBSERVATION0:extra=['A1']:missing=['D1', 'T1']": 1
+    },
+    "latency_wall_ms": {
+      "min": 19364.4,
+      "p50": 29490.3,
+      "p90": 45363.6,
+      "p95": 49329.0,
+      "p99": 52501.2,
+      "max": 53294.3
+    },
+    "n_negative_controls": 0
+  }
+}

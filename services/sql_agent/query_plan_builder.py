@@ -38,6 +38,34 @@ SENSITIVE_LOG_TABLES = {
 }
 
 
+def _flip_cardinality(card: str) -> str:
+    """Reverse a relationship direction while keeping its fan-out semantics truthful.
+
+    When _join_graph inserts the reversed edge for a bidirectional relationship,
+    the cardinality must be inverted: customers → accounts is one_to_many, so the
+    reverse edge accounts → customers is many_to_one.
+    """
+    return {
+        "one_to_many": "many_to_one",
+        "many_to_one": "one_to_many",
+        "one_to_one": "one_to_one",
+        "many_to_many": "many_to_many",
+    }.get(card, "many_to_one")
+
+
+def _dedupe_refs(refs: List[ColumnRef]) -> List[ColumnRef]:
+    """Drop duplicate dimension refs (same table.column) preserving order."""
+    seen = set()
+    out = []
+    for r in refs:
+        key = (r.table, r.name)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(r)
+    return out
+
+
 def initialize_join_registry(db_conn) -> None:
     """Load join_registry into memory for BFS join resolution. Idempotent."""
     global _join_graph, _join_graph_ready
@@ -54,6 +82,7 @@ def initialize_join_registry(db_conn) -> None:
             jtype_idx = colnames.index("join_type") if "join_type" in colnames else -1
             conf_idx = colnames.index("confidence") if "confidence" in colnames else -1
             bidir_idx = colnames.index("is_bidirectional") if "is_bidirectional" in colnames else -1
+            rel_idx = colnames.index("relationship_type") if "relationship_type" in colnames else -1
 
             graph: Dict[str, List[dict]] = {}
             for row in cur.fetchall():
@@ -70,13 +99,18 @@ def initialize_join_registry(db_conn) -> None:
                     is_bidirectional = bool(row[bidir_idx])
                 if from_t in SENSITIVE_LOG_TABLES or to_t in SENSITIVE_LOG_TABLES:
                     is_bidirectional = False
+                cardinality = "many_to_one"
+                if rel_idx != -1 and row[rel_idx] is not None:
+                    cardinality = str(row[rel_idx]).lower()
                 graph.setdefault(from_t, []).append(
-                    {"to_table": to_t, "join_key": key, "condition": cond, "join_type": jtype}
+                    {"to_table": to_t, "join_key": key, "condition": cond, "join_type": jtype,
+                     "cardinality": cardinality}
                 )
                 if is_bidirectional:
                     rev_cond = f"{to_t}.{target_col} = {from_t}.{key}"
                     graph.setdefault(to_t, []).append(
-                        {"to_table": from_t, "join_key": target_col, "condition": rev_cond, "join_type": jtype}
+                        {"to_table": from_t, "join_key": target_col, "condition": rev_cond, "join_type": jtype,
+                         "cardinality": _flip_cardinality(cardinality)}
                     )
             _join_graph = graph
         _join_graph_ready = bool(_join_graph)
@@ -153,6 +187,52 @@ def _bfs_join_path_excluding(start: str, end: str, exclude: Set[str]) -> Optiona
             visited.add(nxt)
             queue.append((nxt, new_path))
     return None
+
+
+def _pick_join_root(tables: List[str], query_text: str) -> Optional[str]:
+    """Choose the ER root for a join closure: the measured entity of the query.
+
+    Prefers the entity whose keyword appears in the query AND whose table is
+    part of the request, falling back to the first (sorted) selected table.
+    This makes the relation's FROM table the subject being measured or filtered.
+    """
+    q = query_text.lower()
+    for keyword, table in _ENTITY_KEYWORDS.items():
+        if table in tables and re.search(r'\b' + re.escape(keyword) + r's?\b', q):
+            return table
+    return None
+
+
+def _build_closure_joins(tables: List[str], query_text: str) -> List[dict]:
+    """Span all selected tables with a join tree resolved from join_registry.
+
+    Relational closure rule: the SQL relation must cover metric sources,
+    dimension tables, filter tables and sort targets together. EntityResolver
+    may hand the planner joins rooted at a table that schema did NOT select
+    (e.g. a phantom customers row feeding a single kyc_cases query); those
+    spurious edges are ignored and replaced by this registry-driven tree.
+    """
+    if len(tables) < 2 or not _join_graph_ready:
+        return []
+    ordered = sorted(tables)
+    root = _pick_join_root(tables, query_text) or ordered[0]
+    joined = {root}
+    edges: List[dict] = []
+    visited = {root}
+    frontier = [root]
+    while frontier:
+        node = frontier.pop(0)
+        for edge in _join_graph.get(node, []):
+            nxt = edge["to_table"]
+            if nxt in visited:
+                continue
+            visited.add(nxt)
+            if nxt in tables and nxt not in joined:
+                joined.add(nxt)
+                edges.append({**edge, "from_table": node})
+            if nxt in tables:
+                frontier.append(nxt)
+    return edges
 
 
 # ─── Approved metric formulas (static registry) ──────────────────────────────
@@ -297,10 +377,16 @@ APPROVED_METRICS: Dict[str, Dict[str, Any]] = {
         },
     },
     "pnb": {
-        "formula": "COALESCE(ins.fee_income, 0) + COALESCE(ins.interest_income, 0) - COALESCE(ins.operating_expenses, 0)",
+        "formula": "COALESCE(income_statement_snapshots.fee_income, 0) + COALESCE(income_statement_snapshots.interest_income, 0) - COALESCE(income_statement_snapshots.operating_expenses, 0)",
         "alias": "pnb",
-        "source_tables": ["income_statement_snapshots", "fee_income", "interest_income"],
-        "grains": {"time"},
+        "source_tables": ["income_statement_snapshots"],
+        "grains": {"time", "scalar"},
+    },
+    "net_income": {
+        "formula": "income_statement_snapshots.net_income",
+        "alias": "net_income",
+        "source_tables": ["income_statement_snapshots"],
+        "grains": {"time", "scalar"},
     },
     "provision_coverage": {
         "formula": "ROUND(100.0 * SUM(p.provision_amount) / NULLIF(SUM(npl.npl_amount), 0), 2)",
@@ -309,7 +395,7 @@ APPROVED_METRICS: Dict[str, Dict[str, Any]] = {
         "grains": {"branch", "time"},
     },
     "cost_income_ratio": {
-        "formula": "ROUND(100.0 * ins.operating_expenses / NULLIF(ins.fee_income + ins.interest_income, 0), 2)",
+        "formula": "ROUND(100.0 * income_statement_snapshots.operating_expenses / NULLIF(income_statement_snapshots.fee_income + income_statement_snapshots.interest_income, 0), 2)",
         "alias": "cost_income_ratio",
         "source_tables": ["income_statement_snapshots"],
         "grains": {"time"},
@@ -363,9 +449,19 @@ _DIMENSION_TO_GRAIN: Dict[str, str] = {
     "branches.state": "branch",
     "branches.city": "branch",
     "accounts.account_type": "account_type",
+    "accounts.status": "account_status",
+    "accounts.currency": "currency",
     "loan_contracts.loan_type": "loan_type",
     "loan_contracts.status": "loan_status",
+    "loan_contracts.disbursement_date": "time",
+    "transactions.transaction_type": "transaction_type",
+    "transactions.status": "transaction_status",
+    "transactions.transaction_date": "time",
+    "risk_flags.severity": "severity",
     "fee_income.fee_type": "fee_type",
+    "non_performing_loans.classification": "classification",
+    "suspicious_activity_reports.status": "status",
+    "kyc_cases.risk_level": "risk_level",
     "time": "time",
 }
 
@@ -398,6 +494,13 @@ _BOOLEAN_COLUMNS: Dict[str, Set[str]] = {
     "products": {"is_active"},
     "kyc_cases": set(),
 }
+
+_NUMERIC_HINTS = [
+    "balance", "amount", "principal_amount", "npl_amount",
+    "provision_amount", "risk_score", "fee_amount", "net_income",
+    "pnb", "operating_expenses", "total_assets", "total_equity",
+    "interest_income", "outstanding_balance",
+]
 
 # ─── Entity keyword → table mapping (for "count customers" detection) ────────
 
@@ -577,23 +680,76 @@ class QueryPlanBuilder:
             )
 
         # ── Build joins (before fan-out detection) ────────────────────────
-        # ponytail: auto-resolve when caller passes empty joins for multi-table
-        resolved_paths = join_paths
-        if not resolved_paths and len(selected_tables) > 1:
-            resolved_paths = _auto_resolve_joins(selected_tables)
+        # Relational closure: the SQL relation set must span every selected
+        # table (metric source ∪ dims ∪ filters ∪ sort). EntityResolver's
+        # join_structure may include edges rooted at tables schema did not
+        # select (phantom customer/account rows); drop those and resolve the
+        # relation over selected_tables from the registry graph instead.
+        if len(selected_tables) > 1 and _join_graph_ready:
+            resolved_paths = _build_closure_joins(selected_tables, query_text)
+            spanned = {selected_tables[0]}
+            for j in resolved_paths:
+                spanned.add(j.get("from_table", ""))
+                spanned.add(j.get("to_table", ""))
+            if not resolved_paths or not set(selected_tables).issubset(spanned):
+                resolved_paths = [
+                    j for j in (join_paths or [])
+                    if j.get("from_table") in selected_tables
+                    and j.get("to_table") in selected_tables
+                ]
+        else:
+            resolved_paths = [
+                j for j in (join_paths or [])
+                if j.get("from_table") in selected_tables
+                and j.get("to_table") in selected_tables
+            ]
         join_specs = self._build_joins(resolved_paths)
 
         # ── Detect fan-out risk ───────────────────────────────────────────
         fan_out = self._detect_fan_out(join_specs, selected_tables)
 
         # ── Resolve implicit analytical expressions ───────────────────────
+        # pnb / net_income live as real columns on income_statement_snapshots;
+        # their golden semantics are plain-column aggregations, not registered
+        # formula metrics (E2E_056/058 measure SUM(pnb)/SUM(net_income)).
+        # Only materialise the SUM(s) the query actually requested.
+        requested_plain_cols = [
+            m.metric_id for m in validated_metrics if m.metric_id in ("pnb", "net_income")
+        ]
+        validated_metrics = [
+            m for m in validated_metrics if m.metric_id not in ("pnb", "net_income")
+        ]
+        plain_col_metrics = []
+        for m in requested_plain_cols:
+            for t in selected_tables:
+                if m in _VALID_COLUMNS.get(t, set()):
+                    plain_col_metrics.append(AggregateExpression(
+                        function="SUM", column=ColumnRef(table=t, name=m),
+                        alias=f"sum_{m}",
+                    ))
+                    break
         implicit_exprs = self._resolve_implicit_aggregation(
             task, query_text, requested_fields, selected_tables,
             selected_columns, dimensions, join_specs,
         )
+        implicit_exprs = plain_col_metrics + implicit_exprs
 
         # ── Build dimensions ──────────────────────────────────────────────
-        dim_refs = self._build_dimensions(dimensions, selected_tables)
+        dim_refs = self._build_dimensions(dimensions, selected_tables, query_text)
+        if (
+            task == "ranking"
+            and not dim_refs
+            and re.search(r"\bclients?\b|\bcustomers?\b", query_text.lower())
+            and any(
+                isinstance(x, AggregateExpression) and x.function in ("SUM", "AVG")
+                and x.column and x.column.table != "customers"
+                for x in implicit_exprs
+            )
+        ):
+            # Ranking customers by an account-level gauge ("Top 10 clients par
+            # solde de compte") ranks at the customer grain, not globally.
+            if "name" in _VALID_COLUMNS.get("customers", set()):
+                dim_refs.append(ColumnRef(table="customers", name="name"))
 
         # ── Build grain ───────────────────────────────────────────────────
         grain = self._build_grain(selected_tables, dim_refs, time_range)
@@ -604,8 +760,12 @@ class QueryPlanBuilder:
         # ── Build time range ──────────────────────────────────────────────
         time_spec = self._build_time_range(time_range)
 
-        # ── Build sort ────────────────────────────────────────────────────
-        sort_spec = self._build_sort(sort_structured, task)
+        # ── Build sort (reconciled to the emitted aggregate at result grain)
+        sort_spec = self._build_sort(
+            sort_structured, task, implicit_exprs,
+            requested_fields, selected_tables, selected_columns,
+            grouped=bool(dim_refs),
+        )
 
         # ── Build requested columns ───────────────────────────────────────
         col_refs = self._build_requested_columns(
@@ -753,6 +913,27 @@ class QueryPlanBuilder:
 
     # ── Implicit analytical expression resolution ─────────────────────────
 
+    _AGGR_TASKS = ("aggregation", "ranking", "trend", "time-series analysis", "distribution")
+
+    def _entity_count_expression(
+        self, q: str, tables: List[str], selected_columns: Dict[str, List[str]],
+        dimensions: List[str], joins: List[JoinSpec],
+    ) -> Optional[AggregateExpression]:
+        """Deterministic COUNT over the measured entity when no explicit metric.
+
+        Returns COUNT(DISTINCT entity_pk) on fan-out joins and COUNT(pk) for
+        subclass entities (non_performing_loans); None for plain COUNT(*).
+        """
+        dim_set = {d.split(".")[-1] if "." in d else d for d in dimensions}
+        found = self._find_entity_count(q, tables, selected_columns, dim_set, joins)
+        if found:
+            col, distinct = found
+            return AggregateExpression(
+                function="COUNT", column=col, distinct=distinct,
+                alias=f"count_{col.name}",
+            )
+        return None
+
     def _resolve_implicit_aggregation(
         self,
         task: str,
@@ -770,7 +951,7 @@ class QueryPlanBuilder:
         exprs: List[AnalyticalExpression] = []
         joins = joins or []
 
-        if task in ("aggregation", "ranking"):
+        if task in self._AGGR_TASKS:
             # Detect ratio/percentage first (higher priority)
             ratio_expr = self._detect_ratio(q, tables, selected_columns)
             if ratio_expr:
@@ -789,6 +970,33 @@ class QueryPlanBuilder:
             )
             if agg_expr:
                 exprs.append(agg_expr)
+                return exprs
+
+            # A ranking over a detail value column is a ranked listing, not a
+            # grouped aggregation ("Top 5 clients par score de risque" orders
+            # rows by a column instead of grouping them).
+            if task == "ranking" and not dimensions:
+                return []
+
+            # Aggregate task with no explicit metric still measures an entity
+            # when a grouping (time/dimension) or a count-style verb anchors
+            # the query (explicit count words, or pending/awaiting population
+            # questions such as "Clients en attente KYC").
+            count_verb = any(
+                re.search(r"\b" + re.escape(w) + r"\b", q)
+                for w in ("combien", "how many", "count", "nombre", "number of", "quantité", "quanti")
+            )
+            count_phrase = re.search(
+                r"\ben attente\b|\bpending\b|\bawaiting\b|\ben attente de\b|\ben cours\b|\bnombre d?\b"
+                r"|\bdormant\w*\b|\binactif\w*\b|\binactive\w*\b|\bsuspendu\w*\b"
+                r"|\bsuspended\b|\bfrozen\b", q
+            )
+            if dimensions or count_verb or count_phrase:
+                entity_expr = self._entity_count_expression(q, tables, selected_columns, dimensions, joins)
+                if entity_expr:
+                    exprs.append(entity_expr)
+                    return exprs
+                exprs.append(AggregateExpression(function="COUNT", column=None, alias="count_all"))
 
         return exprs
 
@@ -802,7 +1010,14 @@ class QueryPlanBuilder:
         dim_set = {d.split(".")[-1] if "." in d else d for d in dimensions}
         joins = joins or []
 
-        func = self._detect_aggregate_function(q, None)
+        # "Volume of transactions" is count-like at a transactional grain but
+        # sum-like at a location grain ("Transaction volume per region").
+        if re.search(r"\bvolume\b", q) and any(
+            d.split(".")[0] == "branches" for d in dimensions
+        ):
+            func = "SUM"
+        else:
+            func = self._detect_aggregate_function(q, None)
 
         if func in ("COUNT", "DISTINCT_COUNT"):
             # Entity-aware: detect entity keyword in query → COUNT(DISTINCT pk)
@@ -810,28 +1025,20 @@ class QueryPlanBuilder:
                 q, tables, selected_columns, dim_set, joins,
             )
             if entity_col:
+                col, distinct = entity_col
                 return AggregateExpression(
-                    function="COUNT", column=entity_col, distinct=True,
-                    alias=f"count_{entity_col.name}",
+                    function="COUNT", column=col, distinct=distinct,
+                    alias=f"count_{col.name}",
                 )
-            target_col = self._find_count_target(requested_fields, tables, selected_columns, dim_set)
-            if func == "DISTINCT_COUNT" and target_col:
-                return AggregateExpression(
-                    function="COUNT", column=target_col, distinct=True,
-                    alias=f"distinct_count_{target_col.name}",
-                )
-            if func == "COUNT" and target_col:
-                return AggregateExpression(
-                    function="COUNT", column=target_col,
-                    alias=f"count_{target_col.name}",
-                )
+            # Counts measure the chosen entity's rows: COUNT(*) is the neutral
+            # grain (attribute columns are never the metric subject).
             return AggregateExpression(
                 function="COUNT", column=None, alias="count_all",
             )
 
         if func and func not in ("COUNT", "DISTINCT_COUNT"):
             target_col = self._find_target_column(
-                requested_fields, tables, selected_columns, dim_set,
+                requested_fields, tables, selected_columns, dim_set, q,
             )
             if target_col:
                 alias = f"{func.lower()}_{target_col.name}"
@@ -839,30 +1046,44 @@ class QueryPlanBuilder:
                     function=func, column=target_col, alias=alias,
                 )
 
-        if not func and dimensions:
-            return AggregateExpression(
-                function="COUNT", column=None, alias="count_all",
-            )
-
         return None
 
     def _find_entity_count(
         self, q: str, tables: List[str],
         selected_columns: Dict[str, List[str]],
         dim_set: set, joins: List[JoinSpec],
-    ) -> Optional[ColumnRef]:
-        """Detect entity keyword in query → COUNT(DISTINCT entity_pk).
-        Only returns DISTINCT when a one_to_many or many_to_many join exists."""
+    ) -> Optional[Tuple[ColumnRef, bool]]:
+        """Detect the measured entity → (COUNT column, use_distinct).
+
+        - Subclass entities (non_performing_loans) are counted plainly: a loan
+          has at most one NPL classification row, so COUNT(npl_id) is the count
+          of NPL loans.
+        - Regular entities return COUNT(DISTINCT pk) only when a fan-out join
+          exists (a one_to_many/many_to_many join would otherwise double count)
+          or when the user explicitly asked for unique/differentiated entities.
+        """
         has_fan_out = any(j.cardinality in ("one_to_many", "many_to_many") for j in joins)
+        is_subclass = (
+            "non_performing_loans" in tables
+            and any(w in q for w in ("non performant", "non performante", "non-performing", "classé", "classées", "douteuse", "douteuses", "npl"))
+        )
+        if is_subclass:
+            return (
+                ColumnRef(table="non_performing_loans", name=ENTITY_IDENTITIES["non_performing_loans"]["identity"]),
+                False,
+            )
+        explicit_distinct = any(
+            re.search(r'\b' + re.escape(w) + r'\b', q)
+            for w in ("unique", "distinct", "distincts", "différents", "différentes")
+        )
         for keyword, table in _ENTITY_KEYWORDS.items():
             if re.search(r'\b' + re.escape(keyword) + r's?\b', q):
                 if table in tables:
                     info = ENTITY_IDENTITIES.get(table)
                     if info:
-                        pk = info["identity"]
-                        col = ColumnRef(table=table, name=pk)
-                        if has_fan_out:
-                            return col
+                        col = ColumnRef(table=table, name=info["identity"])
+                        if has_fan_out or explicit_distinct:
+                            return col, True
         return None
 
     def _find_count_target(
@@ -894,15 +1115,20 @@ class QueryPlanBuilder:
         _wb = lambda w: re.search(r'\b' + re.escape(w) + r'\b', q)
         _wb_any = lambda words: any(_wb(w) for w in words)
 
-        has_avg = _wb_any(["average", "avg", "moyenne"])
+        has_avg = _wb_any(["average", "avg", "moyen", "moyenne"])
         has_min = _wb_any(["minimum", "min", "lowest", "plus bas", "moins"])
         has_max = _wb_any(["maximum", "max", "highest", "plus grand", "meilleur"])
-        has_sum = _wb_any(["total", "sum", "amount", "montant", "somme", "totaliser"])
+        has_sum = _wb_any([
+            "total", "totale", "totales", "totaux", "totaliser", "sum", "somme",
+            "amount", "amounts", "montant", "deposit", "deposits", "depot", "depots",
+            "dépôt", "dépôts", "commission", "commissions", "fee income",
+            "balance", "solde", "avoirs",
+        ])
         has_count = _wb_any([
             "count", "number", "how many", "combien", "nombre",
             "nombre de", "quantité",
         ])
-        has_distinct = _wb_any(["unique", "distinct", "distincts", "différents"])
+        has_distinct = _wb_any(["unique", "distinct", "distincts", "différents", "différentes"])
 
         if has_avg:
             return "AVG"
@@ -964,34 +1190,52 @@ class QueryPlanBuilder:
     def _find_target_column(
         self, requested_fields: List[str],
         tables: List[str], selected_columns: Dict[str, List[str]],
-        dim_set: Optional[set] = None,
+        dim_set: Optional[set] = None, q: str = "",
     ) -> Optional[ColumnRef]:
-        """Find the column to aggregate based on requested fields."""
+        """Find the column to aggregate based on requested fields and topic."""
         dim_set = dim_set or set()
         agg_keywords = {
             "total", "sum", "amount", "montant", "somme", "balance", "solde",
             "average", "avg", "moyenne", "minimum", "min", "maximum", "max",
-            "count", "number", "combien", "nombre",
+            "count", "number", "combien", "nombre", "client", "customer",
+            "account", "compte", "branch", "agence", "branch_id", "customer_id",
+            "account_id", "loan_id", "transaction_id", "employee_id", "id",
         }
 
         for rf in requested_fields:
-            if rf.lower() in agg_keywords or rf in dim_set:
+            if rf.lower() in agg_keywords or rf in dim_set or rf.endswith("_id"):
                 continue
             for t in tables:
                 cols = selected_columns.get(t, [])
-                if rf in cols:
+                if rf in cols and not rf.endswith("_id"):
                     return ColumnRef(table=t, name=rf)
-                if f"{t}.{rf}" in [f"{t}.{c}" for c in cols]:
+                if f"{t}.{rf}" in [f"{t}.{c}" for c in cols] and not rf.endswith("_id"):
                     return ColumnRef(table=t, name=rf)
 
-        # Fallback: use the first numeric-looking column from the primary table
-        _NUMERIC_HINTS = {
-            "balance", "amount", "principal_amount", "outstanding_balance",
-            "risk_score", "fee_amount", "npl_amount", "provision_amount",
-        }
-        for t in sorted(tables):
-            for c in selected_columns.get(t, []):
-                if c in _NUMERIC_HINTS:
+        # Topic resolution: when the query names a subject table ("provisions
+        # totales", "fee income", "transaction volume", "loan amounts"), its own
+        # amount-like column is the metric subject, beating the global hint
+        # order (which would otherwise pick accounts.balance).
+        if q:
+            topic_targets = {
+                "provision": ("provisions", ("provision_amount", "amount", "balance")),
+                "fee": ("fee_income", ("fee_amount", "amount")),
+                "loan": ("loan_contracts", ("principal_amount", "outstanding_balance", "amount", "balance")),
+                "dépôt": ("accounts", ("balance", "available_balance", "amount")),
+                "deposit": ("accounts", ("balance", "available_balance", "amount")),
+                "transaction": ("transactions", ("amount", "balance")),
+            }
+            for topic, (tbl, cols_prio) in topic_targets.items():
+                if topic in q and tbl in tables:
+                    for c in cols_prio:
+                        if c in selected_columns.get(tbl, []) and c in _VALID_COLUMNS.get(tbl, set()):
+                            return ColumnRef(table=tbl, name=c)
+
+        # Fallback: use priority order of financial/metric columns across selected tables
+        for c in _NUMERIC_HINTS:
+            for t in tables:
+                cols = selected_columns.get(t, [])
+                if c in cols:
                     return ColumnRef(table=t, name=c)
 
         return None
@@ -1089,21 +1333,106 @@ class QueryPlanBuilder:
     # ── Dimension / filter / time / sort builders ─────────────────────────
 
     def _build_dimensions(
-        self, dimensions: List[str], tables: List[str],
+        self, dimensions: List[str], tables: List[str], query_text: str = "",
     ) -> List[ColumnRef]:
         refs = []
+        q = (query_text or "").lower()
         for dim in dimensions:
+            if dim == "STATUS":
+                resolved = self._resolve_status_dim(tables, q)
+                if resolved:
+                    refs.append(resolved)
+                continue
+            if dim == "TIME_MONTH":
+                resolved = self._resolve_time_dim(tables, q)
+                if resolved:
+                    refs.append(resolved)
+                continue
+            if dim == "TIME_DAY":
+                for t in tables:
+                    if "transaction_date" in _VALID_COLUMNS.get(t, set()):
+                        refs.append(ColumnRef(table=t, name="transaction_date"))
+                        break
+                continue
+            if dim == "RISK_LEVEL":
+                for t in tables:
+                    if "risk_level" in _VALID_COLUMNS.get(t, set()):
+                        refs.append(ColumnRef(table=t, name="risk_level"))
+                        break
+                    if "risk_score" in _VALID_COLUMNS.get(t, set()):
+                        refs.append(ColumnRef(table=t, name="risk_score"))
+                        break
+                continue
+            if dim == "TYPE":
+                resolved = self._resolve_type_dim(tables, q)
+                if resolved:
+                    refs.append(resolved)
+                continue
             parts = dim.split(".")
             if len(parts) == 2:
                 t, c = parts
-                if t in tables:
+                if t in tables and c in _VALID_COLUMNS.get(t, set()):
                     refs.append(ColumnRef(table=t, name=c))
+                elif c in ("risk_score", "status", "state", "city", "created_at", "type", "loan_type", "risk_level"):
+                    # Builder-side remap: intent may emit 'customers.risk_score'
+                    # while the query subject is kyc_cases; bind to the table
+                    # that actually owns the column and is selected.
+                    for t2 in tables:
+                        if c in _VALID_COLUMNS.get(t2, set()):
+                            refs.append(ColumnRef(table=t2, name=c))
+                            break
             else:
                 for t in tables:
                     if dim in _VALID_COLUMNS.get(t, set()):
                         refs.append(ColumnRef(table=t, name=dim))
                         break
-        return refs
+        return _dedupe_refs(refs)
+
+    def _resolve_status_dim(self, tables: List[str], q: str) -> Optional[ColumnRef]:
+        """Bind the STATUS placeholder to the query's owning table."""
+        if re.search(r"\btransaction|\btransactions?\b", q):
+            if "transactions" in tables and "status" in _VALID_COLUMNS.get("transactions", set()):
+                return ColumnRef(table="transactions", name="status")
+        if re.search(r"\bprêt\b|\bpret\b|\bloan", q):
+            if "loan_contracts" in tables and "status" in _VALID_COLUMNS.get("loan_contracts", set()):
+                return ColumnRef(table="loan_contracts", name="status")
+        if re.search(r"\bcomptes?\b|\baccount", q):
+            if "accounts" in tables and "status" in _VALID_COLUMNS.get("accounts", set()):
+                return ColumnRef(table="accounts", name="status")
+        for t in tables:
+            if t != "customers" and "status" in _VALID_COLUMNS.get(t, set()):
+                return ColumnRef(table=t, name="status")
+        if "customers" in tables and "status" in _VALID_COLUMNS.get("customers", set()):
+            return ColumnRef(table="customers", name="status")
+        return None
+
+    def _resolve_type_dim(self, tables: List[str], q: str) -> Optional[ColumnRef]:
+        """Bind the TYPE placeholder to loan_type or account_type context."""
+        if re.search(r"\bprêt\b|\bpret\b|\bloan\b|\bprêts\b", q):
+            if "loan_contracts" in tables and "loan_type" in _VALID_COLUMNS.get("loan_contracts", set()):
+                return ColumnRef(table="loan_contracts", name="loan_type")
+        if re.search(r"\bcompte\b|\baccount\b|\bcomptes\b", q):
+            if "accounts" in tables and "account_type" in _VALID_COLUMNS.get("accounts", set()):
+                return ColumnRef(table="accounts", name="account_type")
+        if "loan_contracts" in tables and "loan_type" in _VALID_COLUMNS.get("loan_contracts", set()):
+            return ColumnRef(table="loan_contracts", name="loan_type")
+        if "accounts" in tables and "account_type" in _VALID_COLUMNS.get("accounts", set()):
+            return ColumnRef(table="accounts", name="account_type")
+        return None
+
+    def _resolve_time_dim(self, tables: List[str], q: str) -> Optional[ColumnRef]:
+        """Bind the TIME_MONTH placeholder to the query's temporal subject."""
+        if re.search(r"\bprêt\b|\bpret\b|\bloan", q):
+            if "loan_contracts" in tables and "disbursement_date" in _VALID_COLUMNS.get("loan_contracts", set()):
+                return ColumnRef(table="loan_contracts", name="disbursement_date")
+        if "accounts" in tables and "created_at" in _VALID_COLUMNS.get("accounts", set()):
+            return ColumnRef(table="accounts", name="created_at")
+        for t in tables:
+            if "created_at" in _VALID_COLUMNS.get(t, set()):
+                return ColumnRef(table=t, name="created_at")
+            if "transaction_date" in _VALID_COLUMNS.get(t, set()):
+                return ColumnRef(table=t, name="transaction_date")
+        return None
 
     def _build_filters(
         self, filters: List[Dict[str, Any]], tables: List[str],
@@ -1157,14 +1486,56 @@ class QueryPlanBuilder:
 
     def _build_sort(
         self, sort_structured: Optional[List[Dict[str, Any]]], task: str,
+        implicit_exprs: Optional[List[AnalyticalExpression]] = None,
+        requested_fields: Optional[List[str]] = None,
+        tables: Optional[List[str]] = None,
+        selected_columns: Optional[Dict[str, List[str]]] = None,
+        grouped: bool = False,
     ) -> Optional[SortSpec]:
-        if sort_structured:
-            s = sort_structured[0]
-            col = s.get("column", "")
-            direction = s.get("direction", "ASC").upper()
-            if direction not in ("ASC", "DESC"):
-                direction = "ASC"
-            return SortSpec(column=col, direction=direction)
+        explicit = bool(sort_structured)
+        s = sort_structured[0] if sort_structured else None
+        direction = (s or {}).get("direction", "ASC").upper() or "ASC"
+        if direction not in ("ASC", "DESC"):
+            direction = "ASC"
+        if implicit_exprs:
+            # Sort-grain reconciliation: in a grouped result the rank should come
+            # from the aggregate that defines the grain (SUM/AVG/COUNT alias),
+            # keeping the caller's direction. A flat metric read over a single
+            # relation ("latest PNB") orders by its real time column instead.
+            agg = next((x for x in implicit_exprs
+                        if isinstance(x, (AggregateExpression, RatioExpression))), None)
+            if agg is not None and getattr(agg, "alias", None):
+                sort_col = (s or {}).get("column", "")
+                col_tail = sort_col.rsplit(".", 1)[-1]
+                is_real_column = any(
+                    col_tail in selected_columns.get(t, []) for t in (tables or [])
+                )
+                if grouped or not is_real_column:
+                    return SortSpec(column=agg.alias, direction=direction)
+        if task == "ranking":
+            # Ranked listing over a detail column: a ranking request orders by
+            # its subject column, descending (whether or not a sort was told).
+            rank_col = self._pick_ranking_column(
+                tables or [], selected_columns or {}, requested_fields or [],
+            )
+            if rank_col:
+                return SortSpec(column=rank_col, direction="DESC" if not explicit else direction)
+        if explicit:
+            return SortSpec(column=s.get("column", ""), direction=direction)
+        return None
+
+    def _pick_ranking_column(
+        self, tables: List[str], selected_columns: Dict[str, List[str]],
+        requested_fields: List[str],
+    ) -> Optional[str]:
+        for rf in requested_fields:
+            for t in tables:
+                if rf in selected_columns.get(t, []):
+                    return f"{t}.{rf}"
+        for c in _NUMERIC_HINTS:
+            for t in tables:
+                if c in selected_columns.get(t, []) and c in _VALID_COLUMNS.get(t, set()):
+                    return f"{t}.{c}"
         return None
 
     def _build_joins(self, join_paths: List[Dict[str, Any]]) -> List[JoinSpec]:

@@ -1,0 +1,22 @@
+[
+  {"id": "HOLDOUT_001", "question": "Nombre de clients par segment de marché", "language": "fr", "expected_task": "aggregation", "expected_table": "customers", "expected_dim": "customers.segment"},
+  {"id": "HOLDOUT_002", "question": "What is the total balance of all active checking accounts?", "language": "en", "expected_task": "aggregation", "expected_table": "accounts"},
+  {"id": "HOLDOUT_003", "question": "Average risk score for customers in PART_PREM segment", "language": "en", "expected_task": "aggregation", "expected_table": "customers"},
+  {"id": "HOLDOUT_004", "question": "Montant total des prêts par ville d'agence", "language": "fr", "expected_task": "aggregation", "expected_table": "loan_contracts"},
+  {"id": "HOLDOUT_005", "question": "Top 10 branches by total deposit balance", "language": "en", "expected_task": "ranking", "expected_table": "accounts"},
+  {"id": "HOLDOUT_006", "question": "Nombre de transactions par type et par statut", "language": "fr", "expected_task": "aggregation", "expected_table": "transactions"},
+  {"id": "HOLDOUT_007", "question": "What is the NPL ratio for auto loans?", "language": "en", "expected_task": "aggregation", "expected_metric": "npl_ratio"},
+  {"id": "HOLDOUT_008", "question": "Total fee income per fee type in Q1", "language": "en", "expected_task": "aggregation", "expected_table": "fee_income"},
+  {"id": "HOLDOUT_009", "question": "Solde moyen des comptes par agence", "language": "fr", "expected_task": "aggregation", "expected_table": "accounts"},
+  {"id": "HOLDOUT_010", "question": "Top 5 customers by risk score in Sousse", "language": "en", "expected_task": "ranking", "expected_table": "customers"},
+  {"id": "HOLDOUT_011", "question": "Nombre de dossiers KYC en attente par niveau de risque", "language": "fr", "expected_task": "aggregation", "expected_table": "kyc_cases"},
+  {"id": "HOLDOUT_012", "question": "Total provisions for non performing loans", "language": "en", "expected_task": "aggregation", "expected_table": "provisions"},
+  {"id": "HOLDOUT_013", "question": "Montant des prêts décaissés le mois dernier", "language": "fr", "expected_task": "aggregation", "expected_table": "loan_contracts"},
+  {"id": "HOLDOUT_014", "question": "Average transaction amount per channel", "language": "en", "expected_task": "aggregation", "expected_table": "transactions"},
+  {"id": "HOLDOUT_015", "question": "Taux de conformité KYC par agence", "language": "fr", "expected_task": "aggregation", "expected_metric": "kyc_compliance_rate"},
+  {"id": "HOLDOUT_016", "question": "How many active loans are overdue by more than 60 days?", "language": "en", "expected_task": "aggregation", "expected_table": "loan_contracts"},
+  {"id": "HOLDOUT_017", "question": "Nombre de collaborateurs par département", "language": "fr", "expected_task": "aggregation", "expected_table": "employees"},
+  {"id": "HOLDOUT_018", "question": "What is the return on assets (ROA) for the last period?", "language": "en", "expected_task": "aggregation", "expected_metric": "roa"},
+  {"id": "HOLDOUT_019", "question": "Répartition des alertes AML par sévérité", "language": "fr", "expected_task": "aggregation", "expected_table": "aml_alerts"},
+  {"id": "HOLDOUT_020", "question": "Top 3 loan types by total principal amount", "language": "en", "expected_task": "ranking", "expected_table": "loan_contracts"}
+]

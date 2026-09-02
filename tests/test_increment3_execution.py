@@ -150,16 +150,23 @@ class TestMetricExecutionStrategy:
         assert m.execution_strategy.execution_strategy == "independent_subqueries"
 
     def test_metric_without_strategy(self):
-        plan, _ = _build_and_compile(
+        # Step 14: a registered-formula metric whose formula references a
+        # table the join graph cannot reach must fail closed at compile
+        # (previously it emitted SQL referencing `lc` with only `accounts`
+        # in the FROM — an unavoidable runtime DB error).
+        kw = dict(
             task="aggregation",
-            selected_tables=["accounts"],
+            selected_tables=["accounts", "loan_contracts"],
             selected_columns={"accounts": ["account_id", "balance"]},
             metrics=["avg_loan_size"],
             requested_fields=[],
         )
+        plan = BUILDER.build(**{**BASE_KWARGS, **kw})
         m = plan.metrics[0]
         assert m.execution_strategy is None
-
+        from sql_agent.deterministic_compiler import SQLCompileError
+        with pytest.raises(SQLCompileError):
+            COMPILER.compile(plan)
 
 # ═════════════════════════════════════════════════════════════════════════════
 # Increment 3.1: ExpectedAnswer & MetricValidationRules

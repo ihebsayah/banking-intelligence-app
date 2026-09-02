@@ -1,0 +1,105 @@
+{
+  "_comment": "20 held-out relational-semantics cases (not in cases.json). Each case records the expected operator values (MEASURE_ENTITY / GRAIN / RESULT_SHAPE / AGGREGATE / DISTINCT). Feed each question through the same _run_plan harness (services/sql_agent/query_plan_builder.build) and assert the expected values.",
+  "cases": [
+    {
+      "id": "HO_001", "language": "en",
+      "question": "How many active customers do we have?",
+      "operator": {"MEASURE_ENTITY": "customers", "AGGREGATE": "COUNT", "DISTINCT": false, "GRAIN": [], "RESULT_SHAPE": "scalar"}
+    },
+    {
+      "id": "HO_002", "language": "fr",
+      "question": "Combien d'agences y a-t-il au total ?",
+      "operator": {"MEASURE_ENTITY": "branches", "AGGREGATE": "COUNT", "DISTINCT": false, "GRAIN": [], "RESULT_SHAPE": "scalar"}
+    },
+    {
+      "id": "HO_003", "language": "en",
+      "question": "How many accounts does each branch have?",
+      "operator": {"MEASURE_ENTITY": "accounts", "AGGREGATE": "COUNT", "DISTINCT": false, "GRAIN": ["branches.name"], "RESULT_SHAPE": "grouped"}
+    },
+    {
+      "id": "HO_004", "language": "fr",
+      "question": "Nombre de clients par ville de la branche",
+      "operator": {"MEASURE_ENTITY": "customers", "AGGREGATE": "COUNT", "DISTINCT": true, "GRAIN": ["branches.city"], "RESULT_SHAPE": "grouped", "_note": "fan-out join forces COUNT(DISTINCT customer_id)"}
+    },
+    {
+      "id": "HO_005", "language": "fr",
+      "question": "Total des soldes des comptes actifs",
+      "operator": {"MEASURE_ENTITY": "accounts", "AGGREGATE": "SUM", "DISTINCT": false, "GRAIN": [], "RESULT_SHAPE": "scalar", "_column": "accounts.balance"}
+    },
+    {
+      "id": "HO_006", "language": "fr",
+      "question": "Solde moyen des comptes par type de compte",
+      "operator": {"MEASURE_ENTITY": "accounts", "AGGREGATE": "AVG", "DISTINCT": false, "GRAIN": ["accounts.account_type"], "RESULT_SHAPE": "grouped"}
+    },
+    {
+      "id": "HO_007", "language": "en",
+      "question": "Top 5 customers by balance",
+      "operator": {"MEASURE_ENTITY": "customers", "AGGREGATE": "SUM", "DISTINCT": false, "GRAIN": ["customers.name"], "RESULT_SHAPE": "ranked", "_column": "accounts.balance"}
+    },
+    {
+      "id": "HO_008", "language": "fr",
+      "question": "Avantages : quels 10 clients ont le chiffre le plus élevé ?",
+      "operator": {"MEASURE_ENTITY": null, "AGGREGATE": null, "GRAIN": [], "RESULT_SHAPE": "clarification", "_note": "ambiguous subject - should clarify"}
+    },
+    {
+      "id": "HO_009", "language": "en",
+      "question": "Number of non-performing loans by classification",
+      "operator": {"MEASURE_ENTITY": "non_performing_loans", "AGGREGATE": "COUNT", "DISTINCT": false, "GRAIN": ["non_performing_loans.classification"], "RESULT_SHAPE": "grouped"}
+    },
+    {
+      "id": "HO_010", "language": "en",
+      "question": "Total amount of all provisioning",
+      "operator": {"MEASURE_ENTITY": "provisions", "AGGREGATE": "SUM", "DISTINCT": false, "GRAIN": [], "RESULT_SHAPE": "scalar", "_column": "provisions.provision_amount"}
+    },
+    {
+      "id": "HO_011", "language": "fr",
+      "question": "Quel est le ratio de coûts sur revenus ?",
+      "operator": {"MEASURE_ENTITY": null, "AGGREGATE": "RATIO", "DISTINCT": false, "GRAIN": [], "RESULT_SHAPE": "scalar", "_metric": "cost_income_ratio", "_note": "ratio-calculation task; resolves via cost_income_ratio registered metric"}
+    },
+    {
+      "id": "HO_012", "language": "fr",
+      "question": "Dépôts totaux par région",
+      "operator": {"MEASURE_ENTITY": "accounts", "AGGREGATE": "SUM", "DISTINCT": false, "GRAIN": ["branches.region_id"], "RESULT_SHAPE": "grouped", "_column": "accounts.balance"}
+    },
+    {
+      "id": "HO_013", "language": "en",
+      "question": "Which branches hold more than 500 accounts?",
+      "operator": {"MEASURE_ENTITY": "accounts", "AGGREGATE": "COUNT", "DISTINCT": false, "GRAIN": ["branches.name"], "RESULT_SHAPE": "grouped", "_having": true}
+    },
+    {
+      "id": "HO_014", "language": "fr",
+      "question": "Nombre de transactions par statut",
+      "operator": {"MEASURE_ENTITY": "transactions", "AGGREGATE": "COUNT", "DISTINCT": false, "GRAIN": ["transactions.status"], "RESULT_SHAPE": "grouped"}
+    },
+    {
+      "id": "HO_015", "language": "en",
+      "question": "What was the latest net income?",
+      "operator": {"MEASURE_ENTITY": null, "AGGREGATE": "SUM", "DISTINCT": false, "GRAIN": [], "RESULT_SHAPE": "scalar", "_column": "net_income", "_sort": "period DESC"}
+    },
+    {
+      "id": "HO_016", "language": "fr",
+      "question": "Quels sont les clients dont le KYC est en cours ?",
+      "operator": {"MEASURE_ENTITY": "customers", "AGGREGATE": "COUNT", "DISTINCT": false, "GRAIN": [], "RESULT_SHAPE": "scalar", "_note": "count-phrase 'en cours'; deterministic current shape: count anchored by pending-population phrase"}
+    },
+    {
+      "id": "HO_017", "language": "en",
+      "question": "Total commissions earned this quarter",
+      "operator": {"MEASURE_ENTITY": "fee_income", "AGGREGATE": "SUM", "DISTINCT": false, "GRAIN": [], "RESULT_SHAPE": "scalar", "_column": "fee_income.amount", "_time": "this quarter"}
+    },
+    {
+      "id": "HO_018", "language": "fr",
+      "question": "Liste des comptes dormants par branche",
+      "operator": {"MEASURE_ENTITY": "accounts", "AGGREGATE": "COUNT", "DISTINCT": false, "GRAIN": ["branches.name"], "RESULT_SHAPE": "grouped", "_filter": "accounts.status=dormant", "_note": "ambiguous: 'Liste' + 'par branche' — deterministic current shape is a detail_listing; grouped-count requires grouping despite listing verb"}
+    },
+    {
+      "id": "HO_019", "language": "en",
+      "question": "How many employees are in each region?",
+      "operator": {"MEASURE_ENTITY": "employees", "AGGREGATE": "COUNT", "DISTINCT": false, "GRAIN": ["branches.region_id"], "RESULT_SHAPE": "grouped", "_closure": "employees—branches"}
+    },
+    {
+      "id": "HO_020", "language": "fr",
+      "question": "Temps : clients créés ce mois-ci par segment",
+      "operator": {"MEASURE_ENTITY": "customers", "AGGREGATE": "COUNT", "DISTINCT": false, "GRAIN": ["customers.segment"], "RESULT_SHAPE": "grouped", "_time": "this month", "_note": "TIME_MONTH placeholder resolved to customers.created_at"}
+    }
+  ]
+}

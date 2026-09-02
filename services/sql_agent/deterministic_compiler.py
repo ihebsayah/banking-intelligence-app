@@ -42,6 +42,18 @@ _TIME_INTERVALS = {
     "ytd": "365 days",
 }
 
+
+class SQLCompileError(Exception):
+    """Raised when a QueryPlan cannot be compiled to valid SQL.
+
+    Carries a stable error code so callers can attribute failures without
+    parsing the message (Step 14: deterministic compiler correctness repair).
+    """
+
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code = code
+
 # Date column candidates per table
 _DATE_COLUMNS = {
     "customers": "created_at",
@@ -75,6 +87,16 @@ _INDEPENDENT_SUBQUERY_REGISTRY = {
         "denominator": "SELECT COUNT(DISTINCT lc.loan_id) AS den FROM loan_contracts lc",
         "ratio_expr": "ROUND(100.0 * _num.num::numeric / NULLIF(_den.den::numeric, 0), 2)",
     },
+    "roe": {
+        "numerator": "SELECT COALESCE(SUM(ins.net_income), 0) AS num FROM income_statement_snapshots ins",
+        "denominator": "SELECT COALESCE(SUM(bss.total_equity), 0) AS den FROM balance_sheet_snapshots bss",
+        "ratio_expr": "ROUND(100.0 * _num.num::numeric / NULLIF(_den.den::numeric, 0), 2)",
+    },
+    "roa": {
+        "numerator": "SELECT COALESCE(SUM(ins.net_income), 0) AS num FROM income_statement_snapshots ins",
+        "denominator": "SELECT COALESCE(SUM(bss.total_assets), 0) AS den FROM balance_sheet_snapshots bss",
+        "ratio_expr": "ROUND(100.0 * _num.num::numeric / NULLIF(_den.den::numeric, 0), 2)",
+    },
 }
 
 
@@ -105,24 +127,24 @@ class DeterministicSQLCompiler:
         if independent_metric:
             return self._compile_independent_subqueries(plan, independent_metric, params, next_param)
 
-        # ── Standard single-query compilation ──────────────────────────
+        # ── Step 14 REPAIR: base-table selection + join state machine ──
+        # The SQL relation set is built once and threaded through every
+        # clause so joins, SELECT, GROUP BY, and WHERE share one graph.
+        base, relation, join_clause = self._compile_base_and_joins(plan)
+
         # ── SELECT ────────────────────────────────────────────────────────
-        select_parts = self._compile_select(plan)
+        select_parts = self._compile_select(plan, relation)
         select_clause = f"SELECT {', '.join(select_parts)}"
 
         # ── FROM ──────────────────────────────────────────────────────────
-        primary = plan.selected_tables[0] if plan.selected_tables else ""
-        from_clause = f"FROM {primary}"
-
-        # ── JOIN ──────────────────────────────────────────────────────────
-        join_clause = self._compile_joins(plan.joins)
+        from_clause = f"FROM {base}"
 
         # ── WHERE ─────────────────────────────────────────────────────────
-        where_parts = self._compile_where(plan, next_param)
+        where_parts = self._compile_where(plan, relation, next_param)
         where_clause = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
 
         # ── GROUP BY (dimensions present = group by them) ─────────────────
-        group_clause = self._compile_group_by(plan)
+        group_clause = self._compile_group_by(plan, relation)
 
         # ── ORDER BY ──────────────────────────────────────────────────────
         order_clause = self._compile_order_by(plan)
@@ -169,11 +191,20 @@ class DeterministicSQLCompiler:
 
     # ── SELECT compilation ────────────────────────────────────────────────
 
-    def _compile_select(self, plan: QueryPlan) -> List[str]:
+    def _compile_select(
+        self, plan: QueryPlan, relation: set,
+    ) -> List[str]:
         parts: List[str] = []
 
         # Registered metric formulas
         for m in plan.metrics:
+            missing = [t for t in m.source_tables if t not in relation]
+            if missing:
+                raise SQLCompileError(
+                    "UNRESOLVABLE_JOIN_GRAPH",
+                    f"Metric '{m.metric_id}' references table(s) {missing} "
+                    f"not present in the SQL relation set {sorted(relation)}.",
+                )
             parts.append(f"{m.formula} AS {m.alias}")
 
         # Implicit analytical expressions (typed)
@@ -190,63 +221,164 @@ class DeterministicSQLCompiler:
         has_aggregates = bool(plan.metrics or plan.analytical_expressions)
         if not has_aggregates:
             for col in plan.requested_columns:
-                parts.append(f"{col.table}.{col.name}")
+                if col.table in relation:
+                    parts.append(f"{col.table}.{col.name}")
         elif plan.dimensions:
             dim_set = {(d.table, d.name) for d in plan.dimensions}
             for col in plan.requested_columns:
-                if (col.table, col.name) in dim_set:
+                if (col.table, col.name) in dim_set and col.table in relation:
                     parts.append(f"{col.table}.{col.name}")
             for d in plan.dimensions:
                 if (d.table, d.name) not in {(c.table, c.name) for c in plan.requested_columns}:
+                    if d.table not in relation:
+                        raise SQLCompileError(
+                            "UNRESOLVABLE_JOIN_GRAPH",
+                            f"Dimension '{d.qualified}' references table '{d.table}' "
+                            f"not present in the SQL relation set {sorted(relation)}.",
+                        )
                     parts.append(f"{d.table}.{d.name}")
 
         # Fallback: if nothing selected, add primary key
         if not parts and plan.selected_tables:
-            pk = f"{plan.selected_tables[0].rstrip('s')}_id"
-            parts.append(f"{plan.selected_tables[0]}.{pk}")
+            base = next((t for t in plan.selected_tables if t in relation), None)
+            if base:
+                pk = f"{base.rstrip('s')}_id"
+                parts.append(f"{base}.{pk}")
 
         return parts
 
-    # ── JOIN compilation ──────────────────────────────────────────────────
+    # ── FROM root & join state machine (Step 14 repair) ───────────────────
 
-    def _compile_joins(self, joins) -> str:
+    def _compile_base_and_joins(self, plan: QueryPlan) -> tuple:
+        """Choose the true primary FROM table and build the ordered JOIN list.
+
+        Base-table selection:
+          - No joins → the single selected table.
+          - Joins → the join-graph head: a table that appears as some edge's
+            from_table and never as any edge's to_table (the root of the ER
+            tree). Deterministic fallbacks handle ambiguous graphs.
+
+        Join state machine (Step 14 §6):
+          joined = {base}
+          for every edge (s → t):
+            * s in joined and t not        → JOIN t,  joined += {t}
+            * t in joined and s not        → JOIN s (reversed), joined += {s}
+            * both already joined          → skip duplicate edge
+            * neither joined               → UNRESOLVABLE_JOIN_GRAPH
+
+        Self-join protection (Step 14 §7): s == t is rejected unless the edge
+        is explicitly marked self_join_allowed=true.
+
+        Table presence (Step 14 §8): every table referenced in an ON predicate
+        of an emitted join is either already joined or the table being
+        introduced — guaranteed by the state machine.
+
+        Returns (base, relation, join_clause). relation = {base} ∪ joined.
+        """
+        joins = plan.joins or []
         if not joins:
-            return ""
+            if not plan.selected_tables:
+                raise SQLCompileError("EMPTY_PLAN", "QueryPlan selects no tables")
+            base = plan.selected_tables[0]
+            return base, {base}, ""
+
+        froms = {j.from_table for j in joins}
+        tos = {j.to_table for j in joins}
+
+        # Source-only nodes (never a join target) present in selected tables.
+        source_only = sorted(froms - tos)
+        candidates = [t for t in source_only if t in plan.selected_tables]
+        if candidates:
+            base = candidates[0]
+        elif froms:
+            base = next((t for t in plan.selected_tables if t in froms), sorted(froms)[0])
+        else:
+            base = plan.selected_tables[0]
+
+        joined = {base}
         lines = []
         for j in joins:
-            lines.append(f"{j.join_type} {j.to_table} ON {j.condition}")
-        return "\n    ".join(lines)
+            s, t = j.from_table, j.to_table
+            if s == t:
+                self_allowed = bool(getattr(j, "self_join_allowed", False))
+                if not self_allowed:
+                    raise SQLCompileError(
+                        "SELF_JOIN_FORBIDDEN",
+                        f"Self-join on '{s}' is not allowed unless explicitly marked "
+                        f"self_join_allowed=true.",
+                    )
+                continue
+            if s in joined and t not in joined:
+                lines.append(f"{j.join_type} {t} ON {j.condition}")
+                joined.add(t)
+            elif t in joined and s not in joined:
+                # Reverse: introduce the source side onto the already-present
+                # target. The ON predicate stays the same because both tables
+                # are in the relation set (t present, s being introduced).
+                lines.append(f"{j.join_type} {s} ON {j.condition}")
+                joined.add(s)
+            elif s in joined and t in joined:
+                # Duplicate edge: both endpoints already present, skip.
+                continue
+            else:
+                # Neither endpoint present → disconnected from the current
+                # graph. Do not emit a fabricated path.
+                raise SQLCompileError(
+                    "UNRESOLVABLE_JOIN_GRAPH",
+                    f"Join '{s} → {t}' has no endpoint in the relation set "
+                    f"{sorted(joined)}; plan join graph is disconnected.",
+                )
+
+        return base, joined, "\n    ".join(lines)
 
     # ── WHERE compilation ─────────────────────────────────────────────────
 
     def _compile_where(
-        self, plan: QueryPlan, next_param,
+        self, plan: QueryPlan, relation: set, next_param,
     ) -> List[str]:
         parts: List[str] = []
 
         for f in plan.filters:
-            ph = next_param(f.value)
-            if f.operator.upper() == "IN" and isinstance(f.value, (list, tuple)):
+            # Null semantics (Step 14 §16): IS NULL / IS NOT NULL are never
+            # bound to = NULL parameters.
+            op = f.operator.upper()
+            if op in ("IS NULL", "IS NOT NULL"):
+                parts.append(f"{f.column} {op}")
+                continue
+
+            col_table = f.column.split(".")[0] if "." in f.column else ""
+            if col_table and col_table not in relation:
+                raise SQLCompileError(
+                    "UNRESOLVABLE_JOIN_GRAPH",
+                    f"Filter '{f.column}' references table '{col_table}' outside "
+                    f"the SQL relation set {sorted(relation)}.",
+                )
+
+            if op == "IN" and isinstance(f.value, (list, tuple)):
                 placeholders = ", ".join(next_param(v) for v in f.value)
                 parts.append(f"{f.column} IN ({placeholders})")
-            elif f.operator.upper() == "BETWEEN" and isinstance(f.value, (list, tuple)) and len(f.value) == 2:
+            elif op == "BETWEEN" and isinstance(f.value, (list, tuple)) and len(f.value) == 2:
                 ph_lo = next_param(f.value[0])
                 ph_hi = next_param(f.value[1])
                 parts.append(f"{f.column} BETWEEN {ph_lo} AND {ph_hi}")
             else:
-                parts.append(f"{f.column} {f.operator} {ph}")
+                ph = next_param(f.value)
+                parts.append(f"{f.column} {op} {ph}")
 
         if plan.time_range.type == "relative" and plan.time_range.value:
             interval = _TIME_INTERVALS.get(plan.time_range.value)
             if interval:
-                date_col = self._resolve_date_column(plan)
+                date_col = self._resolve_date_column(plan, relation)
                 if date_col:
                     parts.append(f"{date_col} >= CURRENT_DATE - INTERVAL '{interval}'")
 
         return parts
 
-    def _resolve_date_column(self, plan: QueryPlan) -> str:
+    def _resolve_date_column(self, plan: QueryPlan, relation: set = None) -> str:
+        relation = relation or set(plan.selected_tables)
         for t in plan.selected_tables:
+            if t not in relation:
+                continue
             dc = _DATE_COLUMNS.get(t)
             if dc:
                 return f"{t}.{dc}"
@@ -254,10 +386,18 @@ class DeterministicSQLCompiler:
 
     # ── GROUP BY compilation ──────────────────────────────────────────────
 
-    def _compile_group_by(self, plan: QueryPlan) -> str:
+    def _compile_group_by(self, plan: QueryPlan, relation: set = None) -> str:
         """Pure renderer: GROUP BY when dimensions are present."""
         if not plan.dimensions:
             return ""
+        relation = relation or {d.table for d in plan.dimensions}
+        for d in plan.dimensions:
+            if d.table not in relation:
+                raise SQLCompileError(
+                    "UNRESOLVABLE_JOIN_GRAPH",
+                    f"Dimension '{d.qualified}' references table '{d.table}' outside "
+                    f"the SQL relation set {sorted(relation)}.",
+                )
         dim_exprs = [f"{d.table}.{d.name}" for d in plan.dimensions]
         return f"GROUP BY {', '.join(dim_exprs)}"
 
@@ -463,29 +603,37 @@ FROM
 
             if applies_to_num:
                 alias_col = f"{num_alias}.{filter_col}"
-                ph = next_param(f.value)
-                if f.operator.upper() == "IN" and isinstance(f.value, (list, tuple)):
-                    placeholders = ", ".join(next_param(v) for v in f.value)
-                    result[num_table].append(f"{alias_col} IN ({placeholders})")
-                elif f.operator.upper() == "BETWEEN" and isinstance(f.value, (list, tuple)) and len(f.value) == 2:
-                    ph_lo = next_param(f.value[0])
-                    ph_hi = next_param(f.value[1])
-                    result[num_table].append(f"{alias_col} BETWEEN {ph_lo} AND {ph_hi}")
+                op = f.operator.upper()
+                if op in ("IS NULL", "IS NOT NULL"):
+                    result[num_table].append(f"{alias_col} {op}")
                 else:
-                    result[num_table].append(f"{alias_col} {f.operator} {ph}")
+                    ph = next_param(f.value)
+                    if op == "IN" and isinstance(f.value, (list, tuple)):
+                        placeholders = ", ".join(next_param(v) for v in f.value)
+                        result[num_table].append(f"{alias_col} IN ({placeholders})")
+                    elif op == "BETWEEN" and isinstance(f.value, (list, tuple)) and len(f.value) == 2:
+                        ph_lo = next_param(f.value[0])
+                        ph_hi = next_param(f.value[1])
+                        result[num_table].append(f"{alias_col} BETWEEN {ph_lo} AND {ph_hi}")
+                    else:
+                        result[num_table].append(f"{alias_col} {op} {ph}")
 
             if applies_to_den:
                 alias_col = f"{den_alias}.{filter_col}"
-                ph = next_param(f.value)
-                if f.operator.upper() == "IN" and isinstance(f.value, (list, tuple)):
-                    placeholders = ", ".join(next_param(v) for v in f.value)
-                    result[den_table].append(f"{alias_col} IN ({placeholders})")
-                elif f.operator.upper() == "BETWEEN" and isinstance(f.value, (list, tuple)) and len(f.value) == 2:
-                    ph_lo = next_param(f.value[0])
-                    ph_hi = next_param(f.value[1])
-                    result[den_table].append(f"{alias_col} BETWEEN {ph_lo} AND {ph_hi}")
+                op = f.operator.upper()
+                if op in ("IS NULL", "IS NOT NULL"):
+                    result[den_table].append(f"{alias_col} {op}")
                 else:
-                    result[den_table].append(f"{alias_col} {f.operator} {ph}")
+                    ph = next_param(f.value)
+                    if op == "IN" and isinstance(f.value, (list, tuple)):
+                        placeholders = ", ".join(next_param(v) for v in f.value)
+                        result[den_table].append(f"{alias_col} IN ({placeholders})")
+                    elif op == "BETWEEN" and isinstance(f.value, (list, tuple)) and len(f.value) == 2:
+                        ph_lo = next_param(f.value[0])
+                        ph_hi = next_param(f.value[1])
+                        result[den_table].append(f"{alias_col} BETWEEN {ph_lo} AND {ph_hi}")
+                    else:
+                        result[den_table].append(f"{alias_col} {op} {ph}")
 
         if plan.time_range.type == "relative" and plan.time_range.value:
             interval = _TIME_INTERVALS.get(plan.time_range.value)

@@ -41,8 +41,8 @@ class Settings(BaseSettings):
 
     # ─── Mistral AI ────────────────────────────────────────────────────────────
     MISTRAL_API_URL: str = Field(
-        default="http://localhost:11434",
-        description="Mistral local Ollama API URL"
+        default="http://host.docker.internal:11434",
+        description="Native macOS Ollama API URL (outside Docker)"
     )
     MISTRAL_MODEL: str = Field(
         default="mistral",

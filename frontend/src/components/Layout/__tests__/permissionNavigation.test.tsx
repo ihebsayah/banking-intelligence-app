@@ -77,7 +77,9 @@ describe('Phase 3A.7 Permission-Aware Platform Navigation', () => {
     expect(screen.getByText('Investigations')).toBeInTheDocument();
     expect(screen.getByText('Cases')).toBeInTheDocument();
     expect(screen.getByText('Information Requests')).toBeInTheDocument();
-    expect(screen.getByText('Approvals')).toBeInTheDocument();
+
+    // Approvals workbench is reviewer-only (approval:approve); analyst lacks it
+    expect(screen.queryByText('Approvals')).not.toBeInTheDocument();
 
     // Restricted areas for analyst
     expect(screen.queryByText('Outbox Monitor')).not.toBeInTheDocument();
@@ -146,6 +148,22 @@ describe('Phase 3A.7 Permission-Aware Platform Navigation', () => {
     expect(screen.getByText('Outbox Monitor')).toBeInTheDocument();
     expect(screen.getByText('Admin')).toBeInTheDocument();
     expect(screen.getByText('Dev Monitor')).toBeInTheDocument();
+
+    // Admin holds approval:read but NOT approval:approve (SoD) → no Approvals workbench
+    expect(screen.queryByText('Approvals')).not.toBeInTheDocument();
+  });
+
+  it('4b. Compliance reviewer sees Approvals workbench', () => {
+    const compliancePermissions = [
+      'workbench:access',
+      'alert:read_assigned',
+      'case:read_assigned',
+      'approval:approve',
+      'approval:read',
+    ];
+    renderSidebar(makeUser('compliance', compliancePermissions));
+
+    expect(screen.getByText('Approvals')).toBeInTheDocument();
   });
 
   it('5. User lacking alert permission does not see Alert Queue', () => {

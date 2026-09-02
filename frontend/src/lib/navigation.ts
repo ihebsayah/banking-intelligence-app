@@ -96,7 +96,7 @@ export const NAV_GROUPS: NavGroup[] = [
         label: 'Approvals',
         icon: ClipboardCheck,
         category: 'Navigate',
-        requiredPermissions: PERMISSIONS.APPROVAL_READ,
+        requiredPermissions: PERMISSIONS.APPROVAL_APPROVE,
       },
     ],
   },

@@ -109,6 +109,13 @@ class TestVote:
         with pytest.raises(ScopeDeniedError):
             await authorise(OTHER_COMPLIANCE, "approval:approve", res)
 
+    @pytest.mark.asyncio
+    async def test_admin_cannot_approve(self):
+        # Admin holds approval:request + approval:read but never approval:approve (SoD)
+        res = approval_resource(requester="comp1")
+        with pytest.raises(PermissionDeniedError):
+            await authorise(ADMIN, "approval:approve", res)
+
 
 class TestRead:
     @pytest.mark.asyncio

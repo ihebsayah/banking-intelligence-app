@@ -1,0 +1,336 @@
+{
+  "model": "qwen2.5:3b",
+  "temperature": 0.0,
+  "contract": "structured_fact_selection",
+  "cases": [
+    {
+      "case_id": "stress_n02",
+      "category": "N_hallucination",
+      "language": "fr",
+      "n_candidates": 2,
+      "gate_use_llm": true,
+      "mode": "llm",
+      "reason": "OK",
+      "llm_metrics": {
+        "structure_compliance": true,
+        "zero_prose_violation": true,
+        "id_validity": true,
+        "type_correctness": true,
+        "cap_respect": true,
+        "correlation_non_causal": true,
+        "anomaly_non_fraud": true,
+        "french_render_ok": null,
+        "english_render_ok": null,
+        "det_baseline_quality": true,
+        "llm_adds_value": false
+      },
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "A1",
+          "F1"
+        ],
+        "det_obs_ids": [
+          "A1",
+          "F1"
+        ],
+        "det_rec_ids": [],
+        "det_lim_ids": [],
+        "det_summary": "Une observation statistiquement atypique (extrême) a été détectée sur montant. La valeur moyenne de montant est mean montant.",
+        "det_render_ok": true,
+        "det_word_count": 18
+      },
+      "llm_summary_ids": {
+        "summary": [
+          "F1"
+        ],
+        "obs": [
+          "A1"
+        ],
+        "recs": [],
+        "lims": []
+      },
+      "wall_ms": 5147.1898555755615,
+      "eval_count": 43,
+      "prompt_eval_count": 476,
+      "token_sec": 8.5,
+      "error": null,
+      "raw_lmm_response": "{\"summary_fact_ids\": [\"F1\"], \"observation_fact_ids\": [\"A1\"], \"recommendation_ids\": [], \"limitation_ids\": [], \"priority_order\": [\"A1\", \"F1\"]}"
+    },
+    {
+      "case_id": "anom_b02",
+      "category": "B_anomaly",
+      "language": "en",
+      "n_candidates": 3,
+      "gate_use_llm": true,
+      "mode": "llm",
+      "reason": "OK",
+      "llm_metrics": {
+        "structure_compliance": true,
+        "zero_prose_violation": true,
+        "id_validity": true,
+        "type_correctness": true,
+        "cap_respect": true,
+        "correlation_non_causal": true,
+        "anomaly_non_fraud": true,
+        "french_render_ok": null,
+        "english_render_ok": null,
+        "det_baseline_quality": true,
+        "llm_adds_value": false
+      },
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "A1",
+          "F1"
+        ],
+        "det_obs_ids": [
+          "A1",
+          "F1"
+        ],
+        "det_rec_ids": [
+          "R1"
+        ],
+        "det_lim_ids": [],
+        "det_summary": "Une observation statistiquement atypique (extrême) a été détectée sur withdrawal. La valeur moyenne de withdrawal est mean withdrawal.",
+        "det_render_ok": true,
+        "det_word_count": 18
+      },
+      "llm_summary_ids": {
+        "summary": [
+          "F1",
+          "A1"
+        ],
+        "obs": [
+          "A1"
+        ],
+        "recs": [
+          "R1"
+        ],
+        "lims": []
+      },
+      "wall_ms": 10136.267900466919,
+      "eval_count": 54,
+      "prompt_eval_count": 534,
+      "token_sec": 8.1,
+      "error": null,
+      "raw_lmm_response": "{\"summary_fact_ids\": [\"F1\", \"A1\"], \"observation_fact_ids\": [\"A1\"], \"recommendation_ids\": [\"R1\"], \"limitation_ids\": [], \"priority_order\": [\"A1\", \"F1\", \"R1\"]}"
+    },
+    {
+      "case_id": "multi_f04",
+      "category": "F_multi_dim",
+      "language": "fr",
+      "n_candidates": 6,
+      "gate_use_llm": true,
+      "mode": "llm",
+      "reason": "OK",
+      "llm_metrics": {
+        "structure_compliance": true,
+        "zero_prose_violation": true,
+        "id_validity": true,
+        "type_correctness": false,
+        "cap_respect": true,
+        "correlation_non_causal": true,
+        "anomaly_non_fraud": true,
+        "french_render_ok": null,
+        "english_render_ok": null,
+        "det_baseline_quality": true,
+        "llm_adds_value": true
+      },
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "F1",
+          "F2",
+          "D1"
+        ],
+        "det_obs_ids": [
+          "F1",
+          "F2",
+          "D1"
+        ],
+        "det_rec_ids": [
+          "R1"
+        ],
+        "det_lim_ids": [],
+        "det_summary": "La valeur moyenne de loss est mean loss. La valeur moyenne de controls est mean controls. La distribution de agence présente une concentration notable.",
+        "det_render_ok": true,
+        "det_word_count": 24
+      },
+      "llm_summary_ids": {
+        "summary": [
+          "F1",
+          "F2",
+          "C1"
+        ],
+        "obs": [
+          "D1"
+        ],
+        "recs": [
+          "R1"
+        ],
+        "lims": []
+      },
+      "wall_ms": 12948.723077774048,
+      "eval_count": 58,
+      "prompt_eval_count": 692,
+      "token_sec": 8.2,
+      "error": null,
+      "raw_lmm_response": "{\"summary_fact_ids\": [\"F1\", \"F2\", \"C1\"], \"observation_fact_ids\": [\"D1\"], \"recommendation_ids\": [\"R1\"], \"limitation_ids\": [], \"priority_order\": [\"C1\", \"F1\", \"F2\"]}"
+    },
+    {
+      "case_id": "multi_f01",
+      "category": "F_multi_dim",
+      "language": "en",
+      "n_candidates": 8,
+      "gate_use_llm": true,
+      "mode": "llm",
+      "reason": "OK",
+      "llm_metrics": {
+        "structure_compliance": true,
+        "zero_prose_violation": true,
+        "id_validity": true,
+        "type_correctness": false,
+        "cap_respect": true,
+        "correlation_non_causal": true,
+        "anomaly_non_fraud": true,
+        "french_render_ok": null,
+        "english_render_ok": null,
+        "det_baseline_quality": true,
+        "llm_adds_value": true
+      },
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "A1",
+          "T1",
+          "F1"
+        ],
+        "det_obs_ids": [
+          "A1",
+          "T1",
+          "F1",
+          "F2"
+        ],
+        "det_rec_ids": [
+          "R1",
+          "R2"
+        ],
+        "det_lim_ids": [],
+        "det_summary": "A statistically unusual observation (extreme) was detected in exposure. The latest observed period shows a positive change of moderate magnitude in exposure. The mean exposure is mean exposure.",
+        "det_render_ok": true,
+        "det_word_count": 28
+      },
+      "llm_summary_ids": {
+        "summary": [
+          "F1",
+          "D1",
+          "T1"
+        ],
+        "obs": [
+          "F1",
+          "D1",
+          "T1"
+        ],
+        "recs": [
+          "R1",
+          "R2"
+        ],
+        "lims": []
+      },
+      "wall_ms": 17192.322969436646,
+      "eval_count": 78,
+      "prompt_eval_count": 802,
+      "token_sec": 8.3,
+      "error": null,
+      "raw_lmm_response": "{\"summary_fact_ids\": [\"F1\", \"D1\", \"T1\"], \"observation_fact_ids\": [\"F1\", \"D1\", \"T1\"], \"recommendation_ids\": [\"R1\", \"R2\"], \"limitation_ids\": [], \"priority_order\": [\"F1\", \"D1\", \"T1\", \"R1\", \"R2\"]}"
+    },
+    {
+      "case_id": "multi_f02",
+      "category": "F_multi_dim",
+      "language": "fr",
+      "n_candidates": 6,
+      "gate_use_llm": true,
+      "mode": "llm",
+      "reason": "OK",
+      "llm_metrics": {
+        "structure_compliance": true,
+        "zero_prose_violation": true,
+        "id_validity": true,
+        "type_correctness": true,
+        "cap_respect": true,
+        "correlation_non_causal": true,
+        "anomaly_non_fraud": true,
+        "french_render_ok": null,
+        "english_render_ok": null,
+        "det_baseline_quality": true,
+        "llm_adds_value": true
+      },
+      "baseline": {
+        "det_valid": true,
+        "det_summary_ids": [
+          "A1",
+          "F1",
+          "F2"
+        ],
+        "det_obs_ids": [
+          "A1",
+          "F1",
+          "F2",
+          "D1"
+        ],
+        "det_rec_ids": [],
+        "det_lim_ids": [],
+        "det_summary": "Une observation statistiquement atypique (extrême) a été détectée sur marge. La valeur moyenne de marge est mean marge. La valeur moyenne de cout est mean cout.",
+        "det_render_ok": true,
+        "det_word_count": 26
+      },
+      "llm_summary_ids": {
+        "summary": [
+          "F1",
+          "F2",
+          "D1"
+        ],
+        "obs": [
+          "A1",
+          "C1"
+        ],
+        "recs": [],
+        "lims": []
+      },
+      "wall_ms": 13049.85499382019,
+      "eval_count": 59,
+      "prompt_eval_count": 679,
+      "token_sec": 8.3,
+      "error": null,
+      "raw_lmm_response": "{\"summary_fact_ids\": [\"F1\", \"F2\", \"D1\"], \"observation_fact_ids\": [\"A1\", \"C1\"], \"recommendation_ids\": [], \"limitation_ids\": [], \"priority_order\": [\"A1\", \"F1\", \"F2\"]}"
+    }
+  ],
+  "summary": {
+    "n_total": 5,
+    "n_attempts": 5,
+    "n_controls": 0,
+    "STRUCTURE_COMPLIANCE_RATE": 100.0,
+    "ZERO_PROSE_VIOLATION_RATE": 100.0,
+    "ID_VALIDITY_RATE": 100.0,
+    "TYPE_CORRECTNESS_RATE": 60.0,
+    "CAP_RESPECT_RATE": 100.0,
+    "CORRELATION_NON_CAUSAL_RATE": 100.0,
+    "ANOMALY_NON_FRAUD_RATE": 100.0,
+    "FRENCH_RENDER_RATE": 0.0,
+    "ENGLISH_RENDER_RATE": 0.0,
+    "DET_BASELINE_QUALITY_RATE": 100.0,
+    "LLM_ADDS_VALUE_RATE": 60.0,
+    "reasons": {
+      "OK": 5
+    },
+    "latency_wall_ms": {
+      "min": 5147.2,
+      "p50": 12948.7,
+      "p90": 15535.3,
+      "p95": 16363.8,
+      "p99": 17026.6,
+      "max": 17192.3
+    }
+  }
+}

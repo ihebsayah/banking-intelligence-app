@@ -98,7 +98,7 @@ function AppContent() {
             <Route path="/workbench/cases" element={<ProtectedRoute requiredRole={['analyst', 'compliance', 'admin']} requiredPermission={[PERMISSIONS.CASE_READ_ASSIGNED, PERMISSIONS.CASE_READ]}><CaseQueuePage /></ProtectedRoute>} />
             <Route path="/workbench/cases/:caseId" element={<ProtectedRoute requiredRole={['analyst', 'compliance', 'admin']} requiredPermission={[PERMISSIONS.CASE_READ_ASSIGNED, PERMISSIONS.CASE_READ]}><CaseDetailPage /></ProtectedRoute>} />
             <Route path="/workbench/information-requests" element={<ProtectedRoute requiredRole={['analyst', 'compliance', 'admin']} requiredPermission={[PERMISSIONS.INFO_REQUEST_READ_ASSIGNED, PERMISSIONS.INFO_REQUEST_READ]}><IRInboxPage /></ProtectedRoute>} />
-            <Route path="/workbench/approvals" element={<ProtectedRoute requiredRole={['analyst', 'compliance', 'admin']} requiredPermission="approval:read"><ApprovalQueuePage /></ProtectedRoute>} />
+            <Route path="/workbench/approvals" element={<ProtectedRoute requiredRole={['compliance']} requiredPermission={PERMISSIONS.APPROVAL_APPROVE}><ApprovalQueuePage /></ProtectedRoute>} />
             <Route path="/workbench/customers" element={<ProtectedRoute requiredPermission="customer:read_basic"><CustomerSearchPage /></ProtectedRoute>} />
             <Route path="/workbench/customers/:customerId" element={<ProtectedRoute requiredPermission="customer:read_basic"><Customer360Page /></ProtectedRoute>} />
             <Route path="/notifications" element={<ProtectedRoute requiredRole={['analyst', 'compliance', 'admin']} requiredPermission="notification:read"><NotificationsPanel /></ProtectedRoute>} />

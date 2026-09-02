@@ -1,0 +1,380 @@
+{
+  "dataset": "QUALIFICATION_V1",
+  "dsn": "postgresql://banking_user:securepass123@localhost:5432/banking_qual_v1",
+  "schema_fingerprint": "b0e597e0ffbc209060652bfbdd34858d",
+  "tables": [
+    {
+      "table": "account_balances",
+      "row_count": 0,
+      "md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "table": "account_signatories",
+      "row_count": 0,
+      "md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "table": "account_status_history",
+      "row_count": 0,
+      "md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "table": "account_types",
+      "row_count": 3,
+      "md5": "0bc9307aa48dd63057334ae39bbf81f4"
+    },
+    {
+      "table": "accounts",
+      "row_count": 5210,
+      "md5": "d89cd3d482bb1e71345447c051eb5ce1"
+    },
+    {
+      "table": "aml_alerts",
+      "row_count": 500,
+      "md5": "25f7621a9b7a2a84629c0a6f0d844746"
+    },
+    {
+      "table": "audit_findings",
+      "row_count": 3,
+      "md5": "ec34d7aaf4a943467685157d939dc7f4"
+    },
+    {
+      "table": "balance_sheet_snapshots",
+      "row_count": 24,
+      "md5": "7888fa5c9a346089f0a4b6f14a8e23da"
+    },
+    {
+      "table": "branches",
+      "row_count": 238,
+      "md5": "917e7f7d59282f050293c1b16e08b6ba"
+    },
+    {
+      "table": "business_glossary",
+      "row_count": 37,
+      "md5": "247c03e956a0f7fe6495500ae8f3805c"
+    },
+    {
+      "table": "business_units",
+      "row_count": 3,
+      "md5": "29d5304e94308ec1ea468857e4103c24"
+    },
+    {
+      "table": "collateral",
+      "row_count": 476,
+      "md5": "04470fd34f2ea1038b1380db36d93989"
+    },
+    {
+      "table": "column_metadata",
+      "row_count": 10,
+      "md5": "3ba2d60c4bdeee89bfdf17330ec300b4"
+    },
+    {
+      "table": "compliance_cases",
+      "row_count": 0,
+      "md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "table": "compliance_reviews",
+      "row_count": 0,
+      "md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "table": "compliance_rules",
+      "row_count": 12,
+      "md5": "c22b509d23cb48b3e16302a0f9fe236c"
+    },
+    {
+      "table": "compliance_violations",
+      "row_count": 0,
+      "md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "table": "customer_addresses",
+      "row_count": 2000,
+      "md5": "27818acbf5866cf17222b7326e6e99b9"
+    },
+    {
+      "table": "customer_contacts",
+      "row_count": 2000,
+      "md5": "080e60c9a43947bfbab8e103f115fc65"
+    },
+    {
+      "table": "customer_documents",
+      "row_count": 0,
+      "md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "table": "customer_preferences",
+      "row_count": 2000,
+      "md5": "768fac8f104ad2abca906d2f42e07aec"
+    },
+    {
+      "table": "customer_profiles",
+      "row_count": 2000,
+      "md5": "056310bc0f8a633ad3eb7525fdcc3d62"
+    },
+    {
+      "table": "customer_relationships",
+      "row_count": 0,
+      "md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "table": "customer_risk_scores",
+      "row_count": 0,
+      "md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "table": "customer_segments",
+      "row_count": 4,
+      "md5": "b164cd06daaaa3b96c36782280fd34e0"
+    },
+    {
+      "table": "customer_status_history",
+      "row_count": 0,
+      "md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "table": "customers",
+      "row_count": 2210,
+      "md5": "60051805389665a20cb015f23aec1576"
+    },
+    {
+      "table": "data_lineage",
+      "row_count": 0,
+      "md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "table": "departments",
+      "row_count": 5,
+      "md5": "6f6cf264caa15b394b8780937e5e717d"
+    },
+    {
+      "table": "employees",
+      "row_count": 100,
+      "md5": "4e6266211b2ad32b850524a57526d981"
+    },
+    {
+      "table": "fee_income",
+      "row_count": 0,
+      "md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "table": "general_ledger",
+      "row_count": 12,
+      "md5": "b906b4a8a93a5b996200548eba57df0f"
+    },
+    {
+      "table": "guarantees",
+      "row_count": 300,
+      "md5": "6e42cf08081a40a44db015854d774990"
+    },
+    {
+      "table": "income_statement_snapshots",
+      "row_count": 24,
+      "md5": "0a2f3432f24549e852cd9a4d87184c52"
+    },
+    {
+      "table": "interest_income",
+      "row_count": 0,
+      "md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "table": "join_registry",
+      "row_count": 28,
+      "md5": "4c37dd678303035d13d417e512884c52"
+    },
+    {
+      "table": "joint_accounts",
+      "row_count": 250,
+      "md5": "b0cf03f862f69fadccc938810ba29b2a"
+    },
+    {
+      "table": "kpi_categories",
+      "row_count": 6,
+      "md5": "f5b8122a99b58ccb1f38ec643a31e168"
+    },
+    {
+      "table": "kpi_definitions",
+      "row_count": 20,
+      "md5": "f888067f636596f8ba183e440469d19c"
+    },
+    {
+      "table": "kpi_history",
+      "row_count": 0,
+      "md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "table": "kpi_owners",
+      "row_count": 6,
+      "md5": "2c6d2fd280a433203ea7f14315fac618"
+    },
+    {
+      "table": "kpi_thresholds",
+      "row_count": 11,
+      "md5": "a17060611a73dc2183c7e6a2666a1f77"
+    },
+    {
+      "table": "kyc_cases",
+      "row_count": 606,
+      "md5": "78b8dcc3e6e51ef0b95598e35e871640"
+    },
+    {
+      "table": "kyc_documents",
+      "row_count": 606,
+      "md5": "8e0a5db45d6be04098116b99890682dd"
+    },
+    {
+      "table": "kyc_expirations",
+      "row_count": 0,
+      "md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "table": "kyc_reviews",
+      "row_count": 0,
+      "md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "table": "kyc_verifications",
+      "row_count": 0,
+      "md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "table": "ledger_entries",
+      "row_count": 0,
+      "md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "table": "loan_contracts",
+      "row_count": 1500,
+      "md5": "f3657d689646b913128c9c048671b546"
+    },
+    {
+      "table": "loan_delinquency_events",
+      "row_count": 0,
+      "md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "table": "loan_installments",
+      "row_count": 7500,
+      "md5": "2b7edf6d4c1b65521657b4c4413ac973"
+    },
+    {
+      "table": "loan_products",
+      "row_count": 4,
+      "md5": "6d0c5c9cf2f7be9bd90bfcf52640e3be"
+    },
+    {
+      "table": "loan_repayments",
+      "row_count": 7026,
+      "md5": "3dc3622d43b0d5076833b149321aba92"
+    },
+    {
+      "table": "loan_restructuring",
+      "row_count": 0,
+      "md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "table": "metric_registry",
+      "row_count": 25,
+      "md5": "2426157e542f10bbf8cd5f6a1f62dcf8"
+    },
+    {
+      "table": "non_performing_loans",
+      "row_count": 56,
+      "md5": "d48fdf6968d8533844415ec5b246d68d"
+    },
+    {
+      "table": "operating_expenses",
+      "row_count": 0,
+      "md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "table": "pep_screening",
+      "row_count": 13,
+      "md5": "4f918e82b7b9fbb9c688925128ffd8fa"
+    },
+    {
+      "table": "permissions",
+      "row_count": 63,
+      "md5": "6a77e230645a38879cdd12c8935d45aa"
+    },
+    {
+      "table": "products",
+      "row_count": 210,
+      "md5": "32feaeb2f6aa9dd1776c50acb5479308"
+    },
+    {
+      "table": "profitability_metrics",
+      "row_count": 30,
+      "md5": "b632b52aedd6d13f93cd8f770b8986a1"
+    },
+    {
+      "table": "provisions",
+      "row_count": 138,
+      "md5": "20288151e58f4322607e4417fdd0a235"
+    },
+    {
+      "table": "regions",
+      "row_count": 5,
+      "md5": "29320281fb20b8c6f6ba5736bc90291e"
+    },
+    {
+      "table": "regulatory_reports",
+      "row_count": 2,
+      "md5": "95ba929a9f3fce8f54ec0a4516972ab2"
+    },
+    {
+      "table": "relationship_managers",
+      "row_count": 2000,
+      "md5": "a61507c4f8d2f84bb11eb56562117bcd"
+    },
+    {
+      "table": "risk_flags",
+      "row_count": 206,
+      "md5": "d3145c04f67f4979fb19d77033c9fae0"
+    },
+    {
+      "table": "role_permissions",
+      "row_count": 107,
+      "md5": "4d5c12ef7a3b82bb18ec9543fd91a39e"
+    },
+    {
+      "table": "roles",
+      "row_count": 4,
+      "md5": "c52e4dc26a94512bfb90c304917180da"
+    },
+    {
+      "table": "sanctions_screening",
+      "row_count": 45,
+      "md5": "5a3b6f12d7f9428c8430f65831b32f22"
+    },
+    {
+      "table": "suspicious_activity_reports",
+      "row_count": 25,
+      "md5": "b10d4a6cc0a08b5aed53ed3aad18bcb6"
+    },
+    {
+      "table": "table_metadata",
+      "row_count": 55,
+      "md5": "8d27833cae27bebee577dd43156cf5c9"
+    },
+    {
+      "table": "transactions",
+      "row_count": 50210,
+      "md5": "2ea44ce30660b3529ed29b61f3b0aee8"
+    },
+    {
+      "table": "user_activity_log",
+      "row_count": 0,
+      "md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "table": "users",
+      "row_count": 6,
+      "md5": "0e9394a57c4a8d1e38e08ba6940c9567"
+    }
+  ],
+  "global_row_count": 87934,
+  "cases_total": 100,
+  "source": "TEMPLATE snapshot of banking_dev (immutable, read-only)"
+}

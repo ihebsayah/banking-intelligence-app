@@ -304,6 +304,37 @@ class TestApprovalRepo:
             result = await ApprovalRepo(mock_db).expire_due(10)
         assert result == []
 
+    @pytest.mark.asyncio
+    async def test_list_compliance_sees_reviewer_queue_only(self, mock_db):
+        # Compliance reviewer: excludes own requests, scoped, other statuses filterable
+        mock_fetch = AsyncMock(return_value=[])
+        with patch("workbench.repos._fetch_all", mock_fetch):
+            await ApprovalRepo(mock_db).list("comp1", "compliance", ["hq_main"],
+                                            status="pending", limit=50, offset=0)
+        sql = mock_fetch.call_args[0][1]
+        assert "COALESCE(a.scope_id, cc.scope_id) = ANY($1::varchar[])" in sql
+        assert "ar.requested_by != $2" in sql
+        assert "ar.status = $3" in sql
+        assert "ORDER BY ar.created_at DESC" in sql
+
+    @pytest.mark.asyncio
+    async def test_list_admin_sees_own_requests_only(self, mock_db):
+        # Admin is requester-only (case_reopen) — no reviewer queue exposure
+        mock_fetch = AsyncMock(return_value=[])
+        with patch("workbench.repos._fetch_all", mock_fetch):
+            await ApprovalRepo(mock_db).list("admin1", "admin", ["hq_main"], limit=50, offset=0)
+        sql = mock_fetch.call_args[0][1]
+        assert "ar.requested_by = $2" in sql
+
+    @pytest.mark.asyncio
+    async def test_list_analyst_sees_own_requests_only(self, mock_db):
+        mock_fetch = AsyncMock(return_value=[])
+        with patch("workbench.repos._fetch_all", mock_fetch):
+            await ApprovalRepo(mock_db).list("analyst1", "analyst", ["hq_main"], limit=50, offset=0)
+        sql = mock_fetch.call_args[0][1]
+        assert "ar.requested_by = $2" in sql
+        assert "ar.requested_by != $2" not in sql
+
 
 # ── Approval Decision Repo Tests ──────────────────────────────────────────────
 

@@ -25,33 +25,46 @@ logger = logging.getLogger(__name__)
 
 INTENT_TO_DOMAINS: Dict[str, List[str]] = {
     "customer_analysis":    ["customer_analysis", "account_analysis", "customer"],
-    "risk_analysis":        ["risk_analysis", "customer_analysis", "risk", "loan"],
-    "revenue_analysis":     ["revenue_analysis", "account_analysis", "finance"],
+    "risk_analysis":        ["risk_analysis", "customer_analysis", "risk", "loan", "credit risk"],
+    "revenue_analysis":     ["revenue_analysis", "account_analysis", "finance", "profitability"],
     "operational_analysis": ["operational_analysis", "transaction_analysis", "payment"],
     "geographic_analysis":  ["geographic_analysis", "branch_analysis", "organization"],
-    "product_analysis":     ["product_analysis", "revenue_analysis", "product"],
-    "compliance_analysis":  ["compliance_analysis", "risk_analysis", "compliance", "kyc"],
+    "product_analysis":     ["product_analysis", "revenue_analysis", "product", "loan"],
+    "compliance_analysis":  ["compliance_analysis", "risk_analysis", "compliance", "kyc", "aml"],
     "transaction_analysis": ["transaction_analysis", "account_analysis", "payment"],
-    "loan_analysis":        ["loan", "risk"],
-    "kyc_analysis":         ["kyc", "compliance"],
-    "aml_analysis":         ["compliance", "risk"],
-    "profitability_analysis": ["finance"],
-    "liquidity_analysis":   ["liquidity", "finance"]
+    "loan_analysis":        ["loan", "risk", "credit risk"],
+    "kyc_analysis":         ["kyc", "compliance", "customer"],
+    "aml_analysis":         ["aml", "compliance", "risk"],
+    "profitability_analysis": ["finance", "profitability", "account_analysis"],
+    "liquidity_analysis":   ["liquidity", "finance", "account_analysis"]
 }
 
 # ── Fallback Domains → Tables ──────────────────────────────────────────────────
 
 DOMAIN_TO_TABLES: Dict[str, List[str]] = {
-    "customer_analysis":    ["customers"],
-    "account_analysis":     ["accounts"],
-    "risk_analysis":        ["risk_flags"],
+    "customer_analysis":    ["customers", "customer_profiles", "customer_addresses"],
+    "account_analysis":     ["accounts", "account_balances"],
+    "customer":             ["customers", "customer_profiles", "customer_addresses"],
+    "risk_analysis":        ["risk_flags", "customer_risk_scores", "non_performing_loans"],
+    "risk":                 ["risk_flags", "customer_risk_scores", "non_performing_loans"],
+    "credit risk":          ["non_performing_loans", "loan_contracts", "provisions"],
+    "loan":                 ["loan_contracts", "loan_installments", "loan_repayments", "non_performing_loans"],
     "revenue_analysis":     ["customers", "accounts", "transactions", "branches"],
-    "operational_analysis": ["transactions"],
-    "geographic_analysis":  ["branches"],
+    "finance":              ["income_statement_snapshots", "balance_sheet_snapshots", "fee_income", "interest_income", "operating_expenses"],
+    "profitability":        ["income_statement_snapshots", "balance_sheet_snapshots", "fee_income", "interest_income"],
+    "operational_analysis": ["transactions", "accounts"],
+    "payment":              ["transactions", "accounts"],
+    "geographic_analysis":  ["branches", "regions"],
+    "organization":         ["branches", "regions", "employees", "relationship_managers"],
     "product_analysis":     ["products"],
-    "compliance_analysis":  ["risk_flags", "kyc_cases", "compliance_violations"],
-    "transaction_analysis": ["transactions"],
-    "branch_analysis":      ["branches"],
+    "product":              ["products"],
+    "compliance_analysis":  ["risk_flags", "kyc_cases", "aml_alerts", "compliance_violations"],
+    "compliance":           ["risk_flags", "kyc_cases", "aml_alerts", "compliance_violations"],
+    "kyc":                  ["kyc_cases", "customers", "kyc_documents", "kyc_reviews", "kyc_verifications"],
+    "aml":                  ["aml_alerts", "suspicious_activity_reports"],
+    "branch_analysis":      ["branches", "regions", "accounts"],
+    "liquidity":            ["accounts", "account_balances", "accounts"],
+    "transaction_analysis": ["transactions", "accounts"],
 }
 
 # ── Fallback Entity → primary key ──────────────────────────────────────────────
@@ -63,6 +76,9 @@ PRIMARY_ENTITY_KEYS: Dict[str, str] = {
     "branch":      "branch_id",
     "product":     "product_id",
     "region":      "region_id",
+    "loan":        "loan_id",
+    "kyc":         "kyc_case_id",
+    "aml":         "alert_id",
 }
 
 # ── Fallback Table → filtering columns ─────────────────────────────────────────
@@ -74,6 +90,14 @@ TABLE_FILTER_COLUMNS: Dict[str, List[str]] = {
     "risk_flags":           ["flag_type", "severity", "resolved"],
     "products":             ["name", "category"],
     "branches":             ["state", "city", "name"],
+    "loan_contracts":       ["status", "days_past_due", "principal_amount"],
+    "non_performing_loans": ["classification", "status", "npl_amount"],
+    "provisions":           ["period", "provision_amount"],
+    "aml_alerts":           ["severity", "status", "created_at"],
+    "kyc_cases":            ["status", "created_at"],
+    "fee_income":           ["amount", "fee_date"],
+    "interest_income":      ["amount", "period"],
+    "employees":            ["role"],
 }
 
 # ── Fallback join graph (source → list of join specs) ────────────────────────
@@ -85,23 +109,103 @@ JOIN_GRAPH: Dict[str, List[JoinSpec]] = {
         {"to": "accounts",          "key": "customer_id",    "type": "LEFT JOIN"},
         {"to": "risk_flags",        "key": "customer_id",    "type": "LEFT JOIN"},
         {"to": "transactions",      "key": "customer_id",    "type": "LEFT JOIN"},
+        {"to": "loan_contracts",    "key": "customer_id",    "type": "LEFT JOIN"},
+        {"to": "kyc_cases",         "key": "customer_id",    "type": "LEFT JOIN"},
+        {"to": "aml_alerts",        "key": "customer_id",    "type": "LEFT JOIN"},
+        {"to": "customer_profiles", "key": "customer_id",    "type": "LEFT JOIN"},
+        {"to": "customer_addresses","key": "customer_id",    "type": "LEFT JOIN"},
+        {"to": "fee_income",        "key": "customer_id",    "type": "LEFT JOIN"},
+        {"to": "interest_income",   "key": "customer_id",    "type": "LEFT JOIN"},
+        {"to": "customer_risk_scores", "key": "customer_id", "type": "LEFT JOIN"},
     ],
     "accounts": [
         {"to": "transactions",      "key": "account_id",     "type": "LEFT JOIN"},
         {"to": "customers",         "key": "customer_id",    "type": "INNER JOIN"},
         {"to": "branches",          "key": "branch_id",      "type": "LEFT JOIN"},
+        {"to": "loan_contracts",    "key": "account_id",     "type": "LEFT JOIN"},
+        {"to": "risk_flags",        "key": "account_id",     "type": "LEFT JOIN"},
+        {"to": "fee_income",        "key": "account_id",     "type": "LEFT JOIN"},
+        {"to": "account_balances",  "key": "account_id",     "type": "LEFT JOIN"},
     ],
     "transactions": [
         {"to": "accounts",          "key": "account_id",     "type": "INNER JOIN"},
         {"to": "customers",         "key": "customer_id",    "type": "INNER JOIN"},
+        {"to": "aml_alerts",        "key": "transaction_id", "type": "LEFT JOIN"},
     ],
     "branches": [
         {"to": "accounts",          "key": "branch_id",      "type": "LEFT JOIN"},
+        {"to": "employees",         "key": "branch_id",      "type": "LEFT JOIN"},
+        {"to": "regions",           "key": "region_id",      "type": "LEFT JOIN"},
+        {"to": "relationship_managers", "key": "branch_id",  "type": "LEFT JOIN"},
+        {"to": "operating_expenses","key": "branch_id",      "type": "LEFT JOIN"},
+    ],
+    "regions": [
+        {"to": "branches",          "key": "region_id",      "type": "LEFT JOIN"},
+    ],
+    "employees": [
+        {"to": "branches",          "key": "branch_id",      "type": "LEFT JOIN"},
+        {"to": "relationship_managers", "key": "employee_id", "type": "LEFT JOIN"},
     ],
     "products": [],
     "risk_flags": [
         {"to": "customers",         "key": "customer_id",    "type": "INNER JOIN"},
-    ]
+        {"to": "accounts",          "key": "account_id",     "type": "LEFT JOIN"},
+    ],
+    "loan_contracts": [
+        {"to": "customers",         "key": "customer_id",    "type": "LEFT JOIN"},
+        {"to": "accounts",          "key": "account_id",     "type": "LEFT JOIN"},
+        {"to": "provisions",        "key": "loan_id",        "type": "LEFT JOIN"},
+        {"to": "non_performing_loans", "key": "loan_id",     "type": "LEFT JOIN"},
+        {"to": "loan_installments", "key": "loan_id",        "type": "LEFT JOIN"},
+        {"to": "loan_repayments",   "key": "loan_id",        "type": "LEFT JOIN"},
+        {"to": "loan_delinquency_events", "key": "loan_id",  "type": "LEFT JOIN"},
+        {"to": "collateral",        "key": "loan_id",        "type": "LEFT JOIN"},
+        {"to": "interest_income",   "key": "loan_id",        "type": "LEFT JOIN"},
+        {"to": "loan_restructuring","key": "loan_id",        "type": "LEFT JOIN"},
+    ],
+    "non_performing_loans": [
+        {"to": "loan_contracts",    "key": "loan_id",        "type": "INNER JOIN"},
+    ],
+    "provisions": [
+        {"to": "loan_contracts",    "key": "loan_id",        "type": "INNER JOIN"},
+    ],
+    "kyc_cases": [
+        {"to": "customers",         "key": "customer_id",    "type": "INNER JOIN"},
+        {"to": "kyc_documents",     "key": "kyc_case_id",    "type": "LEFT JOIN"},
+        {"to": "kyc_reviews",       "key": "kyc_case_id",    "type": "LEFT JOIN"},
+        {"to": "kyc_verifications", "key": "kyc_case_id",    "type": "LEFT JOIN"},
+    ],
+    "aml_alerts": [
+        {"to": "customers",         "key": "customer_id",    "type": "INNER JOIN"},
+        {"to": "suspicious_activity_reports", "key": "alert_id", "type": "LEFT JOIN"},
+        {"to": "transactions",      "key": "transaction_id", "type": "LEFT JOIN"},
+    ],
+    "suspicious_activity_reports": [
+        {"to": "aml_alerts",        "key": "alert_id",       "type": "INNER JOIN"},
+    ],
+    "fee_income": [
+        {"to": "accounts",          "key": "account_id",     "type": "INNER JOIN"},
+        {"to": "customers",         "key": "customer_id",    "type": "LEFT JOIN"},
+    ],
+    "interest_income": [
+        {"to": "loan_contracts",    "key": "loan_id",        "type": "INNER JOIN"},
+        {"to": "customers",         "key": "customer_id",    "type": "LEFT JOIN"},
+    ],
+    "operating_expenses": [
+        {"to": "branches",          "key": "branch_id",      "type": "INNER JOIN"},
+    ],
+    "customer_risk_scores": [
+        {"to": "customers",         "key": "customer_id",    "type": "INNER JOIN"},
+    ],
+    "customer_profiles": [
+        {"to": "customers",         "key": "customer_id",    "type": "INNER JOIN"},
+    ],
+    "customer_addresses": [
+        {"to": "customers",         "key": "customer_id",    "type": "INNER JOIN"},
+    ],
+    "account_balances": [
+        {"to": "accounts",          "key": "account_id",     "type": "INNER JOIN"},
+    ],
 }
 
 
@@ -302,51 +406,98 @@ class SchemaMatcher:
         "compliance_violations", "compliance_cases", "compliance_reviews", "regulatory_reports"
     }
 
+    def _static_adjacency(self) -> Dict[str, List[Dict[str, Any]]]:
+        """Bidirectional adjacency derived from the static JOIN_GRAPH."""
+        adj: Dict[str, List[Dict[str, Any]]] = {}
+        for src, specs in JOIN_GRAPH.items():
+            for spec in specs:
+                jt = {"to": spec["to"], "key": spec["key"], "type": spec.get("type", "LEFT JOIN")}
+                adj.setdefault(src, []).append(jt.copy())
+                adj.setdefault(spec["to"], []).append({"to": src, "key": spec["key"], "type": jt["type"]})
+        return adj
+
     def _bfs_join_path(self, from_table: str, to_table: str) -> List[JoinPath]:
-        """BFS graph traversal to discover the shortest join path using join_registry."""
+        """BFS graph traversal to discover the shortest join path.
+
+        Uses the DB-backed join_registry when populated (semantic layer on);
+        otherwise falls back to the static JOIN_GRAPH so bridges resolve
+        deterministically offline (SEMANTIC_LAYER_ENABLED=false).
+        """
+        if self._join_registry_cache:
+            registry = self._join_registry_cache
+
+            def _neighbors(node: str) -> list:
+                out = []
+                for edge in registry:
+                    src = edge["source_table"].lower()
+                    tgt = edge["target_table"].lower()
+                    is_bidirectional = edge.get("is_bidirectional", True)
+                    if is_bidirectional is False:
+                        continue
+                    if src in self.SENSITIVE_LOG_TABLES or tgt in self.SENSITIVE_LOG_TABLES:
+                        is_bidirectional = False
+                    if src == node:
+                        out.append([tgt, edge["source_column"], edge.get("join_type", "LEFT JOIN")])
+                    elif tgt == node and is_bidirectional:
+                        out.append([src, edge["source_column"], edge.get("join_type", "LEFT JOIN")])
+                return out
+
+            queue = [[from_table]]
+            visited = {from_table}
+            while queue:
+                path = queue.pop(0)
+                curr = path[-1]
+                if curr == to_table:
+                    join_paths = []
+                    for i in range(len(path) - 1):
+                        s = path[i]
+                        t = path[i + 1]
+                        edge = self._find_edge(s, t)
+                        if edge:
+                            join_paths.append(JoinPath(
+                                from_table=edge["source_table"],
+                                to_table=edge["target_table"],
+                                join_key=edge["source_column"],
+                                join_type=edge.get("join_type", "LEFT JOIN")
+                            ))
+                    return join_paths
+                if len(path) >= 4:
+                    continue
+                for nxt, key, jtype in _neighbors(curr):
+                    if nxt not in visited:
+                        visited.add(nxt)
+                        queue.append(path + [nxt])
+            return []
+
+        # ── Static fallback (no join_registry available) ────────────────
+        adj = self._static_adjacency()
+        if from_table not in adj:
+            return []
         queue = [[from_table]]
         visited = {from_table}
-
         while queue:
             path = queue.pop(0)
             curr = path[-1]
             if curr == to_table:
                 join_paths = []
                 for i in range(len(path) - 1):
-                    s = path[i]
-                    t = path[i+1]
-                    edge = self._find_edge(s, t)
-                    if edge:
+                    s, t = path[i], path[i + 1]
+                    spec = next((x for x in adj.get(s, []) if x["to"] == t), None)
+                    if spec:
                         join_paths.append(JoinPath(
-                            from_table=edge["source_table"],
-                            to_table=edge["target_table"],
-                            join_key=edge["source_column"],
-                            join_type=edge.get("join_type", "LEFT JOIN")
+                            from_table=s,
+                            to_table=t,
+                            join_key=spec["key"],
+                            join_type=spec["type"],
                         ))
                 return join_paths
-
-            # Limit depth of search: MAX_JOIN_PATH_DEPTH = 3.
-            # Number of joins (edges) is len(path) - 1. If it's already 3 joins, do not expand.
             if len(path) >= 4:
                 continue
-
-            # Neighbors
-            for edge in self._join_registry_cache:
-                src = edge["source_table"].lower()
-                tgt = edge["target_table"].lower()
-                
-                # Check for bidirectional permission
-                is_bidirectional = edge.get("is_bidirectional", True)
-                if is_bidirectional is not False: # True or None or other truthy
-                    if src in self.SENSITIVE_LOG_TABLES or tgt in self.SENSITIVE_LOG_TABLES:
-                        is_bidirectional = False
-
-                if src == curr and tgt not in visited:
-                    visited.add(tgt)
-                    queue.append(path + [tgt])
-                elif tgt == curr and is_bidirectional and src not in visited:
-                    visited.add(src)
-                    queue.append(path + [src])
+            for spec in adj.get(curr, []):
+                nxt = spec["to"]
+                if nxt not in visited:
+                    visited.add(nxt)
+                    queue.append(path + [nxt])
         return []
 
     def _find_edge(self, s: str, t: str) -> Optional[Dict[str, Any]]:

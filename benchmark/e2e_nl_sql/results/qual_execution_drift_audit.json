@@ -1,0 +1,70 @@
+{
+  "generated_at": "2026-09-02T06:17:42",
+  "dsn": "postgresql://banking_user:securepass123@localhost:5432/banking_dev",
+  "FROM": "benchmark/e2e_nl_sql/results/E2E_QUALIFICATION_V1.json",
+  "execution_failure_count": 6,
+  "classification_counts": {
+    "SQL_ERROR": 0,
+    "FIXTURE_DRIFT": 0,
+    "RECONCILED": 6
+  },
+  "compiler_defects": 0,
+  "fixture_drift_cases": 0,
+  "reconciled_cases": 6,
+  "cases": [
+    {
+      "id": "E2E_006",
+      "classification": "RECONCILED",
+      "detail": "matches",
+      "sql_error": false,
+      "fixture_drift": false,
+      "reconciled": true,
+      "question": "How many customers are in each segment?"
+    },
+    {
+      "id": "E2E_007",
+      "classification": "RECONCILED",
+      "detail": "matches",
+      "sql_error": false,
+      "fixture_drift": false,
+      "reconciled": true,
+      "question": "Nombre de comptes par statut"
+    },
+    {
+      "id": "E2E_037",
+      "classification": "RECONCILED",
+      "detail": "scalar None vs NULL expected",
+      "sql_error": false,
+      "fixture_drift": false,
+      "reconciled": true,
+      "question": "Quel est le montant total du capital des prêts actifs ?"
+    },
+    {
+      "id": "E2E_039",
+      "classification": "RECONCILED",
+      "detail": "matches",
+      "sql_error": false,
+      "fixture_drift": false,
+      "reconciled": true,
+      "question": "Répartition des prêts par type"
+    },
+    {
+      "id": "E2E_047",
+      "classification": "RECONCILED",
+      "detail": "matches",
+      "sql_error": false,
+      "fixture_drift": false,
+      "reconciled": true,
+      "question": "Number of transactions per status"
+    },
+    {
+      "id": "E2E_067",
+      "classification": "RECONCILED",
+      "detail": "rowcount 0 vs 0",
+      "sql_error": false,
+      "fixture_drift": false,
+      "reconciled": true,
+      "question": "Clients avec prêts dans les branches de Tunis"
+    }
+  ]
+}

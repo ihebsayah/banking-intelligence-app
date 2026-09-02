@@ -1,0 +1,22 @@
+{
+  "model": "qwen3:4b",
+  "temperature": 0.0,
+  "cases": [
+    {
+      "case_id": "anom_b02",
+      "category": "B_anomaly",
+      "language": "en",
+      "gate_use_llm": true,
+      "mode": "llm_fallback",
+      "reason": "LLM_UNAVAILABLE_OR_EMPTY",
+      "payload_facts": 3,
+      "load_duration_ms": 149.353291,
+      "wall_ms": 43211.90118789673,
+      "eval_count": 180,
+      "prompt_eval_count": 644,
+      "token_sec": 6.0,
+      "error": null,
+      "llm_summary": ""
+    }
+  ]
+}

@@ -5,10 +5,14 @@ CRITICAL SECURITY MODULE — Validates SQL queries to prevent injection attacks.
 
 Five checks (all must pass):
   1. syntax_check    — sqlparse can parse it
-  2. select_only     — first statement is SELECT (no DML/DDL)
+  2. select_only     — statement(s) are SELECT (no DML/DDL)
   3. keyword_check   — no dangerous keywords
   4. limit_check     — LIMIT clause present
   5. pattern_check   — no suspicious injection patterns
+                     (regex layer + structured statement-purity scan;
+                      legitimate nested SELECT derived tables / scalar
+                      subqueries are accepted, non-SELECT nested statements
+                      are rejected)
 
 Also signs safe queries with HMAC to detect tampering.
 
@@ -88,6 +92,7 @@ SUSPICIOUS_PATTERNS: List[Tuple[str, re.Pattern]] = [
     ("or_1_equals_1",       re.compile(r"\bOR\s+['\"]?1['\"]?\s*=\s*['\"]?1['\"]?", re.I)),
     ("and_1_equals_1",      re.compile(r"\bAND\s+['\"]?1['\"]?\s*=\s*['\"]?1['\"]?", re.I)),
     ("or_true",             re.compile(r"\bOR\s+TRUE\b", re.I)),
+    ("and_true",            re.compile(r"\bAND\s+TRUE\b", re.I)),
     ("and_false",           re.compile(r"\bAND\s+FALSE\b", re.I)),
     # UNION injection
     ("union_select",        re.compile(r"\bUNION\s+(ALL\s+)?SELECT\b", re.I)),
@@ -112,9 +117,10 @@ SUSPICIOUS_PATTERNS: List[Tuple[str, re.Pattern]] = [
     ("char_function",       re.compile(r"\bCHAR\s*\(", re.I)),
     ("ascii_function",      re.compile(r"\bASCII\s*\(", re.I)),
     ("concat_ws",           re.compile(r"\bCONCAT_WS\s*\(", re.I)),
-    # Subquery abuse — any nested SELECT
-    ("subselect_where",     re.compile(r"\bWHERE\s+\(?\s*SELECT\b", re.I)),
-    ("nested_select",       re.compile(r"\(\s*SELECT\b", re.I)),  # catches = (SELECT ..)
+    # NOTE: nested SELECTs are NOT flagged here — legitimate derived tables,
+    # scalar subqueries and EXISTS subqueries (all read-only SELECTs) must pass.
+    # Non-SELECT nested statements are rejected by the structured purity scan in
+    # pattern_check (_structured_statement_purity), not by regex.
     # System variable access
     ("sys_variable",        re.compile(r"@@\w+", re.I)),
     # LOAD / file read
@@ -207,6 +213,14 @@ class QueryValidator:
         for name, pattern in SUSPICIOUS_PATTERNS:
             if pattern.search(sql):
                 found_patterns.append(name)
+        # Structured statement-purity scan (defense-in-depth + nested SELECTs):
+        # rejects stacked queries and nested non-SELECT statements (subquery/CTE
+        # with DELETE/DROP/...) while accepting legitimate derived tables and
+        # scalar subqueries. Only applied when sqlparse is available.
+        if HAS_SQLPARSE:
+            found_patterns = found_patterns + [
+                p for p in self._structured_statement_purity(sql) if p not in found_patterns
+            ]
         if found_patterns:
             checks_failed.append("pattern_check")
             issues.append(f"Suspicious injection pattern(s): {', '.join(found_patterns)}")
@@ -289,6 +303,76 @@ class QueryValidator:
             sanitized_sql=sanitized if safe else None,
             semantic_warnings=semantic_warnings,
         )
+
+    @staticmethod
+    def _structured_statement_purity(sql: str) -> List[str]:
+        """Structured scan for non-SELECT / clause-embedded subquery content.
+
+        Replaces the brittle `nested_select` / `subselect_where` regex checks:
+          - `stacked_queries`    — more than one top-level statement (`;`-separated)
+          - `nested_non_select`  — a nested DML/DDL keyword other than SELECT
+                                   anywhere in the tree (subquery/CTE write attempt)
+          - `subquery_in_clause` — a Parenthesis sub-SELECT appearing inside a
+                                   WHERE/HAVING/ON clause (injection exfil vector).
+                                   Legitimate derived tables live in FROM, never
+                                   in clauses — the compiler emits neither.
+        Legitimate derived tables, scalar subqueries and EXISTS subqueries are
+        read-only SELECTs and are accepted.
+        """
+        violations: List[str] = []
+        try:
+            statements = sqlparse.parse(sql)
+        except Exception:  # noqa: BLE001 — nothing parsed, regex layer still applies
+            return violations
+        if len(statements) > 1:
+            violations.append("stacked_queries")
+        for stmt in statements:
+            if stmt.get_type() != "SELECT":
+                violations.append("nested_non_select")
+                continue
+            if QueryValidator._subquery_in_clause(stmt):
+                violations.append("subquery_in_clause")
+            for token in stmt.flatten():
+                ttype = token.ttype
+                if ttype in (sqlparse.tokens.Keyword.DML, sqlparse.tokens.Keyword.DDL):
+                    if str(token.value).strip().upper() != "SELECT":
+                        violations.append("nested_non_select")
+                        break
+        return violations
+
+    @staticmethod
+    def _subquery_in_clause(stmt) -> bool:
+        """True if a Parenthesis containing a SELECT appears inside a
+        WHERE/HAVING/ON clause. Derived tables and scalar subqueries are fine;
+        subqueries inside filter clauses are the classic exfil vector."""
+        clause_keywords = ("HAVING", "ON")
+
+        def walk(tokens: list, in_clause: bool, prev=None) -> bool:
+            for t in tokens:
+                if isinstance(t, sqlparse.sql.Parenthesis) and in_clause:
+                    prev_upper = str(prev.value).strip().upper() if prev is not None else ""
+                    prev_exists = prev_upper == "EXISTS"
+                    has_select = any(tk.ttype is sqlparse.tokens.Keyword.DML
+                                     and str(tk.value).strip().upper() == "SELECT"
+                                     for tk in t.flatten())
+                    if has_select and not prev_exists:
+                        return True
+                sub = in_clause
+                if isinstance(t, sqlparse.sql.Where):
+                    sub = True
+                elif t.ttype is sqlparse.tokens.Keyword and str(t.value).strip().upper() in clause_keywords:
+                    sub = True
+                if t.is_group and walk(t.tokens, sub, None):
+                    return True
+                if str(t.value).strip() and getattr(t, "ttype", None) not in (
+                        sqlparse.tokens.Token.Text.Whitespace,):
+                    prev = t
+            return False
+
+        try:
+            return walk(stmt.tokens, False)
+        except Exception:  # noqa: BLE001
+            return False
 
     def _sign_query(self, sql: str, parameters: list) -> str:
         """HMAC-SHA256 signature over (sql + parameters) for tamper detection."""

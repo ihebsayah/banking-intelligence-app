@@ -33,7 +33,7 @@ export function ApprovalQueuePage() {
   const [items, setItems] = useState<ApprovalRequest[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState('pending');
   const [actionType, setActionType] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

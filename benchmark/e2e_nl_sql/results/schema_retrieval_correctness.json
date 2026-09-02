@@ -1,0 +1,2548 @@
+{
+  "metrics": {
+    "total_supported_cases": 90,
+    "TABLE_RECALL": 1.0,
+    "TABLE_PRECISION": 1.0,
+    "EXACT_TABLE_MATCH": 90,
+    "EXACT_RATE": 100.0,
+    "AVG_SELECTED_TABLES": 1.5,
+    "METRIC_COLUMN_COVERAGE": 100.0,
+    "DIMENSION_COLUMN_COVERAGE": 100.0,
+    "FILTER_COLUMN_COVERAGE": 98.89,
+    "TIME_SOURCE_COVERAGE": 100.0,
+    "cases_with_bridges": 10,
+    "failure_shape": {}
+  },
+  "cases": [
+    {
+      "id": "E2E_001",
+      "question": "How many customers do we have?",
+      "expected_tables": [
+        "customers"
+      ],
+      "got_tables": [
+        "customers"
+      ],
+      "selected_tables": [
+        "customers"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "customers": "glossary term 'customers'; direct table name 'customers'"
+      }
+    },
+    {
+      "id": "E2E_002",
+      "question": "Combien de comptes sont actifs ?",
+      "expected_tables": [
+        "accounts"
+      ],
+      "got_tables": [
+        "accounts"
+      ],
+      "selected_tables": [
+        "accounts"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "accounts": "glossary term 'comptes'"
+      }
+    },
+    {
+      "id": "E2E_003",
+      "question": "Somme totale des soldes de tous les comptes",
+      "expected_tables": [
+        "accounts"
+      ],
+      "got_tables": [
+        "accounts"
+      ],
+      "selected_tables": [
+        "accounts"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "accounts": "glossary term 'comptes'"
+      }
+    },
+    {
+      "id": "E2E_004",
+      "question": "How many customers have both a loan and an account?",
+      "expected_tables": [
+        "accounts",
+        "customers",
+        "loan_contracts"
+      ],
+      "got_tables": [
+        "customers",
+        "accounts",
+        "loan_contracts"
+      ],
+      "selected_tables": [
+        "customers",
+        "accounts",
+        "loan_contracts"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "customers": "glossary term 'customers'; direct table name 'customers'",
+        "accounts": "glossary term 'account'",
+        "loan_contracts": "glossary term 'loan'"
+      }
+    },
+    {
+      "id": "E2E_005",
+      "question": "Combien de clients sont dans le segment CORP_LARGE ?",
+      "expected_tables": [
+        "customers"
+      ],
+      "got_tables": [
+        "customers"
+      ],
+      "selected_tables": [
+        "customers"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "customers": "requested field 'segment' (exclusive); glossary term 'clients'"
+      }
+    },
+    {
+      "id": "E2E_006",
+      "question": "How many customers are in each segment?",
+      "expected_tables": [
+        "customers"
+      ],
+      "got_tables": [
+        "customers"
+      ],
+      "selected_tables": [
+        "customers"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "customers": "requested field 'segment' (exclusive); glossary term 'customers'; direct table name 'customers'"
+      }
+    },
+    {
+      "id": "E2E_007",
+      "question": "Nombre de comptes par statut",
+      "expected_tables": [
+        "accounts"
+      ],
+      "got_tables": [
+        "accounts"
+      ],
+      "selected_tables": [
+        "accounts"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "accounts": "glossary term 'comptes'"
+      }
+    },
+    {
+      "id": "E2E_008",
+      "question": "Quel est le solde moyen des comptes ?",
+      "expected_tables": [
+        "accounts"
+      ],
+      "got_tables": [
+        "accounts"
+      ],
+      "selected_tables": [
+        "accounts"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "accounts": "glossary term 'comptes'; glossary term 'solde'"
+      }
+    },
+    {
+      "id": "E2E_009",
+      "question": "Combien de comptes épargne existent ?",
+      "expected_tables": [
+        "accounts"
+      ],
+      "got_tables": [
+        "accounts"
+      ],
+      "selected_tables": [
+        "accounts"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "accounts": "glossary term 'comptes'; glossary term 'épargne'"
+      }
+    },
+    {
+      "id": "E2E_010",
+      "question": "Top 10 des clients par solde de compte",
+      "expected_tables": [
+        "accounts",
+        "customers"
+      ],
+      "got_tables": [
+        "customers",
+        "accounts"
+      ],
+      "selected_tables": [
+        "customers",
+        "accounts"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "customers": "glossary term 'clients'",
+        "accounts": "glossary term 'compte'; glossary term 'solde'"
+      }
+    },
+    {
+      "id": "E2E_011",
+      "question": "How many active customers are in the PART_MASS segment?",
+      "expected_tables": [
+        "customers"
+      ],
+      "got_tables": [
+        "customers"
+      ],
+      "selected_tables": [
+        "customers"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "customers": "requested field 'segment' (exclusive); glossary term 'customers'; direct table name 'customers'"
+      }
+    },
+    {
+      "id": "E2E_012",
+      "question": "Comptes dormants à la BR_016",
+      "expected_tables": [
+        "accounts",
+        "branches"
+      ],
+      "got_tables": [
+        "accounts",
+        "branches"
+      ],
+      "selected_tables": [
+        "accounts",
+        "branches"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "accounts": "glossary term 'dormants'; glossary term 'comptes'",
+        "branches": "branch code 'BR_016'"
+      }
+    },
+    {
+      "id": "E2E_013",
+      "question": "What are the top 5 branches by number of accounts?",
+      "expected_tables": [
+        "accounts",
+        "branches"
+      ],
+      "got_tables": [
+        "accounts",
+        "branches"
+      ],
+      "selected_tables": [
+        "accounts",
+        "branches"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "accounts": "glossary term 'accounts'; direct table name 'accounts'",
+        "branches": "glossary term 'branches'; direct table name 'branches'"
+      }
+    },
+    {
+      "id": "E2E_014",
+      "question": "Top 3 segments par nombre de clients",
+      "expected_tables": [
+        "customers"
+      ],
+      "got_tables": [
+        "customers"
+      ],
+      "selected_tables": [
+        "customers"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "customers": "requested field 'segment' (exclusive); glossary term 'clients'"
+      }
+    },
+    {
+      "id": "E2E_015",
+      "question": "Agences avec le plus de comptes dormants",
+      "expected_tables": [
+        "accounts",
+        "branches"
+      ],
+      "got_tables": [
+        "accounts",
+        "branches"
+      ],
+      "selected_tables": [
+        "accounts",
+        "branches"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "accounts": "glossary term 'dormants'; glossary term 'comptes'",
+        "branches": "glossary term 'agences'"
+      }
+    },
+    {
+      "id": "E2E_016",
+      "question": "Évolution mensuelle des nouveaux comptes",
+      "expected_tables": [
+        "accounts"
+      ],
+      "got_tables": [
+        "accounts"
+      ],
+      "selected_tables": [
+        "accounts"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "accounts": "glossary term 'comptes'"
+      }
+    },
+    {
+      "id": "E2E_017",
+      "question": "Combien de clients ont un score de risque supérieur à 0,7 ?",
+      "expected_tables": [
+        "customers"
+      ],
+      "got_tables": [
+        "customers"
+      ],
+      "selected_tables": [
+        "customers"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "customers": "glossary term 'score de risque'; glossary term 'clients'"
+      }
+    },
+    {
+      "id": "E2E_018",
+      "question": "Customers who joined in the last year, by segment",
+      "expected_tables": [
+        "customers"
+      ],
+      "got_tables": [
+        "customers"
+      ],
+      "selected_tables": [
+        "customers"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "customers": "requested field 'segment' (exclusive); glossary term 'customers'; direct table name 'customers'"
+      }
+    },
+    {
+      "id": "E2E_019",
+      "question": "Montant moyen du solde par segment de client",
+      "expected_tables": [
+        "accounts",
+        "customers"
+      ],
+      "got_tables": [
+        "customers",
+        "accounts"
+      ],
+      "selected_tables": [
+        "customers",
+        "accounts"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "customers": "requested field 'segment' (exclusive); glossary term 'client'",
+        "accounts": "glossary term 'solde'"
+      }
+    },
+    {
+      "id": "E2E_021",
+      "question": "Quel est le ratio de prêts improductifs (NPL) ?",
+      "expected_tables": [
+        "loan_contracts",
+        "non_performing_loans"
+      ],
+      "got_tables": [
+        "loan_contracts",
+        "non_performing_loans"
+      ],
+      "selected_tables": [
+        "loan_contracts",
+        "non_performing_loans"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "loan_contracts": "glossary term 'improductifs'; glossary term 'prêts'; glossary term 'npl'",
+        "non_performing_loans": "glossary term 'improductifs'; glossary term 'npl'"
+      }
+    },
+    {
+      "id": "E2E_022",
+      "question": "Quel est le score de risque moyen des clients dont le KYC est vérifié ?",
+      "expected_tables": [
+        "customers"
+      ],
+      "got_tables": [
+        "customers"
+      ],
+      "selected_tables": [
+        "customers"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "customers": "requested field 'kyc_verified' (exclusive); glossary term 'score de risque'; glossary term 'kyc est vérifié'; glossary term 'clients'; glossary term 'kyc'"
+      }
+    },
+    {
+      "id": "E2E_023",
+      "question": "How many customers have a high risk score?",
+      "expected_tables": [
+        "customers"
+      ],
+      "got_tables": [
+        "customers"
+      ],
+      "selected_tables": [
+        "customers"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "customers": "glossary term 'risk score'; glossary term 'customers'; glossary term 'high risk'; direct table name 'customers'"
+      }
+    },
+    {
+      "id": "E2E_024",
+      "question": "Customers with risk score above 0.5 who are KYC verified",
+      "expected_tables": [
+        "customers"
+      ],
+      "got_tables": [
+        "customers"
+      ],
+      "selected_tables": [
+        "customers"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "customers": "requested field 'kyc_verified' (exclusive); glossary term 'kyc verified'; glossary term 'risk score'; glossary term 'customers'; glossary term 'kyc'; direct table name 'customers'"
+      }
+    },
+    {
+      "id": "E2E_025",
+      "question": "Combien de flags de risque y a-t-il par sévérité ?",
+      "expected_tables": [
+        "risk_flags"
+      ],
+      "got_tables": [
+        "risk_flags"
+      ],
+      "selected_tables": [
+        "risk_flags"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "risk_flags": "glossary term 'sévérité'; glossary term 'flags'"
+      }
+    },
+    {
+      "id": "E2E_026",
+      "question": "Combien de flags de risque sont non résolus ?",
+      "expected_tables": [
+        "risk_flags"
+      ],
+      "got_tables": [
+        "risk_flags"
+      ],
+      "selected_tables": [
+        "risk_flags"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": false,
+      "time_source_ok": true,
+      "reasons": {
+        "risk_flags": "glossary term 'non résolus'; glossary term 'résolus'; glossary term 'flags'"
+      }
+    },
+    {
+      "id": "E2E_027",
+      "question": "Quel est le montant total des provisions ?",
+      "expected_tables": [
+        "provisions"
+      ],
+      "got_tables": [
+        "provisions"
+      ],
+      "selected_tables": [
+        "provisions"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "provisions": "glossary term 'provisions'; direct table name 'provisions'"
+      }
+    },
+    {
+      "id": "E2E_028",
+      "question": "Montant des prêts non performants par classification",
+      "expected_tables": [
+        "non_performing_loans"
+      ],
+      "got_tables": [
+        "non_performing_loans"
+      ],
+      "selected_tables": [
+        "non_performing_loans"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "non_performing_loans": "glossary term 'non performants'; glossary term 'classification'"
+      }
+    },
+    {
+      "id": "E2E_029",
+      "question": "Top 5 des clients par score de risque",
+      "expected_tables": [
+        "customers"
+      ],
+      "got_tables": [
+        "customers"
+      ],
+      "selected_tables": [
+        "customers"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "customers": "glossary term 'score de risque'; glossary term 'clients'"
+      }
+    },
+    {
+      "id": "E2E_030",
+      "question": "Clients à haut risque par segment",
+      "expected_tables": [
+        "customers"
+      ],
+      "got_tables": [
+        "customers"
+      ],
+      "selected_tables": [
+        "customers"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "customers": "requested field 'segment' (exclusive); filter column 'customers.risk_score'; glossary term 'haut risque'; glossary term 'clients'"
+      }
+    },
+    {
+      "id": "E2E_031",
+      "question": "What is the average risk score per branch?",
+      "expected_tables": [
+        "accounts",
+        "branches",
+        "customers"
+      ],
+      "got_tables": [
+        "customers",
+        "branches",
+        "accounts"
+      ],
+      "selected_tables": [
+        "customers",
+        "branches"
+      ],
+      "bridge_tables": [
+        "accounts"
+      ],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "customers": "glossary term 'risk score'",
+        "branches": "glossary term 'branch'",
+        "accounts": ""
+      }
+    },
+    {
+      "id": "E2E_032",
+      "question": "Combien de clients ont des prêts avec retard de plus de 30 jours ?",
+      "expected_tables": [
+        "customers",
+        "loan_contracts"
+      ],
+      "got_tables": [
+        "customers",
+        "loan_contracts"
+      ],
+      "selected_tables": [
+        "customers",
+        "loan_contracts"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "customers": "glossary term 'clients'",
+        "loan_contracts": "glossary term 'prêts'"
+      }
+    },
+    {
+      "id": "E2E_033",
+      "question": "Nombre de prêts non performants par type de prêt",
+      "expected_tables": [
+        "loan_contracts",
+        "non_performing_loans"
+      ],
+      "got_tables": [
+        "loan_contracts",
+        "non_performing_loans"
+      ],
+      "selected_tables": [
+        "loan_contracts",
+        "non_performing_loans"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "loan_contracts": "glossary term 'non performants'; glossary term 'prêts'; glossary term 'prêt'",
+        "non_performing_loans": "glossary term 'non performants'"
+      }
+    },
+    {
+      "id": "E2E_034",
+      "question": "Provisions totales par agence",
+      "expected_tables": [
+        "accounts",
+        "branches",
+        "loan_contracts",
+        "provisions"
+      ],
+      "got_tables": [
+        "branches",
+        "provisions",
+        "accounts",
+        "loan_contracts"
+      ],
+      "selected_tables": [
+        "branches",
+        "provisions"
+      ],
+      "bridge_tables": [
+        "accounts",
+        "loan_contracts"
+      ],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "branches": "glossary term 'agence'",
+        "provisions": "glossary term 'provisions'; glossary term 'totales'; direct table name 'provisions'",
+        "accounts": "",
+        "loan_contracts": ""
+      }
+    },
+    {
+      "id": "E2E_036",
+      "question": "What is the total number of loan contracts?",
+      "expected_tables": [
+        "loan_contracts"
+      ],
+      "got_tables": [
+        "loan_contracts"
+      ],
+      "selected_tables": [
+        "loan_contracts"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "loan_contracts": "glossary term 'loan contracts'; glossary term 'loan'"
+      }
+    },
+    {
+      "id": "E2E_037",
+      "question": "Quel est le montant total du capital des prêts actifs ?",
+      "expected_tables": [
+        "loan_contracts"
+      ],
+      "got_tables": [
+        "loan_contracts"
+      ],
+      "selected_tables": [
+        "loan_contracts"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "loan_contracts": "glossary term 'prêts'"
+      }
+    },
+    {
+      "id": "E2E_038",
+      "question": "How many loans does each branch have?",
+      "expected_tables": [
+        "accounts",
+        "branches",
+        "loan_contracts"
+      ],
+      "got_tables": [
+        "branches",
+        "loan_contracts",
+        "accounts"
+      ],
+      "selected_tables": [
+        "branches",
+        "loan_contracts"
+      ],
+      "bridge_tables": [
+        "accounts"
+      ],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "branches": "glossary term 'branch'",
+        "loan_contracts": "glossary term 'loans'",
+        "accounts": ""
+      }
+    },
+    {
+      "id": "E2E_039",
+      "question": "Répartition des prêts par type",
+      "expected_tables": [
+        "loan_contracts"
+      ],
+      "got_tables": [
+        "loan_contracts"
+      ],
+      "selected_tables": [
+        "loan_contracts"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "loan_contracts": "glossary term 'prêts'"
+      }
+    },
+    {
+      "id": "E2E_040",
+      "question": "How many auto loans are currently active?",
+      "expected_tables": [
+        "loan_contracts"
+      ],
+      "got_tables": [
+        "loan_contracts"
+      ],
+      "selected_tables": [
+        "loan_contracts"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "loan_contracts": "glossary term 'loans'"
+      }
+    },
+    {
+      "id": "E2E_041",
+      "question": "Nombre de prêts en retard dans la branche Tunis",
+      "expected_tables": [
+        "accounts",
+        "branches",
+        "loan_contracts"
+      ],
+      "got_tables": [
+        "branches",
+        "loan_contracts",
+        "accounts"
+      ],
+      "selected_tables": [
+        "branches",
+        "loan_contracts"
+      ],
+      "bridge_tables": [
+        "accounts"
+      ],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "branches": "glossary term 'branche'",
+        "loan_contracts": "filter column 'loan_contracts.status'; glossary term 'en retard'; glossary term 'prêts'",
+        "accounts": ""
+      }
+    },
+    {
+      "id": "E2E_042",
+      "question": "Top 5 des types de prêts par nombre de contrats",
+      "expected_tables": [
+        "loan_contracts"
+      ],
+      "got_tables": [
+        "loan_contracts"
+      ],
+      "selected_tables": [
+        "loan_contracts"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "loan_contracts": "glossary term 'prêts'"
+      }
+    },
+    {
+      "id": "E2E_043",
+      "question": "Number of loans disbursed per month",
+      "expected_tables": [
+        "loan_contracts"
+      ],
+      "got_tables": [
+        "loan_contracts"
+      ],
+      "selected_tables": [
+        "loan_contracts"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "loan_contracts": "glossary term 'disbursed'; glossary term 'loans'"
+      }
+    },
+    {
+      "id": "E2E_044",
+      "question": "Nombre de prêts par mois de décaissement",
+      "expected_tables": [
+        "loan_contracts"
+      ],
+      "got_tables": [
+        "loan_contracts"
+      ],
+      "selected_tables": [
+        "loan_contracts"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "loan_contracts": "glossary term 'décaissement'; glossary term 'prêts'"
+      }
+    },
+    {
+      "id": "E2E_045",
+      "question": "What is the average loan principal per branch state?",
+      "expected_tables": [
+        "accounts",
+        "branches",
+        "loan_contracts"
+      ],
+      "got_tables": [
+        "branches",
+        "loan_contracts",
+        "accounts"
+      ],
+      "selected_tables": [
+        "branches",
+        "loan_contracts"
+      ],
+      "bridge_tables": [
+        "accounts"
+      ],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "branches": "glossary term 'branch'; glossary term 'state'",
+        "loan_contracts": "requested field 'principal_amount' (exclusive); glossary term 'loan'",
+        "accounts": ""
+      }
+    },
+    {
+      "id": "E2E_046",
+      "question": "Combien de transactions ont été enregistrées ?",
+      "expected_tables": [
+        "transactions"
+      ],
+      "got_tables": [
+        "transactions"
+      ],
+      "selected_tables": [
+        "transactions"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "transactions": "glossary term 'transactions'; direct table name 'transactions'"
+      }
+    },
+    {
+      "id": "E2E_047",
+      "question": "Number of transactions per status",
+      "expected_tables": [
+        "transactions"
+      ],
+      "got_tables": [
+        "transactions"
+      ],
+      "selected_tables": [
+        "transactions"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "transactions": "glossary term 'transactions'; direct table name 'transactions'"
+      }
+    },
+    {
+      "id": "E2E_048",
+      "question": "Transactions per day for the last 30 days",
+      "expected_tables": [
+        "transactions"
+      ],
+      "got_tables": [
+        "transactions"
+      ],
+      "selected_tables": [
+        "transactions"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "transactions": "glossary term 'transactions'; direct table name 'transactions'"
+      }
+    },
+    {
+      "id": "E2E_049",
+      "question": "Somme totale des montants de toutes les transactions",
+      "expected_tables": [
+        "transactions"
+      ],
+      "got_tables": [
+        "transactions"
+      ],
+      "selected_tables": [
+        "transactions"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "transactions": "glossary term 'transactions'; glossary term 'montants'; direct table name 'transactions'"
+      }
+    },
+    {
+      "id": "E2E_050",
+      "question": "What is the average transaction amount?",
+      "expected_tables": [
+        "transactions"
+      ],
+      "got_tables": [
+        "transactions"
+      ],
+      "selected_tables": [
+        "transactions"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "transactions": "glossary term 'transaction'"
+      }
+    },
+    {
+      "id": "E2E_051",
+      "question": "How many completed transactions were there in the last 30 days?",
+      "expected_tables": [
+        "transactions"
+      ],
+      "got_tables": [
+        "transactions"
+      ],
+      "selected_tables": [
+        "transactions"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "transactions": "glossary term 'transactions'; direct table name 'transactions'"
+      }
+    },
+    {
+      "id": "E2E_052",
+      "question": "Top 10 largest transfer transactions",
+      "expected_tables": [
+        "transactions"
+      ],
+      "got_tables": [
+        "transactions"
+      ],
+      "selected_tables": [
+        "transactions"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "transactions": "glossary term 'transactions'; direct table name 'transactions'"
+      }
+    },
+    {
+      "id": "E2E_053",
+      "question": "Volume de transactions par type de compte",
+      "expected_tables": [
+        "accounts",
+        "transactions"
+      ],
+      "got_tables": [
+        "accounts",
+        "transactions"
+      ],
+      "selected_tables": [
+        "accounts",
+        "transactions"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "accounts": "glossary term 'compte'",
+        "transactions": "glossary term 'transactions'; glossary term 'volume'; direct table name 'transactions'"
+      }
+    },
+    {
+      "id": "E2E_054",
+      "question": "Transaction count per transaction type",
+      "expected_tables": [
+        "transactions"
+      ],
+      "got_tables": [
+        "transactions"
+      ],
+      "selected_tables": [
+        "transactions"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "transactions": "glossary term 'transaction'"
+      }
+    },
+    {
+      "id": "E2E_056",
+      "question": "What is the latest PNB (net banking income)?",
+      "expected_tables": [
+        "income_statement_snapshots"
+      ],
+      "got_tables": [
+        "income_statement_snapshots"
+      ],
+      "selected_tables": [
+        "income_statement_snapshots"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "income_statement_snapshots": "metric registry source for 'pnb'; requested field 'pnb' (exclusive); glossary term 'pnb'"
+      }
+    },
+    {
+      "id": "E2E_057",
+      "question": "Quel est le total des commissions (fee income) ?",
+      "expected_tables": [
+        "fee_income"
+      ],
+      "got_tables": [
+        "fee_income"
+      ],
+      "selected_tables": [
+        "fee_income"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "fee_income": "glossary term 'commissions'; glossary term 'fee income'; glossary term 'fee'"
+      }
+    },
+    {
+      "id": "E2E_058",
+      "question": "What was the net income in the last period?",
+      "expected_tables": [
+        "income_statement_snapshots"
+      ],
+      "got_tables": [
+        "income_statement_snapshots"
+      ],
+      "selected_tables": [
+        "income_statement_snapshots"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "income_statement_snapshots": "glossary term 'net income'"
+      }
+    },
+    {
+      "id": "E2E_059",
+      "question": "Commissions par type de frais",
+      "expected_tables": [
+        "fee_income"
+      ],
+      "got_tables": [
+        "fee_income"
+      ],
+      "selected_tables": [
+        "fee_income"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "fee_income": "glossary term 'commissions'; glossary term 'frais'"
+      }
+    },
+    {
+      "id": "E2E_060",
+      "question": "What is the fee income per account type?",
+      "expected_tables": [
+        "accounts",
+        "fee_income"
+      ],
+      "got_tables": [
+        "accounts",
+        "fee_income"
+      ],
+      "selected_tables": [
+        "accounts",
+        "fee_income"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "accounts": "glossary term 'account'",
+        "fee_income": "glossary term 'fee income'; glossary term 'fee'"
+      }
+    },
+    {
+      "id": "E2E_061",
+      "question": "What is the return on equity (ROE)?",
+      "expected_tables": [
+        "balance_sheet_snapshots",
+        "income_statement_snapshots"
+      ],
+      "got_tables": [
+        "income_statement_snapshots",
+        "balance_sheet_snapshots"
+      ],
+      "selected_tables": [
+        "income_statement_snapshots",
+        "balance_sheet_snapshots"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "income_statement_snapshots": "metric registry source for 'roe'; glossary term 'return on equity'; glossary term 'roe'",
+        "balance_sheet_snapshots": "metric registry source for 'roe'; glossary term 'return on equity'; glossary term 'equity'; glossary term 'roe'"
+      }
+    },
+    {
+      "id": "E2E_062",
+      "question": "Quel est le ROA (retour sur actifs) ?",
+      "expected_tables": [
+        "balance_sheet_snapshots",
+        "income_statement_snapshots"
+      ],
+      "got_tables": [
+        "income_statement_snapshots",
+        "balance_sheet_snapshots"
+      ],
+      "selected_tables": [
+        "income_statement_snapshots",
+        "balance_sheet_snapshots"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "income_statement_snapshots": "metric registry source for 'roa'; glossary term 'roa'",
+        "balance_sheet_snapshots": "metric registry source for 'roa'; glossary term 'roa'"
+      }
+    },
+    {
+      "id": "E2E_063",
+      "question": "What is the cost-to-income ratio?",
+      "expected_tables": [
+        "income_statement_snapshots"
+      ],
+      "got_tables": [
+        "income_statement_snapshots"
+      ],
+      "selected_tables": [
+        "income_statement_snapshots"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "income_statement_snapshots": "glossary term 'cost-to-income'"
+      }
+    },
+    {
+      "id": "E2E_064",
+      "question": "Quel est le total des intérêts perçus ?",
+      "expected_tables": [
+        "interest_income"
+      ],
+      "got_tables": [
+        "interest_income"
+      ],
+      "selected_tables": [
+        "interest_income"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "interest_income": "glossary term 'intérêts'; glossary term 'perçus'"
+      }
+    },
+    {
+      "id": "E2E_066",
+      "question": "How many branches exist in total?",
+      "expected_tables": [
+        "branches"
+      ],
+      "got_tables": [
+        "branches"
+      ],
+      "selected_tables": [
+        "branches"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "branches": "glossary term 'branches'; direct table name 'branches'"
+      }
+    },
+    {
+      "id": "E2E_067",
+      "question": "Clients avec prêts dans les branches de Tunis",
+      "expected_tables": [
+        "accounts",
+        "branches",
+        "customers",
+        "loan_contracts"
+      ],
+      "got_tables": [
+        "customers",
+        "branches",
+        "loan_contracts",
+        "accounts"
+      ],
+      "selected_tables": [
+        "customers",
+        "branches",
+        "loan_contracts"
+      ],
+      "bridge_tables": [
+        "accounts"
+      ],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "customers": "glossary term 'clients'",
+        "branches": "glossary term 'branches'; direct table name 'branches'",
+        "loan_contracts": "glossary term 'prêts'",
+        "accounts": ""
+      }
+    },
+    {
+      "id": "E2E_068",
+      "question": "Loan amounts by branch state",
+      "expected_tables": [
+        "accounts",
+        "branches",
+        "loan_contracts"
+      ],
+      "got_tables": [
+        "branches",
+        "loan_contracts",
+        "accounts"
+      ],
+      "selected_tables": [
+        "branches",
+        "loan_contracts"
+      ],
+      "bridge_tables": [
+        "accounts"
+      ],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "branches": "glossary term 'branch'; glossary term 'state'",
+        "loan_contracts": "glossary term 'loan amounts'; glossary term 'loan'",
+        "accounts": ""
+      }
+    },
+    {
+      "id": "E2E_069",
+      "question": "Nombre de comptes par ville de la branche",
+      "expected_tables": [
+        "accounts",
+        "branches"
+      ],
+      "got_tables": [
+        "accounts",
+        "branches"
+      ],
+      "selected_tables": [
+        "accounts",
+        "branches"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "accounts": "glossary term 'comptes'",
+        "branches": "glossary term 'branche'; glossary term 'ville'"
+      }
+    },
+    {
+      "id": "E2E_070",
+      "question": "How many customers are in each state?",
+      "expected_tables": [
+        "accounts",
+        "branches",
+        "customers"
+      ],
+      "got_tables": [
+        "customers",
+        "branches",
+        "accounts"
+      ],
+      "selected_tables": [
+        "customers",
+        "branches"
+      ],
+      "bridge_tables": [
+        "accounts"
+      ],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "customers": "glossary term 'customers'; direct table name 'customers'",
+        "branches": "glossary term 'state'",
+        "accounts": ""
+      }
+    },
+    {
+      "id": "E2E_071",
+      "question": "Nombre d'agences par région",
+      "expected_tables": [
+        "branches"
+      ],
+      "got_tables": [
+        "branches"
+      ],
+      "selected_tables": [
+        "branches"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "branches": "glossary term 'agences'; glossary term 'région'"
+      }
+    },
+    {
+      "id": "E2E_072",
+      "question": "Top 5 branches by deposits this year",
+      "expected_tables": [
+        "accounts",
+        "branches"
+      ],
+      "got_tables": [
+        "accounts",
+        "branches"
+      ],
+      "selected_tables": [
+        "accounts",
+        "branches"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "accounts": "glossary term 'deposits'",
+        "branches": "glossary term 'branches'; direct table name 'branches'"
+      }
+    },
+    {
+      "id": "E2E_073",
+      "question": "Clients actifs par ville de la branche",
+      "expected_tables": [
+        "accounts",
+        "branches",
+        "customers"
+      ],
+      "got_tables": [
+        "customers",
+        "branches",
+        "accounts"
+      ],
+      "selected_tables": [
+        "customers",
+        "branches"
+      ],
+      "bridge_tables": [
+        "accounts"
+      ],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "customers": "glossary term 'clients'",
+        "branches": "glossary term 'branche'; glossary term 'ville'",
+        "accounts": ""
+      }
+    },
+    {
+      "id": "E2E_074",
+      "question": "Transaction volume per region",
+      "expected_tables": [
+        "accounts",
+        "branches",
+        "transactions"
+      ],
+      "got_tables": [
+        "transactions",
+        "branches",
+        "accounts"
+      ],
+      "selected_tables": [
+        "transactions",
+        "branches"
+      ],
+      "bridge_tables": [
+        "accounts"
+      ],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "transactions": "glossary term 'transaction'; glossary term 'volume'",
+        "branches": "glossary term 'region'",
+        "accounts": ""
+      }
+    },
+    {
+      "id": "E2E_076",
+      "question": "How many customers have verified their KYC?",
+      "expected_tables": [
+        "customers"
+      ],
+      "got_tables": [
+        "customers"
+      ],
+      "selected_tables": [
+        "customers"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "customers": "glossary term 'verified their kyc'; glossary term 'customers'; glossary term 'kyc'; direct table name 'customers'"
+      }
+    },
+    {
+      "id": "E2E_077",
+      "question": "Quel est le taux de conformité KYC ?",
+      "expected_tables": [
+        "customers"
+      ],
+      "got_tables": [
+        "customers"
+      ],
+      "selected_tables": [
+        "customers"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "customers": "metric registry source for 'kyc_compliance_rate'; glossary term 'taux de conformité'; glossary term 'conformité'; glossary term 'kyc'"
+      }
+    },
+    {
+      "id": "E2E_078",
+      "question": "How many KYC cases are pending?",
+      "expected_tables": [
+        "kyc_cases"
+      ],
+      "got_tables": [
+        "kyc_cases"
+      ],
+      "selected_tables": [
+        "kyc_cases"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "kyc_cases": "glossary term 'kyc cases'; glossary term 'pending'"
+      }
+    },
+    {
+      "id": "E2E_079",
+      "question": "How many AML alerts have been raised?",
+      "expected_tables": [
+        "aml_alerts"
+      ],
+      "got_tables": [
+        "aml_alerts"
+      ],
+      "selected_tables": [
+        "aml_alerts"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "aml_alerts": "glossary term 'alerts'"
+      }
+    },
+    {
+      "id": "E2E_080",
+      "question": "Quel est le taux d'alertes AML par client ?",
+      "expected_tables": [
+        "aml_alerts",
+        "customers"
+      ],
+      "got_tables": [
+        "customers",
+        "aml_alerts"
+      ],
+      "selected_tables": [
+        "customers",
+        "aml_alerts"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "customers": "metric registry source for 'aml_alert_rate'; glossary term 'client'",
+        "aml_alerts": "metric registry source for 'aml_alert_rate'; glossary term 'alertes'"
+      }
+    },
+    {
+      "id": "E2E_081",
+      "question": "How many high-severity open AML alerts exist?",
+      "expected_tables": [
+        "aml_alerts"
+      ],
+      "got_tables": [
+        "aml_alerts"
+      ],
+      "selected_tables": [
+        "aml_alerts"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "aml_alerts": "glossary term 'open aml alerts'; glossary term 'high-severity'; glossary term 'alerts'"
+      }
+    },
+    {
+      "id": "E2E_082",
+      "question": "Clients en attente KYC avec un risque élevé",
+      "expected_tables": [
+        "customers",
+        "kyc_cases"
+      ],
+      "got_tables": [
+        "customers",
+        "kyc_cases"
+      ],
+      "selected_tables": [
+        "customers",
+        "kyc_cases"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "customers": "glossary term 'risque élevé'; glossary term 'clients'",
+        "kyc_cases": "glossary term 'attente kyc'; glossary term 'attente'"
+      }
+    },
+    {
+      "id": "E2E_083",
+      "question": "Suspicious activity reports per status",
+      "expected_tables": [
+        "suspicious_activity_reports"
+      ],
+      "got_tables": [
+        "suspicious_activity_reports"
+      ],
+      "selected_tables": [
+        "suspicious_activity_reports"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "suspicious_activity_reports": "glossary term 'suspicious activity'; glossary term 'activity reports'; glossary term 'suspicious'"
+      }
+    },
+    {
+      "id": "E2E_084",
+      "question": "Dossiers KYC par niveau de risque",
+      "expected_tables": [
+        "kyc_cases"
+      ],
+      "got_tables": [
+        "kyc_cases"
+      ],
+      "selected_tables": [
+        "kyc_cases"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "kyc_cases": "glossary term 'dossiers'"
+      }
+    },
+    {
+      "id": "E2E_085",
+      "question": "List all customer emails for the KYC outreach campaign",
+      "expected_tables": [
+        "customers"
+      ],
+      "got_tables": [
+        "customers"
+      ],
+      "selected_tables": [
+        "customers"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "customers": "requested field 'email' (exclusive); glossary term 'customer'; glossary term 'kyc'"
+      }
+    },
+    {
+      "id": "E2E_086",
+      "question": "What is the loan to deposit ratio?",
+      "expected_tables": [
+        "accounts",
+        "loan_contracts"
+      ],
+      "got_tables": [
+        "accounts",
+        "loan_contracts"
+      ],
+      "selected_tables": [
+        "accounts",
+        "loan_contracts"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "accounts": "metric registry source for 'loan_to_deposit'; glossary term 'deposit'",
+        "loan_contracts": "metric registry source for 'loan_to_deposit'; glossary term 'loan'"
+      }
+    },
+    {
+      "id": "E2E_087",
+      "question": "Total des dépôts par devise",
+      "expected_tables": [
+        "accounts"
+      ],
+      "got_tables": [
+        "accounts"
+      ],
+      "selected_tables": [
+        "accounts"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "accounts": "glossary term 'dépôts'; glossary term 'devise'"
+      }
+    },
+    {
+      "id": "E2E_088",
+      "question": "What is the total value of assets?",
+      "expected_tables": [
+        "balance_sheet_snapshots"
+      ],
+      "got_tables": [
+        "balance_sheet_snapshots"
+      ],
+      "selected_tables": [
+        "balance_sheet_snapshots"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "balance_sheet_snapshots": "glossary term 'assets'"
+      }
+    },
+    {
+      "id": "E2E_089",
+      "question": "What is the average balance across all accounts?",
+      "expected_tables": [
+        "accounts"
+      ],
+      "got_tables": [
+        "accounts"
+      ],
+      "selected_tables": [
+        "accounts"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "accounts": "glossary term 'accounts'; glossary term 'balance'; direct table name 'accounts'"
+      }
+    },
+    {
+      "id": "E2E_090",
+      "question": "Dépôts totaux par agence",
+      "expected_tables": [
+        "accounts",
+        "branches"
+      ],
+      "got_tables": [
+        "accounts",
+        "branches"
+      ],
+      "selected_tables": [
+        "accounts",
+        "branches"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "accounts": "glossary term 'dépôts'",
+        "branches": "glossary term 'agence'"
+      }
+    },
+    {
+      "id": "E2E_091",
+      "question": "How many employees does the bank have?",
+      "expected_tables": [
+        "employees"
+      ],
+      "got_tables": [
+        "employees"
+      ],
+      "selected_tables": [
+        "employees"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "employees": "glossary term 'employees'; direct table name 'employees'"
+      }
+    },
+    {
+      "id": "E2E_092",
+      "question": "Nombre d'employés par agence",
+      "expected_tables": [
+        "branches",
+        "employees"
+      ],
+      "got_tables": [
+        "branches",
+        "employees"
+      ],
+      "selected_tables": [
+        "branches",
+        "employees"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "branches": "glossary term 'agence'",
+        "employees": "glossary term 'employés'"
+      }
+    },
+    {
+      "id": "E2E_093",
+      "question": "How many employees work per city?",
+      "expected_tables": [
+        "branches",
+        "employees"
+      ],
+      "got_tables": [
+        "branches",
+        "employees"
+      ],
+      "selected_tables": [
+        "branches",
+        "employees"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "branches": "glossary term 'city'",
+        "employees": "glossary term 'employees'; direct table name 'employees'"
+      }
+    },
+    {
+      "id": "E2E_094",
+      "question": "How many transactions were processed in the last 30 days?",
+      "expected_tables": [
+        "transactions"
+      ],
+      "got_tables": [
+        "transactions"
+      ],
+      "selected_tables": [
+        "transactions"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "transactions": "glossary term 'transactions'; direct table name 'transactions'"
+      }
+    },
+    {
+      "id": "E2E_095",
+      "question": "Which branches have more than 500 accounts?",
+      "expected_tables": [
+        "accounts",
+        "branches"
+      ],
+      "got_tables": [
+        "accounts",
+        "branches"
+      ],
+      "selected_tables": [
+        "accounts",
+        "branches"
+      ],
+      "bridge_tables": [],
+      "recall": 1.0,
+      "precision": 1.0,
+      "exact": true,
+      "missing": [],
+      "extra": [],
+      "metric_cols_ok": true,
+      "dim_cols_ok": true,
+      "filter_cols_ok": true,
+      "time_source_ok": true,
+      "reasons": {
+        "accounts": "glossary term 'accounts'; direct table name 'accounts'",
+        "branches": "glossary term 'branches'; direct table name 'branches'"
+      }
+    }
+  ]
+}
