@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import {
   ArrowLeft, RefreshCw, AlertTriangle, CheckCircle2,
-  Eye, FileSearch, XCircle, TrendingUp, UserPlus,
+  Eye, FileSearch, XCircle, UserPlus,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { BankingHeader } from '../Layout/BankingHeader';
@@ -17,10 +17,9 @@ import { CustomerContextPanel } from '../customers/CustomerContextPanel';
 import type { Alert, AlertAdminView } from '../../types/alerts';
 import { InvestigateAlertDialog } from './dialogs/InvestigateAlertDialog';
 import { DismissAlertDialog } from './dialogs/DismissAlertDialog';
-import { EscalateAlertDialog } from './dialogs/EscalateAlertDialog';
 import { AssignAlertDialog } from './dialogs/AssignAlertDialog';
 
-type DialogName = 'investigate' | 'dismiss' | 'escalate' | 'assign' | null;
+type DialogName = 'investigate' | 'dismiss' | 'assign' | null;
 
 export function AlertDetailPage() {
   const { alertId } = useParams<{ alertId: string }>();
@@ -113,7 +112,6 @@ export function AlertDetailPage() {
   const canInvestigate = !isAdminView && hasPermission(PERMISSIONS.ALERT_INVESTIGATE) && s === 'acknowledged' && isAssignee;
   const canDismiss = !isAdminView && hasPermission(PERMISSIONS.ALERT_DISMISS)
     && (s === 'acknowledged' || s === 'under_investigation') && isAssignee;
-  const canEscalate = !isAdminView && hasPermission(PERMISSIONS.ALERT_TRANSITION) && s === 'under_investigation' && isAssignee;
   const canAssign = hasPermission(PERMISSIONS.ALERT_ASSIGN) && hasRole('admin')
     && s !== 'resolved' && s !== 'dismissed';
 
@@ -173,7 +171,7 @@ export function AlertDetailPage() {
         </div>
 
         {/* Action bar */}
-        {(canAcknowledge || canInvestigate || canDismiss || canEscalate || canAssign) && (
+        {(canAcknowledge || canInvestigate || canDismiss || canAssign) && (
           <div className="flex flex-wrap items-center gap-2">
             {canAcknowledge && (
               <button
@@ -201,15 +199,6 @@ export function AlertDetailPage() {
                 style={{ background: 'rgba(220,38,38,0.12)', color: 'var(--accent-red)' }}
               >
                 <XCircle size={14} /> Dismiss
-              </button>
-            )}
-            {canEscalate && (
-              <button
-                onClick={() => setDialog('escalate')}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold shadow-md transition-all hover:brightness-90"
-                style={{ background: 'rgba(220,38,38,0.12)', color: 'var(--accent-red)' }}
-              >
-                <TrendingUp size={14} /> Escalate
               </button>
             )}
             {canAssign && (
@@ -250,7 +239,7 @@ export function AlertDetailPage() {
             </span>
             {(alert.resolved_customer_id || (alert.related_entity_type === 'customer' && alert.related_entity_id)) && (
               <Link
-                to={`/workbench/customers/${encodeURIComponent(alert.resolved_customer_id || alert.related_entity_id!)}`}
+                to={`/workbench/customers/${encodeURIComponent(alert.resolved_customer_id || alert.related_entity_id!)}?context_type=alert&context_id=${encodeURIComponent(alert.alert_id)}`}
                 className="text-[10px] font-semibold underline decoration-dotted hover:brightness-125"
                 style={{ color: 'var(--accent-blue)' }}>
                 Open Customer 360
@@ -261,7 +250,10 @@ export function AlertDetailPage() {
 
         {/* Customer context (authorized, read-only) */}
         {!isAdminView && (alert.resolved_customer_id || (alert.related_entity_type === 'customer' && alert.related_entity_id)) && (
-          <CustomerContextPanel customerId={alert.resolved_customer_id || alert.related_entity_id!} />
+          <CustomerContextPanel
+            customerId={alert.resolved_customer_id || alert.related_entity_id!}
+            context={{ type: 'alert', id: alert.alert_id }}
+          />
         )}
 
         {/* Meta grid */}
@@ -310,13 +302,6 @@ export function AlertDetailPage() {
             open={dialog === 'dismiss'}
             onClose={() => setDialog(null)}
             onSuccess={() => fetchAlert()}
-            onConflict={() => { setConflict(true); fetchAlert(); }}
-          />
-          <EscalateAlertDialog
-            alert={alert}
-            open={dialog === 'escalate'}
-            onClose={() => setDialog(null)}
-            onSuccess={(caseId) => navigate(`/workbench/cases/${caseId}`)}
             onConflict={() => { setConflict(true); fetchAlert(); }}
           />
         </>

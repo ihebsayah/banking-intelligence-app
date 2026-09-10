@@ -24,7 +24,7 @@ const mockAuth = vi.hoisted(() => {
 });
 
 const { mockGet, mockTransition, mockCancel, mockUpdate, mockListComments, mockListTimeline, mockAlertGet, mockGetOverview,
-  mockReviewNotHarmful, mockEscalateToCase } =
+  mockReviewNotHarmful, mockEscalateToCase, mockListEligibleComplianceOfficers, mockSubmitToCompliance } =
   vi.hoisted(() => ({
     mockGet: vi.fn(),
     mockTransition: vi.fn(),
@@ -36,6 +36,8 @@ const { mockGet, mockTransition, mockCancel, mockUpdate, mockListComments, mockL
     mockGetOverview: vi.fn(),
     mockReviewNotHarmful: vi.fn(),
     mockEscalateToCase: vi.fn(),
+    mockListEligibleComplianceOfficers: vi.fn(),
+    mockSubmitToCompliance: vi.fn(),
   }));
 
 vi.mock('../../../auth/AuthProvider', () => ({ useAuth: mockAuth.useAuth }));
@@ -50,6 +52,8 @@ vi.mock('../../../api/investigationsApi', () => ({
     listTimeline: mockListTimeline,
     reviewNotHarmful: mockReviewNotHarmful,
     escalateToCase: mockEscalateToCase,
+    listEligibleComplianceOfficers: mockListEligibleComplianceOfficers,
+    submitToCompliance: mockSubmitToCompliance,
   },
 }));
 
@@ -67,6 +71,26 @@ vi.mock('../../../api/customer360Api', () => ({
     status: (err as { response?: { status?: number } })?.response?.status,
     message: 'mock',
   }),
+}));
+
+const { mockListIR, mockListAttachments } = vi.hoisted(() => ({
+  mockListIR: vi.fn(),
+  mockListAttachments: vi.fn(),
+}));
+
+vi.mock('../../../api/informationRequestsApi', () => ({
+  informationRequestsApi: {
+    listForInvestigation: mockListIR,
+    listAttachments: mockListAttachments,
+    downloadAttachment: vi.fn(),
+    accept: vi.fn(),
+    return: vi.fn(),
+    get: vi.fn(),
+    listAssigned: vi.fn(),
+    acknowledge: vi.fn(),
+    respond: vi.fn(),
+    uploadAttachment: vi.fn(),
+  },
 }));
 
 import { InvestigationDetailPage } from '../InvestigationDetailPage';
@@ -125,6 +149,13 @@ describe('InvestigationDetailPage', () => {
     mockListTimeline.mockResolvedValue(defaultTimeline);
     mockReviewNotHarmful.mockResolvedValue({ success: true, investigation: makeInvestigation({ status: 'completed', version: 5 }), version: 5 });
     mockEscalateToCase.mockResolvedValue({ success: true, investigation: makeInvestigation({ status: 'completed', version: 5 }), case_id: 'case_001', version: 5 });
+    mockListEligibleComplianceOfficers.mockResolvedValue([
+      { user_id: 'compliance_001', name: 'Compliance One', email: 'c1@bank.hq' },
+      { user_id: 'compliance_002', name: 'Compliance Two', email: 'c2@bank.hq' },
+    ]);
+    mockSubmitToCompliance.mockResolvedValue({ success: true, investigation: makeInvestigation({ status: 'submitted', findings_text: 'Evidence found', conclusion: 'Confirmed', compliance_officer_id: 'compliance_001', version: 5 }), version: 5 });
+    mockListIR.mockResolvedValue({ total: 0, page: 1, page_size: 50, items: [] });
+    mockListAttachments.mockResolvedValue({ total: 0, items: [] });
     mockAlertGet.mockResolvedValue({
       alert_id: 'al_12345678', alert_type: 'transaction_anomaly', severity: 'high', title: 'Suspicious transfer',
       description: 'Large round-trip transaction', source_rule_type: 'ml_anomaly', source_rule_id: 'r1',
@@ -169,14 +200,17 @@ describe('InvestigationDetailPage', () => {
   });
 
   it('submits an active investigation for review after confirming', async () => {
-    mockGet.mockResolvedValue(makeInvestigation({ findings_text: 'Evidence found' }));
-    mockTransition.mockResolvedValue({ success: true, investigation: makeInvestigation({ status: 'submitted', findings_text: 'Evidence found', version: 5 }), version: 5 });
+    mockGet.mockResolvedValue(makeInvestigation({ findings_text: 'Evidence found', conclusion: 'Confirmed' }));
+    mockSubmitToCompliance.mockResolvedValue({ success: true, investigation: makeInvestigation({ status: 'submitted', findings_text: 'Evidence found', conclusion: 'Confirmed', compliance_officer_id: 'compliance_001', version: 5 }), version: 5 });
     renderDetail();
     fireEvent.click(await screen.findByRole('button', { name: /Submit for Review/i }));
-    expect(await screen.findByText(/final compliance approval/i)).toBeInTheDocument();
+    await screen.findByRole('dialog');
     const dialog = screen.getByRole('dialog');
+    fireEvent.change(await within(dialog).findByLabelText('Select Compliance Officer'), { target: { value: 'compliance_001' } });
     fireEvent.click(within(dialog).getByRole('button', { name: /Submit for Review/i }));
-    await waitFor(() => expect(mockTransition).toHaveBeenCalledWith('inv_1', { target_status: 'submitted', expected_version: 4 }));
+    await waitFor(() => expect(mockSubmitToCompliance).toHaveBeenCalledWith(
+      'inv_1', { compliance_officer_id: 'compliance_001', expected_version: 4 }
+    ));
   });
 
   it('analyst completes when findings and conclusion exist', async () => {
@@ -227,23 +261,16 @@ describe('InvestigationDetailPage', () => {
     expect(screen.queryByRole('button', { name: /Escalate to Case/i })).not.toBeInTheDocument();
   });
 
-  it('compliance reviewer returns for revision with a reason', async () => {
+  it('compliance reviewer routes post-submission input via IR, not return-for-revision', async () => {
     mockAuth.state.role = 'compliance';
-    mockAuth.state.permissions = ['investigation:read_own', 'investigation:review'];
+    mockAuth.state.permissions = ['investigation:read_own', 'investigation:review', 'info_request:create'];
     mockGet.mockResolvedValue(makeInvestigation({ status: 'submitted' }));
-    mockTransition.mockResolvedValue({
-      success: true,
-      investigation: makeInvestigation({ status: 'returned', return_reason: 'more evidence', version: 5 }),
-      version: 5,
-    });
     renderDetail();
-    fireEvent.click(await screen.findByRole('button', { name: /Return for Revision/i }));
-    fireEvent.change(screen.getByLabelText(/Return reason/i), { target: { value: 'more evidence' } });
-    const dialog = screen.getByRole('dialog');
-    fireEvent.click(within(dialog).getByRole('button', { name: /Return for Revision/i }));
-    await waitFor(() => expect(mockTransition).toHaveBeenCalledWith('inv_1', {
-      target_status: 'returned', return_reason: 'more evidence', expected_version: 4,
-    }));
+    await screen.findByText('Round-trip transfer');
+    // Return-for-revision is removed in C4
+    expect(screen.queryByRole('button', { name: /Return for Revision/i })).not.toBeInTheDocument();
+    // The Information Request button is the ONLY post-submission analyst path
+    expect(screen.getByRole('button', { name: /Request Additional Information/i })).toBeInTheDocument();
   });
 
   it('analyst without review permission sees no Not Harmful/Escalate/Return buttons', async () => {
@@ -256,12 +283,12 @@ describe('InvestigationDetailPage', () => {
     expect(screen.queryByRole('button', { name: /Return for Revision/i })).not.toBeInTheDocument();
   });
 
-  it('returned investigation shows reason banner and resume action', async () => {
+  it('legacy returned investigation is frozen with no resume/edit actions', async () => {
     mockGet.mockResolvedValue(makeInvestigation({ status: 'returned', return_reason: 'more evidence needed' }));
     renderDetail();
-    expect(await screen.findByText(/returned — reason: more evidence needed/i)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /Mark Revision Started/i }));
-    await waitFor(() => expect(mockTransition).toHaveBeenCalledWith('inv_1', { target_status: 'active', expected_version: 4 }));
+    expect((await screen.findAllByText(/report is frozen/i)).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: /Mark Revision Started/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Resume/i })).not.toBeInTheDocument();
   });
 
   it('admin cancels an investigation with a reason', async () => {
@@ -304,11 +331,13 @@ describe('InvestigationDetailPage', () => {
   });
 
   it('shows a conflict banner and refetches on 409', async () => {
-    mockGet.mockResolvedValue(makeInvestigation({ findings_text: 'Evidence found' }));
-    mockTransition.mockRejectedValue({ response: { status: 409, data: { message: 'Investigation was updated' } } });
+    mockGet.mockResolvedValue(makeInvestigation({ findings_text: 'Evidence found', conclusion: 'Confirmed' }));
+    mockSubmitToCompliance.mockRejectedValue({ response: { status: 409, data: { message: 'Investigation was updated' } } });
     renderDetail();
     fireEvent.click(await screen.findByRole('button', { name: /Submit for Review/i }));
+    await screen.findByRole('dialog');
     const dialog = screen.getByRole('dialog');
+    fireEvent.change(await within(dialog).findByLabelText('Select Compliance Officer'), { target: { value: 'compliance_001' } });
     fireEvent.click(within(dialog).getByRole('button', { name: /Submit for Review/i }));
     expect(await screen.findByText(/Investigation was updated by someone else/i)).toBeInTheDocument();
     await waitFor(() => expect(mockGet.mock.calls.length).toBeGreaterThanOrEqual(2));
@@ -334,7 +363,7 @@ describe('InvestigationDetailPage', () => {
     expect(await screen.findByTestId('customer-context-panel')).toBeInTheDocument();
     expect(await screen.findByText('Fouad Ben Salah')).toBeInTheDocument();
     expect(mockAlertGet).toHaveBeenCalledWith('al_12345678');
-    expect(mockGetOverview).toHaveBeenCalledWith('CUST_00001');
+    expect(mockGetOverview).toHaveBeenCalledWith('CUST_00001', { type: 'investigation', id: 'inv_1' });
   });
 
   it('shows no customer context when the linked alert has no customer reference', async () => {
@@ -366,7 +395,7 @@ describe('InvestigationDetailPage', () => {
     });
     renderDetail();
     expect(await screen.findByTestId('customer-context-panel')).toBeInTheDocument();
-    expect(mockGetOverview).toHaveBeenCalledWith('CUST_00141');
+    expect(mockGetOverview).toHaveBeenCalledWith('CUST_00141', { type: 'investigation', id: 'inv_1' });
   });
 
   it('shows no customer context when the linked alert cannot be resolved', async () => {

@@ -83,4 +83,28 @@ describe('customer360Api', () => {
     const [url] = mockGet.mock.calls[0];
     expect(url).toBe('/v1/customers/CUST_00001/transactions?limit=20&offset=0');
   });
+
+  it('getOverview appends the workflow context when provided', async () => {
+    mockGet.mockResolvedValue({ data: overview });
+    await customer360Api.getOverview('CUST_00001', { type: 'investigation', id: 'INV-42' });
+    const [url] = mockGet.mock.calls[0];
+    expect(url).toBe('/v1/customers/CUST_00001/overview?context_type=investigation&context_id=INV-42');
+  });
+
+  it('getTransactions appends the workflow context when provided', async () => {
+    mockGet.mockResolvedValue({
+      data: {
+        transaction_summary: { currencies: [] },
+        recent_transactions: [],
+        total_count: 0,
+        limit: 20,
+        offset: 0,
+        data_quality: overview.data_quality,
+        generated_at: '2026-08-01T00:00:00Z',
+      },
+    });
+    await customer360Api.getTransactions('CUST_00001', { limit: 20, offset: 0 }, { type: 'case', id: 'CASE-9' });
+    const [url] = mockGet.mock.calls[0];
+    expect(url).toBe('/v1/customers/CUST_00001/transactions?limit=20&offset=0&context_type=case&context_id=CASE-9');
+  });
 });

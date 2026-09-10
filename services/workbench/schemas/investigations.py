@@ -71,9 +71,35 @@ class InvestigationResponse(BaseModel):
     submitted_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     return_reason: Optional[str] = None
+    compliance_officer_id: Optional[str] = None
+    submission_snapshot: Optional["SubmissionSnapshot"] = None
     version: int
     created_at: datetime
     updated_at: datetime
+
+
+class SubmissionSnapshot(BaseModel):
+    submission_id: str
+    analyst_id: str
+    compliance_officer_id: Optional[str] = None
+    findings_text: Optional[str] = None
+    findings_refs: Optional[List[Any]] = None
+    conclusion: Optional[str] = None
+    submitted_at: datetime
+    evidence_manifest: Optional[List[Any]] = None
+    report_hash: str
+
+
+
+class SubmitInvestigationRequest(BaseModel):
+    compliance_officer_id: str = Field(min_length=1)
+    expected_version: int = Field(ge=1)
+
+
+class EligibleComplianceOfficer(BaseModel):
+    user_id: str
+    name: str
+    email: str
 
 
 class InvestigationListResponse(BaseModel):

@@ -20,6 +20,19 @@ export interface FindingRef {
   description?: string;
 }
 
+/** Authoritative immutable snapshot of the analyst report at submission time. */
+export interface SubmissionSnapshot {
+  submission_id: string;
+  analyst_id: string;
+  compliance_officer_id?: string | null;
+  findings_text?: string | null;
+  findings_refs?: FindingRef[] | null;
+  conclusion?: string | null;
+  submitted_at: string;
+  evidence_manifest?: Array<{ filename: string; sha256: string; uploaded_by: string; uploaded_at: string } | Record<string, unknown>> | null;
+  report_hash: string;
+}
+
 export interface Investigation {
   investigation_id: string;
   title: string;
@@ -37,9 +50,17 @@ export interface Investigation {
   submitted_at?: string | null;
   completed_at?: string | null;
   return_reason?: string | null;
+  compliance_officer_id?: string | null;
+  submission_snapshot?: SubmissionSnapshot | null;
   version: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface EligibleComplianceOfficer {
+  user_id: string;
+  name: string;
+  email: string;
 }
 
 export interface InvestigationListResponse {

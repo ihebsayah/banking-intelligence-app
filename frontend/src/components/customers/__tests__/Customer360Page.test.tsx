@@ -363,7 +363,7 @@ describe('Customer360Page', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Next' }));
     expect(await screen.findByText('Showing 21–40 of 45')).toBeInTheDocument();
-    expect(mockGetTransactions).toHaveBeenLastCalledWith('CUST_00001', { limit: 20, offset: 20 });
+    expect(mockGetTransactions).toHaveBeenLastCalledWith('CUST_00001', { limit: 20, offset: 20 }, undefined);
   });
 
   it('renders a leakage-safe not-found state for 404', async () => {
@@ -427,7 +427,7 @@ describe('Customer360Page', () => {
 
     const links = await screen.findAllByRole('link', { name: /Open Customer 360/i });
     expect(links.length).toBe(2); // Related-row link + customer-context panel link
-    for (const link of links) expect(link).toHaveAttribute('href', '/workbench/customers/CUST_00001');
+    for (const link of links) expect(link).toHaveAttribute('href', '/workbench/customers/CUST_00001?context_type=alert&context_id=AL-0001');
     fireEvent.click(links[0]);
     expect(await screen.findByText('customer:CUST_00001')).toBeInTheDocument();
   });

@@ -426,7 +426,12 @@ export function CaseDetailPage() {
               )}
 
               {/* Customer context (authorized, read-only) */}
-              {customerId && <CustomerContextPanel customerId={customerId} />}
+              {customerId && (
+                <CustomerContextPanel
+                  customerId={customerId}
+                  context={{ type: 'case', id: caseId! }}
+                />
+              )}
 
               {/* Meta grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

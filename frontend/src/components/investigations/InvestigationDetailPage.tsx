@@ -16,24 +16,26 @@ import { FindingsEditor } from './FindingsEditor';
 import { CommentsTab } from './CommentsTab';
 import { TimelineTab } from './TimelineTab';
 import { ConfirmTransitionDialog } from './dialogs/ConfirmTransitionDialog';
-import { ReturnInvestigationDialog } from './dialogs/ReturnInvestigationDialog';
 import { CancelInvestigationDialog } from './dialogs/CancelInvestigationDialog';
 import { RequestInfoDialog } from './dialogs/RequestInfoDialog';
 import { MarkNotHarmfulDialog } from './dialogs/MarkNotHarmfulDialog';
 import { EscalateToCaseDialog } from './dialogs/EscalateToCaseDialog';
+import { SubmitToComplianceDialog } from './dialogs/SubmitToComplianceDialog';
 import { EvidenceUploadPanel } from './EvidenceUploadPanel';
+import { InformationRequestsPanel } from './InformationRequestsPanel';
 import { HelpCircle } from 'lucide-react';
 import { useAuth } from '../../auth/AuthProvider';
 import { PERMISSIONS } from '../../lib/permissions';
 import { formatDateTime } from '../../utils/formatters';
 import type { Investigation } from '../../types/investigations';
 
-type Tab = 'overview' | 'findings' | 'comments' | 'timeline';
-type Dialog = 'submit' | 'complete' | 'not_harmful' | 'escalate_case' | 'return' | 'cancel' | 'request_info' | null;
+type Tab = 'overview' | 'findings' | 'information_requests' | 'comments' | 'timeline';
+type Dialog = 'submit' | 'complete' | 'not_harmful' | 'escalate_case' | 'cancel' | 'request_info' | null;
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'findings', label: 'Findings' },
+  { id: 'information_requests', label: 'Information Requests' },
   { id: 'comments', label: 'Comments' },
   { id: 'timeline', label: 'Timeline' },
 ];
@@ -50,9 +52,9 @@ function workflowGuidance(status: Investigation['status']): string {
   switch (status) {
     case 'open': return 'Start the investigation to begin work on it.';
     case 'active': return 'Record findings and a conclusion, then submit for review.';
-    case 'awaiting_information': return 'Awaiting information — resumes from the Information Request workflow (Phase 2D).';
+    case 'awaiting_information': return 'Awaiting information — resumes when the assigned analyst responds to the Information Request.';
     case 'submitted': return 'Submitted for compliance review.';
-    case 'returned': return 'Rework the findings and resume the investigation.';
+    case 'returned': return 'Legacy state — report is frozen. Post-submission input is routed through Information Requests.';
     case 'completed': return 'Investigation complete — read-only.';
     case 'cancelled': return 'Investigation cancelled — read-only.';
   }
@@ -188,21 +190,20 @@ export function InvestigationDetailPage() {
 
   const s = investigation.status;
   const isAssignee = Boolean(applicationUser?.user_id && investigation.assigned_to === applicationUser.user_id);
+  const canTransition = hasPermission(PERMISSIONS.INVESTIGATION_TRANSITION);
   const canEditFindings = hasPermission(PERMISSIONS.INVESTIGATION_MODIFY_FINDINGS)
     && isAssignee && (s === 'active' || s === 'returned');
-  const canTransition = hasPermission(PERMISSIONS.INVESTIGATION_TRANSITION) && isAssignee;
+
   const canReview = hasPermission(PERMISSIONS.INVESTIGATION_REVIEW);
   const canCancel = hasPermission(PERMISSIONS.INVESTIGATION_ASSIGN) && hasRole('admin');
 
-  const showSubmit = canTransition && s === 'active' && hasFindings(investigation);
+  const showSubmit = canTransition && s === 'active' && hasFindings(investigation) && hasConclusion(investigation);
   const showComplete = canTransition && s === 'active' && hasFindings(investigation) && hasConclusion(investigation);
   const showNotHarmful = canReview && s === 'submitted';
   const showEscalateCase = canReview && hasPermission(PERMISSIONS.CASE_CREATE) && s === 'submitted';
-  const showReturn = canReview && s === 'submitted';
   const showRequestInfo = (canReview || hasPermission(PERMISSIONS.INFO_REQUEST_CREATE)) && s === 'submitted';
   const showCancel = canCancel && s !== 'completed' && s !== 'cancelled';
   const showStart = canTransition && s === 'open';
-  const showResume = canTransition && s === 'returned';
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: 'var(--bg-primary)' }}>
@@ -259,13 +260,14 @@ export function InvestigationDetailPage() {
           )}
         </div>
 
-        {/* Returned investigation banner */}
+        {/* Legacy returned investigation banner (frozen report) */}
         {s === 'returned' && (
           <div className="flex items-center gap-2.5 px-4 py-3 rounded-xl border"
             style={{ background: 'rgba(217,119,6,0.1)', borderColor: 'rgba(217,119,6,0.35)' }}>
             <Undo2 size={16} style={{ color: 'var(--accent-amber)' }} />
             <p className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>
-              Investigation returned — reason: {investigation.return_reason ?? 'not provided'}
+              Legacy state — report is frozen. Post-submission input is routed through Information Requests.
+              {investigation.return_reason ? ` Prior reason: ${investigation.return_reason}` : ''}
             </p>
           </div>
         )}
@@ -293,8 +295,9 @@ export function InvestigationDetailPage() {
         <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
           {tab === 'overview' && (
             <div className="space-y-5">
-              {/* Action bar */}
-              {(showStart || showSubmit || showComplete || showNotHarmful || showEscalateCase || showReturn || showCancel || showResume) && (
+              {/* Action bar — C4: Return-for-revision removed; all post-submit
+                  analyst input goes through the IR feedback loop. */}
+              {(showStart || showSubmit || showComplete || showNotHarmful || showEscalateCase || showCancel || showRequestInfo) && (
                 <div className="flex flex-wrap items-center gap-2">
                   {showStart && (
                     <button
@@ -324,16 +327,6 @@ export function InvestigationDetailPage() {
                       <CheckCircle2 size={14} /> Complete
                     </button>
                   )}
-                  {showResume && (
-                    <button
-                      onClick={() => runDirectTransition('active')}
-                      disabled={acting}
-                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold shadow-md transition-all hover:brightness-90 disabled:opacity-50"
-                      style={{ background: 'var(--accent-blue)', color: 'var(--text-primary)' }}
-                    >
-                      <PlayCircle size={14} /> {acting ? 'Resuming…' : 'Mark Revision Started'}
-                    </button>
-                  )}
                   {showNotHarmful && (
                     <button
                       onClick={() => setDialog('not_harmful')}
@@ -350,15 +343,6 @@ export function InvestigationDetailPage() {
                       style={{ background: 'var(--accent-red)', color: 'var(--text-primary)' }}
                     >
                       <ArrowRight size={14} /> Escalate to Case
-                    </button>
-                  )}
-                  {showReturn && (
-                    <button
-                      onClick={() => setDialog('return')}
-                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold shadow-md transition-all hover:brightness-90"
-                      style={{ background: 'rgba(217,119,6,0.9)', color: 'var(--text-primary)' }}
-                    >
-                      <Undo2 size={14} /> Return for Revision
                     </button>
                   )}
                   {showRequestInfo && (
@@ -420,7 +404,12 @@ export function InvestigationDetailPage() {
               )}
 
               {/* Customer context (authorized, read-only) */}
-              {customerId && <CustomerContextPanel customerId={customerId} />}
+              {customerId && (
+                <CustomerContextPanel
+                  customerId={customerId}
+                  context={{ type: 'investigation', id: investigationId! }}
+                />
+              )}
 
               {/* Meta grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -428,6 +417,7 @@ export function InvestigationDetailPage() {
                   { label: 'Status', value: s.replace(/_/g, ' ') },
                   { label: 'Priority', value: investigation.priority },
                   { label: 'Assigned To', value: investigation.assigned_to ?? '—' },
+                  { label: 'Compliance Officer', value: investigation.compliance_officer_id ?? '—' },
                   { label: 'Created By', value: investigation.created_by },
                   { label: 'Scope', value: investigation.scope_id },
                   { label: 'Started', value: investigation.started_at ? formatDateTime(investigation.started_at) : '—' },
@@ -468,6 +458,14 @@ export function InvestigationDetailPage() {
             </div>
           )}
 
+          {tab === 'information_requests' && (
+            <InformationRequestsPanel
+              investigationId={investigation.investigation_id}
+              refreshKey={investigation.version}
+              onConflict={onMutationConflict}
+            />
+          )}
+
           {tab === 'comments' && <CommentsTab entityId={investigation.investigation_id} />}
           {tab === 'timeline' && <TimelineTab entityId={investigation.investigation_id} />}
         </div>
@@ -475,23 +473,9 @@ export function InvestigationDetailPage() {
 
       {investigation && (
         <>
-          <ConfirmTransitionDialog
+          <SubmitToComplianceDialog
             open={dialog === 'submit'}
-            title="Submit for Review"
-            body={
-              <>
-                <p>
-                  The findings become <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>review-oriented</span> and
-                  move to a compliance reviewer. You cannot edit findings while the investigation is under review.
-                </p>
-                <p className="mt-2">
-                  This is a submission for review — it is <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>not</span> a final compliance approval.
-                </p>
-              </>
-            }
-            confirmLabel="Submit for Review"
             investigation={investigation}
-            target="submitted"
             onClose={() => setDialog(null)}
             onSuccess={setInvestigation}
             onConflict={onMutationConflict}
@@ -516,13 +500,6 @@ export function InvestigationDetailPage() {
           />
           <EscalateToCaseDialog
             open={dialog === 'escalate_case'}
-            investigation={investigation}
-            onClose={() => setDialog(null)}
-            onSuccess={setInvestigation}
-            onConflict={onMutationConflict}
-          />
-          <ReturnInvestigationDialog
-            open={dialog === 'return'}
             investigation={investigation}
             onClose={() => setDialog(null)}
             onSuccess={setInvestigation}

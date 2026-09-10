@@ -5,18 +5,19 @@
 // forbidden / not-found / unavailable outcomes degrade to a safe empty state
 // instead of fabricating data. The Customer 360 page remains the only detailed
 // viewer; this panel only adds authorized context to the investigation flow.
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertCircle, ExternalLink, RefreshCw, ShieldX, UserX } from 'lucide-react';
 import { clsx } from 'clsx';
 import { customer360Api, parseCustomer360Error } from '../../api/customer360Api';
-import type { Customer360ApiError } from '../../api/customer360Api';
+import type { Customer360ApiError, Customer360Context } from '../../api/customer360Api';
 import type { Customer360Overview } from '../../types/customer360';
 import { StatusBadge } from '../ui/StatusBadge';
 import { dateOnly, isMasked, money, riskClassification, severityVariant, statusVariant } from './customer360Format';
 
 interface Props {
   customerId: string;
+  context?: Customer360Context;
   className?: string;
 }
 
@@ -55,15 +56,28 @@ function ErrorState({ kind, onRetry }: { kind: Customer360ApiError['kind']; onRe
   );
 }
 
-export function CustomerContextPanel({ customerId, className }: Props) {
+export function CustomerContextPanel({ customerId, context, className }: Props) {
   const [overview, setOverview] = useState<Customer360Overview | null>(null);
   const [status, setStatus] = useState<PanelStatus>('loading');
   const [errorKind, setErrorKind] = useState<Customer360ApiError['kind']>('unknown');
 
+  // Parents inline a fresh `context` object each render; stabilize it so the
+  // fetch effect does not re-run (and re-fetch) on every render.
+  const contextKey = context
+    ? `${context.type}:${context.id}`
+    : '';
+  const ctx: Customer360Context | undefined = useMemo(
+    () =>
+      contextKey
+        ? { type: contextKey.split(':')[1] as Customer360Context['type'], id: contextKey.split(':').slice(1).join(':') }
+        : undefined,
+    [contextKey],
+  );
+
   const fetchOverview = useCallback(async () => {
     setStatus('loading');
     try {
-      const data = await customer360Api.getOverview(customerId);
+      const data = await customer360Api.getOverview(customerId, ctx);
       setOverview(data);
       setStatus('ready');
     } catch (err) {
@@ -71,7 +85,7 @@ export function CustomerContextPanel({ customerId, className }: Props) {
       setErrorKind(parseCustomer360Error(err).kind);
       setStatus('error');
     }
-  }, [customerId]);
+  }, [customerId, ctx]);
 
   useEffect(() => { fetchOverview(); }, [fetchOverview]);
 
@@ -111,7 +125,7 @@ export function CustomerContextPanel({ customerId, className }: Props) {
           Customer context
         </h3>
         <Link
-          to={`/workbench/customers/${encodeURIComponent(customerId)}`}
+          to={`/workbench/customers/${encodeURIComponent(customerId)}${context ? `?context_type=${encodeURIComponent(context.type)}&context_id=${encodeURIComponent(context.id)}` : ''}`}
           className="inline-flex items-center gap-1 text-[10px] font-semibold hover:brightness-125"
           style={{ color: 'var(--accent-blue)' }}>
           Open Customer 360 <ExternalLink size={10} />

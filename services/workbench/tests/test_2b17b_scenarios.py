@@ -336,12 +336,13 @@ class TestInvestigationLifecycle:
     @pytest.mark.asyncio
     async def test_t06_submit_with_findings(self, scenario_app, client, integration_db, seeded_users):
         inv_id = await _seed_investigation(integration_db, status="active", assigned_to="sbtb_analyst_1",
-                                           findings_text="evidence")
-        r = await _patch(client, f"/api/v1/investigations/{inv_id}/transition",
-                         "sbtb_analyst_1",
-                         {"target_status": "submitted", "expected_version": 1})
+                                           findings_text="evidence", conclusion="resolved")
+        r = await _post(client, f"/api/v1/investigations/{inv_id}/submit",
+                        "sbtb_analyst_1",
+                        {"compliance_officer_id": "sbtb_compliance_1", "expected_version": 1})
         assert r.status_code == 200
         assert r.json()["investigation"]["status"] == "submitted"
+        assert r.json()["investigation"]["compliance_officer_id"] == "sbtb_compliance_1"
 
     @pytest.mark.asyncio
     async def test_t07_compliance_completes(self, scenario_app, client, integration_db, seeded_users):
@@ -354,28 +355,38 @@ class TestInvestigationLifecycle:
         assert r.json()["investigation"]["status"] == "completed"
 
     @pytest.mark.asyncio
-    async def test_t24_return_investigation(self, scenario_app, client, integration_db, seeded_users):
+    async def test_t24_return_investigation_via_generic_transition_denied(
+            self, scenario_app, client, integration_db, seeded_users):
+        # C4: Return-for-revision via generic transition is removed from the
+        # canonical flow. Compliance must use the IR loop instead.
         inv_id = await _seed_investigation(integration_db, status="submitted",
-                                           assigned_to="sbtb_analyst_1")
+                                           assigned_to="sbtb_analyst_1",
+                                           compliance_officer_id="sbtb_compliance_1")
         r = await _patch(client, f"/api/v1/investigations/{inv_id}/transition",
                          "sbtb_compliance_1",
                          {"target_status": "returned", "return_reason": "needs work", "expected_version": 1})
-        assert r.status_code == 200
-        assert r.json()["investigation"]["status"] == "returned"
+        assert r.status_code == 409
+        assert r.json()["error"] == "INVALID_TRANSITION"
 
     @pytest.mark.asyncio
-    async def test_t25_resubmit_after_return(self, scenario_app, client, integration_db, seeded_users):
+    async def test_t25_legacy_returned_frozen_no_reopen(
+            self, scenario_app, client, integration_db, seeded_users):
+        # C4: A legacy `returned` investigation can no longer be re-opened for
+        # editing (returned -> active is removed) and the report stays frozen.
         inv_id = await _seed_investigation(integration_db, status="returned",
-                                           assigned_to="sbtb_analyst_1", findings_text="revised")
+                                           assigned_to="sbtb_analyst_1", findings_text="revised",
+                                           conclusion="concluded")
         r = await _patch(client, f"/api/v1/investigations/{inv_id}/transition",
                          "sbtb_analyst_1",
                          {"target_status": "active", "expected_version": 1})
-        assert r.status_code == 200
-        r = await _patch(client, f"/api/v1/investigations/{inv_id}/transition",
+        assert r.status_code == 409
+        assert r.json()["error"] == "INVALID_TRANSITION"
+
+        r = await _patch(client, f"/api/v1/investigations/{inv_id}",
                          "sbtb_analyst_1",
-                         {"target_status": "submitted", "expected_version": 2})
-        assert r.status_code == 200
-        assert r.json()["investigation"]["status"] == "submitted"
+                         {"findings_text": "changed anyway", "expected_version": 1})
+        assert r.status_code == 409
+        assert r.json()["error"] == "INVALID_TRANSITION"
 
     @pytest.mark.asyncio
     async def test_t30_comment_on_investigation(self, scenario_app, client, integration_db, seeded_users):
@@ -392,18 +403,20 @@ class TestCaseEscalationAndReview:
 
     @pytest.mark.asyncio
     async def test_t08_escalate_alert_to_case(self, scenario_app, client, integration_db, seeded_users):
+        # C5 §48: the legacy direct Alert->Case escalation endpoint
+        # `POST /alerts/{id}/escalate` was REMOVED. Case creation now happens
+        # only through the compliance review `POST /investigations/{id}/review/escalate`
+        # action (which requires investigation:review + case:create). An analyst
+        # therefore cannot create a case directly from an alert: the old route no
+        # longer exists and returns 404.
         alert_id = await _seed_alert(integration_db, status="under_investigation",
                                      assigned_to="sbtb_analyst_1")
-        inv_id = await _seed_investigation(integration_db, alert_id=alert_id, status="active",
-                                           assigned_to="sbtb_analyst_1")
+        await _seed_investigation(integration_db, alert_id=alert_id, status="active",
+                                  assigned_to="sbtb_analyst_1")
         r = await _post(client, f"/api/v1/alerts/{alert_id}/escalate",
                         "sbtb_analyst_1",
                         {"title": "Escalated", "expected_version": 1})
-        assert r.status_code == 200
-        case_id = r.json()["case_id"]
-        case = await _get(client, f"/api/v1/cases/{case_id}", "sbtb_admin_1")
-        assert case.status_code == 200
-        assert case.json()["status"] == "open"
+        assert r.status_code == 404
 
     @pytest.mark.asyncio
     async def test_t09_assign_case(self, scenario_app, client, integration_db, seeded_users):
@@ -733,14 +746,17 @@ class TestConcurrencyVersioning:
 
     @pytest.mark.asyncio
     async def test_v03_duplicate_escalate_idempotent(self, scenario_app, client, integration_db, seeded_users):
+        # C5 §48: the legacy alert-level escalate endpoint is gone, so it can no
+        # longer be used to (idempotently) create a case from an alert. The route
+        # no longer exists -> 404. Case creation is exclusively via the compliance
+        # review escalation action on an investigation (dup guard: DUPLICATE_ESCALATION).
         alert_id = await _seed_alert(integration_db, status="under_investigation",
                                      assigned_to="sbtb_analyst_1")
         await _seed_investigation(integration_db, alert_id=alert_id)
         await _seed_case(integration_db, alert_id=alert_id, status="open")
         r = await _post(client, f"/api/v1/alerts/{alert_id}/escalate",
                         "sbtb_analyst_1", {"title": "dup", "expected_version": 1})
-        assert r.status_code == 200
-        assert "case_id" in r.json()
+        assert r.status_code == 404
 
     @pytest.mark.asyncio
     async def test_v04_duplicate_investigate_idempotent(self, scenario_app, client, integration_db, seeded_users):
@@ -953,9 +969,10 @@ class TestForbiddenTransitions:
     @pytest.mark.asyncio
     async def test_f10_submit_without_findings(self, scenario_app, client, integration_db, seeded_users):
         inv_id = await _seed_investigation(integration_db, status="active", assigned_to="sbtb_analyst_1")
-        r = await _patch(client, f"/api/v1/investigations/{inv_id}/transition",
-                         "sbtb_analyst_1",
-                         {"target_status": "submitted", "expected_version": 1})
+        r = await _post(client, f"/api/v1/investigations/{inv_id}/submit",
+                        "sbtb_analyst_1",
+                        {"compliance_officer_id": "sbtb_compliance_1", "expected_version": 1})
+        # findings AND conclusion are both required before submit
         assert r.status_code == 400
 
     @pytest.mark.asyncio

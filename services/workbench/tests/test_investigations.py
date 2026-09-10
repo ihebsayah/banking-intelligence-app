@@ -104,7 +104,8 @@ class TestGetById:
     async def test_assigned_user_success(self, mock_db):
         inv = make_inv(assigned_to="user1", status="active")
         with patch("workbench.repos._fetch_one", AsyncMock(return_value=inv.model_dump())), \
-             patch(AUTH_TARGET, AsyncMock()):
+             patch(AUTH_TARGET, AsyncMock()), \
+             patch("workbench.repos.ReportSubmissionRepo.fetch_for_investigation", AsyncMock(return_value=None)):
             result = await InvestigationService(mock_db).get_by_id(MOCK_USER, inv.investigation_id)
         assert result.investigation_id == inv.investigation_id
 
@@ -149,7 +150,9 @@ class TestUpdate:
         assert result.investigation.conclusion == "Concluded"
 
     @pytest.mark.asyncio
-    async def test_update_findings_returned(self, mock_db):
+    async def test_update_findings_returned_is_denied(self, mock_db):
+        # C4: a legacy `returned` investigation is frozen; findings may no
+        # longer be edited post-submission.
         inv = make_inv(status="returned", assigned_to="user1", version=3,
                        return_reason="needs evidence")
         req = UpdateInvestigationRequest(findings_text="Updated evidence", conclusion="Now conclusive",
@@ -157,11 +160,9 @@ class TestUpdate:
         uow_mock = make_uow_mock()
         with patch(UOW_TARGET, return_value=uow_mock), \
              patch(AUTH_TARGET, AsyncMock()), \
-             patch("workbench.repos._fetch_one", AsyncMock(return_value=inv.model_dump())), \
-             patch("workbench.repos._execute", AsyncMock(return_value="UPDATE 1")):
-            result = await InvestigationService(mock_db).update(MOCK_USER, inv.investigation_id, req)
-        assert result.investigation.findings_text == "Updated evidence"
-        assert result.investigation.conclusion == "Now conclusive"
+             patch("workbench.repos._fetch_one", AsyncMock(return_value=inv.model_dump())):
+            with pytest.raises(InvalidTransition):
+                await InvestigationService(mock_db).update(MOCK_USER, inv.investigation_id, req)
 
     @pytest.mark.asyncio
     async def test_wrong_state_for_update(self, mock_db):
@@ -201,16 +202,34 @@ class TestTransition:
     @pytest.mark.asyncio
     async def test_active_to_submitted(self, mock_db):
         inv = make_inv(status="active", assigned_to="user1", version=2,
-                       findings_text="evidence found")
-        req = TransitionInvestigationRequest(target_status="submitted", expected_version=2)
+                       findings_text="evidence found", conclusion="done")
+        from workbench.schemas.investigations import SubmitInvestigationRequest
+        req = SubmitInvestigationRequest(compliance_officer_id="user3", expected_version=2)
         uow_mock = make_uow_mock()
+
+        officer_row = {"user_id": "user3", "status": "active", "role": "compliance",
+                       "name": "o", "email": "o@x"}
+        role_perm_row = {"permission_key": "investigation:review"}
+        mock_db.fetch_one = AsyncMock(side_effect=lambda sql, params=None, conn=None:
+                                      officer_row if "role_permissions" not in sql and "FROM users" in sql
+                                      else (role_perm_row if "role_permissions" in sql else None))
+        mock_db.fetch_all = AsyncMock(return_value=[])
+
+        async def fake_fetch_one(db, sql, params=None, conn=None):
+            if "FROM investigations" in sql:
+                return inv.model_dump()
+            return None
+
         with patch(UOW_TARGET, return_value=uow_mock), \
              patch(AUTH_TARGET, AsyncMock()), \
-             patch("workbench.repos._fetch_one", AsyncMock(return_value=inv.model_dump())), \
+             patch("workbench.repos._fetch_one", side_effect=fake_fetch_one), \
+             patch("workbench.repos._fetch_all", AsyncMock(return_value=[])), \
              patch("workbench.repos._execute", AsyncMock(return_value="UPDATE 1")):
-            result = await InvestigationService(mock_db).transition(MOCK_USER, inv.investigation_id, req)
+            result = await InvestigationService(mock_db).submit_to_compliance(
+                MOCK_USER, inv.investigation_id, req)
         assert result.investigation.status == "submitted"
         assert result.investigation.submitted_at is not None
+        assert result.investigation.compliance_officer_id == "user3"
 
     @pytest.mark.asyncio
     async def test_submitted_to_completed(self, mock_db):
@@ -226,42 +245,45 @@ class TestTransition:
         assert result.investigation.completed_at is not None
 
     @pytest.mark.asyncio
-    async def test_submitted_to_returned(self, mock_db):
+    async def test_submitted_to_returned_is_denied(self, mock_db):
+        # C4: return-for-revision via generic transition removed; compliance
+        # must use the IR feedback loop instead.
         inv = make_inv(status="submitted", assigned_to="user1", version=3)
         req = TransitionInvestigationRequest(target_status="returned", return_reason="needs work",
                                              expected_version=3)
         uow_mock = make_uow_mock()
         with patch(UOW_TARGET, return_value=uow_mock), \
              patch(AUTH_TARGET, AsyncMock()), \
-             patch("workbench.repos._fetch_one", AsyncMock(return_value=inv.model_dump())), \
-             patch("workbench.repos._execute", AsyncMock(return_value="UPDATE 1")):
-            result = await InvestigationService(mock_db).transition(MOCK_USER, inv.investigation_id, req)
-        assert result.investigation.status == "returned"
-        assert result.investigation.return_reason == "needs work"
+             patch("workbench.repos._fetch_one", AsyncMock(return_value=inv.model_dump())):
+            with pytest.raises(InvalidTransition):
+                await InvestigationService(mock_db).transition(MOCK_USER, inv.investigation_id, req)
 
     @pytest.mark.asyncio
-    async def test_returned_to_active_clears_reason(self, mock_db):
+    async def test_returned_to_active_is_denied(self, mock_db):
+        # C4: the returned→active re-open path is removed; legacy returned
+        # investigations are frozen/read-only.
         inv = make_inv(status="returned", assigned_to="user1", version=3,
                        return_reason="needs more evidence")
         req = TransitionInvestigationRequest(target_status="active", expected_version=3)
         uow_mock = make_uow_mock()
         with patch(UOW_TARGET, return_value=uow_mock), \
              patch(AUTH_TARGET, AsyncMock()), \
-             patch("workbench.repos._fetch_one", AsyncMock(return_value=inv.model_dump())), \
-             patch("workbench.repos._execute", AsyncMock(return_value="UPDATE 1")):
-            result = await InvestigationService(mock_db).transition(MOCK_USER, inv.investigation_id, req)
-        assert result.investigation.status == "active"
-        assert result.investigation.return_reason is None
+             patch("workbench.repos._fetch_one", AsyncMock(return_value=inv.model_dump())):
+            with pytest.raises(InvalidTransition):
+                await InvestigationService(mock_db).transition(MOCK_USER, inv.investigation_id, req)
 
     @pytest.mark.asyncio
-    async def test_returned_requires_reason(self, mock_db):
+    async def test_returned_requires_reason_is_dead_code(self, mock_db):
+        # C4: submitted→returned is no longer in the allowed-transitions map,
+        # so the return-reason gate is unreachable — the transition itself is
+        # rejected first.
         inv = make_inv(status="submitted", assigned_to="user1", version=3)
         req = TransitionInvestigationRequest(target_status="returned", expected_version=3)
         uow_mock = make_uow_mock()
         with patch(UOW_TARGET, return_value=uow_mock), \
              patch(AUTH_TARGET, AsyncMock()), \
              patch("workbench.repos._fetch_one", AsyncMock(return_value=inv.model_dump())):
-            with pytest.raises(InvalidAssignee, match="return_reason required"):
+            with pytest.raises(InvalidTransition):
                 await InvestigationService(mock_db).transition(MOCK_USER, inv.investigation_id, req)
 
     @pytest.mark.asyncio
@@ -340,17 +362,19 @@ class TestCancel:
         assert result.investigation.status == "cancelled"
 
     @pytest.mark.asyncio
-    async def test_cancel_from_returned(self, mock_db):
+    async def test_cancel_from_returned_is_denied(self, mock_db):
+        # C4: `returned` is a frozen legacy status; cancellation is only
+        # permitted from operational statuses (open/active/awaiting_information/
+        # submitted).
         inv = make_inv(status="returned", assigned_to="user1", version=3,
                        return_reason="needs evidence")
         req = CancelInvestigationRequest(cancel_reason="closing", expected_version=3)
         uow_mock = make_uow_mock()
         with patch(UOW_TARGET, return_value=uow_mock), \
              patch(AUTH_TARGET, AsyncMock()), \
-             patch("workbench.repos._fetch_one", AsyncMock(return_value=inv.model_dump())), \
-             patch("workbench.repos._execute", AsyncMock(return_value="UPDATE 1")):
-            result = await InvestigationService(mock_db).cancel(MOCK_USER, inv.investigation_id, req)
-        assert result.investigation.status == "cancelled"
+             patch("workbench.repos._fetch_one", AsyncMock(return_value=inv.model_dump())):
+            with pytest.raises(InvalidTransition):
+                await InvestigationService(mock_db).cancel(MOCK_USER, inv.investigation_id, req)
 
     @pytest.mark.asyncio
     async def test_completed_cancellation_rejected(self, mock_db):
@@ -589,6 +613,6 @@ class TestRouteRegistration:
         assert "/api/v1/investigations/{investigation_id}/status" not in paths
         assert "/api/v1/investigations/{investigation_id}/findings" not in paths
 
-    def test_exact_count_twelve(self):
+    def test_exact_count(self):
         from workbench.routers.investigations import router
-        assert len(router.routes) == 12
+        assert len(router.routes) == 14

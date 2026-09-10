@@ -2869,6 +2869,8 @@ _CUSTOMER_READ_PERMISSIONS = (
 async def customer360_overview(
     customer_id: str,
     request: Request,
+    context_type: str = Query(default=None, description="Workflow context type (alert|investigation|case)"),
+    context_id: str = Query(default=None, description="Workflow context object id"),
     user: User = Depends(require_any_permission_audited(*_CUSTOMER_READ_PERMISSIONS)),
 ):
     service = _get_customer360_service(request)
@@ -2882,7 +2884,9 @@ async def customer360_overview(
     start_time = time.monotonic()
     request_id = str(getattr(request.state, "request_id", "") or "")
     try:
-        result = await service.get_overview(user, customer_id, request_id)
+        result = await service.get_overview(
+            user, customer_id, request_id, context_type, context_id
+        )
     except Customer360SourceUnavailable as exc:
         await _send_audit_log(_customer_audit_entry(
             user, "customer_360_access", customer_id, AuditStatus.ERROR,
@@ -2927,6 +2931,8 @@ async def customer360_transactions(
     request: Request,
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    context_type: str = Query(default=None, description="Workflow context type (alert|investigation|case)"),
+    context_id: str = Query(default=None, description="Workflow context object id"),
     user: User = Depends(require_any_permission_audited(
         "customer:read_transactions", action="customer_transactions_access"
     )),
@@ -2942,7 +2948,9 @@ async def customer360_transactions(
     start_time = time.monotonic()
     request_id = str(getattr(request.state, "request_id", "") or "")
     try:
-        result = await service.get_transactions(user, customer_id, request_id, limit, offset)
+        result = await service.get_transactions(
+            user, customer_id, request_id, limit, offset, context_type, context_id
+        )
     except Customer360SourceUnavailable as exc:
         await _send_audit_log(_customer_audit_entry(
             user, "customer_transactions_access", customer_id, AuditStatus.ERROR,

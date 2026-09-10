@@ -62,9 +62,35 @@ class Investigation(BaseModel):
     submitted_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     return_reason: Optional[str] = None
+    compliance_officer_id: Optional[str] = None
     version: int = 1
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class InvestigationReportSubmission(BaseModel):
+    submission_id: str
+    investigation_id: str
+    analyst_id: str
+    compliance_officer_id: Optional[str] = None
+    findings_text: Optional[str] = None
+    findings_refs: Optional[List[Any]] = None
+    conclusion: Optional[str] = None
+    submitted_at: datetime
+    evidence_manifest: Optional[List[Any]] = None
+    report_hash: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class InvestigationReviewDecision(BaseModel):
+    review_decision_id: str
+    investigation_id: str
+    compliance_officer_id: str
+    decision_type: str
+    rationale: str
+    resulting_case_id: Optional[str] = None
+    decided_at: datetime
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 class ComplianceCase(BaseModel):
@@ -131,6 +157,19 @@ class InformationRequest(BaseModel):
     version: int = 1
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class InformationRequestAttachment(BaseModel):
+    attachment_id: str
+    ir_id: str
+    original_filename: str
+    stored_filename: str
+    content_type: str
+    size_bytes: int
+    sha256_hash: str
+    description: Optional[str] = None
+    uploaded_by: str
+    uploaded_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 class ApprovalRequest(BaseModel):

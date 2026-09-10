@@ -10,7 +10,7 @@ import hashlib
 import json
 import uuid
 from datetime import date, datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, BinaryIO, Dict, List, Optional, Tuple
 
 from shared.authorise import (
     ApplicationUser, RequestContext, Resource, authorise,
@@ -27,19 +27,22 @@ from workbench.exceptions import (
 )
 from workbench.models import (
     ActivityTimelineEntry, AuditOutboxEvent, ComplianceCase,
-    IdempotencyRecord, InformationRequest, Investigation, Notification,
+    IdempotencyRecord, InformationRequest, InformationRequestAttachment,
+    Investigation, Notification,
 )
 from workbench.repos import (
-    CaseRepo, IdempotencyRepo, InfoRequestRepo, InvestigationRepo,
-    NotificationRepo, OutboxRepo, TimelineRepo,
+    CaseRepo, IdempotencyRepo, InfoRequestRepo, IrAttachmentRepo,
+    InvestigationRepo, NotificationRepo, OutboxRepo, TimelineRepo,
 )
 from workbench.schemas.information_requests import (
     AcknowledgeInformationRequest, AcceptInformationRequest,
     CancelInformationRequest, CreateInformationRequest,
     InformationRequestAdminView, InformationRequestMutationResponse,
-    InformationRequestResponse, RespondInformationRequest,
+    InformationRequestResponse, IrAttachmentListResponse,
+    IrAttachmentResponse, RespondInformationRequest,
     ReturnInformationRequest,
 )
+from workbench.storage import EvidenceStorage, validate_file_type
 from workbench.uow import UnitOfWork
 
 
@@ -72,6 +75,16 @@ def _make_notification(user_id: str, ntype: str, title: str, body: str,
         title=title, body=body, entity_type=entity_type, entity_id=entity_id,
         created_at=_now(),
     )
+
+
+def _notification_parent(ir: "InformationRequest", case: Optional["ComplianceCase"] = None,
+                         inv: Optional["Investigation"] = None) -> tuple[str, str]:
+    """Point IR notifications at the owning workstream so compliance can reach the response."""
+    if inv is not None:
+        return "investigation", inv.investigation_id
+    if case is not None:
+        return "compliance_case", case.case_id
+    return "information_request", ir.ir_id
 
 
 def _make_outbox(event_type: str, entity_type: str, entity_id: str,
@@ -124,6 +137,7 @@ def _resource_from_inv(inv: Investigation) -> Resource:
         id=inv.investigation_id, status=inv.status,
         assigned_to=inv.assigned_to, scope_id=inv.scope_id,
         version=inv.version, entity_type="investigation",
+        compliance_officer_id=inv.compliance_officer_id,
     )
 
 
@@ -204,8 +218,9 @@ async def _validate_assignee(db: DatabaseConnector, user_id: str,
 
 
 class InformationRequestService:
-    def __init__(self, db: DatabaseConnector) -> None:
+    def __init__(self, db: DatabaseConnector, storage: Optional[EvidenceStorage] = None) -> None:
         self._db = db
+        self._storage = storage or EvidenceStorage()
 
     async def _resolve_ir_parent(
         self, ir: InformationRequest, conn: Any = None
@@ -222,6 +237,35 @@ class InformationRequestService:
             return inv.scope_id, _resource_from_ir(ir, inv.scope_id), None, inv
         else:
             raise WorkbenchError("INVALID_IR", "Information request has no parent entity", 400)
+
+    async def _authorise_ir_read(
+        self, user: ApplicationUser, ir: InformationRequest,
+        scope_id: str, parent_assigned_to: Optional[str],
+    ) -> bool:
+        """Authorise reading an IR (and its attachments).
+
+        Assigned users reach the IR via ``info_request:read_assigned``; other
+        readers need ``info_request:read`` and must own the IR or be assigned
+        to its parent entity. Fails closed (404 at the endpoint level).
+        """
+        resource = _resource_from_ir(ir, scope_id)
+        try:
+            await authorise(user, "info_request:read_assigned", resource,
+                            self._db, RequestContext())
+            return ir.assigned_to == user.user_id
+        except (AuthOwnershipDenied, AuthScopeDenied, AuthPermissionDenied,
+                AuthWorkflowState, ResourceNotFound):
+            pass
+
+        try:
+            await authorise(user, "info_request:read", resource,
+                            self._db, RequestContext())
+        except AuthPermissionDenied:
+            return False
+
+        if user.role != "admin":
+            return ir.created_by == user.user_id or parent_assigned_to == user.user_id
+        return True
 
     # ── IR1 — POST /cases/{case_id}/information-requests ─────────────────────
 
@@ -298,7 +342,7 @@ class InformationRequestService:
                 _make_notification(ir.assigned_to, "ir_created",
                                    f"Information request assigned to you",
                                    ir.question,
-                                   "information_request", ir.ir_id),
+                                   *_notification_parent(ir, case, None)),
                 uow.conn)
 
             await OutboxRepo(self._db).insert(
@@ -411,7 +455,7 @@ class InformationRequestService:
                 _make_notification(ir.assigned_to, "ir_created",
                                    f"Information request assigned to you",
                                    ir.question,
-                                   "information_request", ir.ir_id),
+                                   *_notification_parent(ir, None, inv)),
                 uow.conn)
 
             await OutboxRepo(self._db).insert(
@@ -516,7 +560,9 @@ class InformationRequestService:
             irs = [ir for ir in irs if ir.assigned_to == user.user_id]
         elif user.role != "admin":
             irs = [ir for ir in irs
-                   if ir.created_by == user.user_id or inv.assigned_to == user.user_id]
+                   if ir.created_by == user.user_id
+                   or inv.assigned_to == user.user_id
+                   or inv.compliance_officer_id == user.user_id]
 
         if user.role == "admin":
             return [_admin_view(ir) for ir in irs], len(irs)
@@ -552,25 +598,8 @@ class InformationRequestService:
         scope_id, resource, case, inv = await self._resolve_ir_parent(ir)
         parent_assigned_to = case.assigned_to if case else (inv.assigned_to if inv else None)
 
-        try:
-            await authorise(user, "info_request:read_assigned", resource,
-                            self._db, RequestContext())
-            if ir.assigned_to != user.user_id:
-                raise ResourceNotFound("InformationRequest", ir_id)
-            return _admin_view(ir) if user.role == "admin" else _full_response(ir)
-        except (AuthOwnershipDenied, AuthScopeDenied, AuthPermissionDenied,
-                AuthWorkflowState, ResourceNotFound):
-            pass
-
-        try:
-            await authorise(user, "info_request:read", resource,
-                            self._db, RequestContext())
-        except AuthPermissionDenied:
+        if not await self._authorise_ir_read(user, ir, scope_id, parent_assigned_to):
             raise ResourceNotFound("InformationRequest", ir_id)
-
-        if user.role != "admin":
-            if not (ir.created_by == user.user_id or parent_assigned_to == user.user_id):
-                raise ResourceNotFound("InformationRequest", ir_id)
         return _admin_view(ir) if user.role == "admin" else _full_response(ir)
 
     # ── IR4 — PATCH /information-requests/{ir_id}/acknowledge ─────────────────
@@ -621,7 +650,7 @@ class InformationRequestService:
                     _make_notification(ir.created_by, "ir_acknowledged",
                                        f"Information request acknowledged",
                                        ir.question,
-                                       "information_request", ir_id),
+                                       *_notification_parent(ir, case, inv)),
                     uow.conn)
 
             await OutboxRepo(self._db).insert(
@@ -648,6 +677,11 @@ class InformationRequestService:
         self, user: ApplicationUser, ir_id: str, req: RespondInformationRequest,
         idempotency_key: Optional[str] = None,
         request_id: str = "",
+        *,
+        original_filename: Optional[str] = None,
+        content_type: Optional[str] = None,
+        file_obj: Optional[BinaryIO] = None,
+        description: Optional[str] = None,
     ) -> InformationRequestMutationResponse:
         path = f"/api/v1/information-requests/{ir_id}/respond"
         async with UnitOfWork(self._db) as uow:
@@ -677,42 +711,242 @@ class InformationRequestService:
             ir.version += 1
             ir.updated_at = _now()
 
-            updated = await InfoRequestRepo(self._db).update(ir, req.expected_version, uow.conn)
-            if updated is None:
-                raise VersionConflict()
+            stored_filename: Optional[str] = None
+            try:
+                if file_obj is not None:
+                    validate_file_type(original_filename or "attachment.bin",
+                                       content_type or "application/octet-stream")
+                    attachment_id = _uuid()
+                    stored_filename, sha256_hash, size_bytes = self._storage.save(
+                        scope_id=scope_id, investigation_id=ir.ir_id,
+                        attachment_id=attachment_id, file_obj=file_obj,
+                    )
+                    att = InformationRequestAttachment(
+                        attachment_id=attachment_id, ir_id=ir.ir_id,
+                        original_filename=original_filename or "attachment.bin",
+                        stored_filename=stored_filename,
+                        content_type=content_type or "application/octet-stream",
+                        size_bytes=size_bytes, sha256_hash=sha256_hash,
+                        description=description, uploaded_by=user.user_id,
+                        uploaded_at=_now(),
+                    )
+                    try:
+                        await IrAttachmentRepo(self._db).create(att, uow.conn)
+                    except Exception:
+                        # Compensation: DB write failed → remove the physical object.
+                        self._storage.delete(scope_id, ir.ir_id, stored_filename)
+                        raise
+                    await TimelineRepo(self._db).insert(
+                        _make_timeline("information_request", ir_id, "ir.attachment_uploaded",
+                                       user.user_id, None,
+                                       {"attachment_id": attachment_id,
+                                        "content_type": content_type,
+                                        "size_bytes": size_bytes,
+                                        "sha256_hash": sha256_hash}),
+                        uow.conn)
+                    await OutboxRepo(self._db).insert(
+                        _make_outbox("ir.attachment_uploaded", "information_request", ir_id,
+                                     user.user_id, user.role,
+                                     {"ir_id": ir_id, "attachment_id": attachment_id,
+                                      "content_type": content_type, "size_bytes": size_bytes,
+                                      "sha256_hash": sha256_hash}),
+                        uow.conn)
 
-            await TimelineRepo(self._db).insert(
-                _make_timeline("information_request", ir_id, "ir.responded", user.user_id,
-                               {"status": old_status}, {"status": "responded"}),
-                uow.conn)
+                updated = await InfoRequestRepo(self._db).update(ir, req.expected_version, uow.conn)
+                if updated is None:
+                    raise VersionConflict()
 
-            if ir.created_by:
-                await NotificationRepo(self._db).insert(
-                    _make_notification(ir.created_by, "ir_responded",
-                                       f"Information request responded",
-                                       req.response_text,
-                                       "information_request", ir_id),
+                await TimelineRepo(self._db).insert(
+                    _make_timeline("information_request", ir_id, "ir.responded", user.user_id,
+                                   {"status": old_status}, {"status": "responded"}),
                     uow.conn)
 
-            await OutboxRepo(self._db).insert(
-                _make_outbox("ir.responded", "information_request", ir_id,
-                             user.user_id, user.role,
-                             _audit_payload(
-                                 "ir.responded", "information_request", ir_id,
+                if ir.created_by:
+                    await NotificationRepo(self._db).insert(
+                        _make_notification(ir.created_by, "ir_responded",
+                                           f"Information request responded",
+                                           req.response_text,
+                                           *_notification_parent(ir, case, inv)),
+                        uow.conn)
+
+                # If the parent investigation is awaiting_information and no
+                # other active IRs remain (the just-responded IR stays in the
+                # active set until compliance accepts/returns it), resume it back
+                # into the review queue.
+                inv_resumed = False
+                if inv and inv.status == "awaiting_information":
+                    active_irs = await InfoRequestRepo(self._db).fetch_active_by_investigation(
+                        inv.investigation_id, uow.conn)
+                    if len(active_irs) <= 1:
+                        old_inv_status = inv.status
+                        inv.status = "submitted"
+                        inv.version += 1
+                        inv.updated_at = _now()
+                        await InvestigationRepo(self._db).update(inv, inv.version - 1, uow.conn)
+                        inv_resumed = True
+                        await TimelineRepo(self._db).insert(
+                            _make_timeline("investigation", inv.investigation_id,
+                                           "investigation.submitted", user.user_id,
+                                           {"status": old_inv_status},
+                                           {"status": "submitted", "reason": "ir_responded"}),
+                            uow.conn)
+                        if inv.assigned_to:
+                            await NotificationRepo(self._db).insert(
+                                _make_notification(inv.assigned_to, "investigation_submitted",
+                                                   f"Information request responded — investigation returned to review",
+                                                   f"IR {ir_id} responded",
+                                                   "investigation", inv.investigation_id),
+                                uow.conn)
+                        await OutboxRepo(self._db).insert(
+                            _make_outbox("investigation.submitted", "investigation", inv.investigation_id,
+                                         user.user_id, user.role,
+                                         _audit_payload(
+                                             "investigation.submitted", "investigation", inv.investigation_id,
+                                             user.user_id, user.role,
+                                             before={"status": old_inv_status},
+                                             after={"status": "submitted", "version": inv.version},
+                                             request_id=request_id,
+                                             metadata={"ir_id": ir_id})),
+                            uow.conn)
+
+                await OutboxRepo(self._db).insert(
+                    _make_outbox("ir.responded", "information_request", ir_id,
                                  user.user_id, user.role,
-                                 before={"status": old_status, "version": req.expected_version},
-                                 after={"status": "responded", "version": ir.version,
-                                        "response_text_sha256": _sha256(req.response_text),
-                                        "responded_at": ir.responded_at.isoformat()},
-                                 request_id=request_id,
-                                 metadata={"case_id": ir.case_id, "investigation_id": ir.investigation_id})),
+                                 _audit_payload(
+                                     "ir.responded", "information_request", ir_id,
+                                     user.user_id, user.role,
+                                     before={"status": old_status, "version": req.expected_version},
+                                     after={"status": "responded", "version": ir.version,
+                                            "response_text_sha256": _sha256(req.response_text),
+                                            "responded_at": ir.responded_at.isoformat()},
+                                     request_id=request_id,
+                                     metadata={"case_id": ir.case_id, "investigation_id": ir.investigation_id,
+                                               "investigation_resumed_triggered": inv_resumed})),
+                    uow.conn)
+
+                resp = _mutation_response(ir, user.role)
+                await _store_idempotency(
+                    IdempotencyRepo(self._db), idempotency_key, "PATCH", path,
+                    req.model_dump(), 200, resp.model_dump_json(), uow.conn)
+                return resp
+            except Exception:
+                if stored_filename:
+                    # Compensation: response failed after physical write → remove the object.
+                    self._storage.delete(scope_id, ir.ir_id, stored_filename)
+                raise
+
+    # ── IR5.1 — POST /information-requests/{ir_id}/attachments ───────────────
+
+    async def upload_attachment(
+        self, user: ApplicationUser, ir_id: str,
+        original_filename: str, content_type: str, file_obj: BinaryIO,
+        description: Optional[str] = None, request_id: str = "",
+    ) -> IrAttachmentResponse:
+        validate_file_type(original_filename, content_type)
+
+        attachment_id = _uuid()
+        stored_filename = None
+
+        async with UnitOfWork(self._db) as uow:
+            ir = await InfoRequestRepo(self._db).fetch_by_id(ir_id, uow.conn)
+            if ir is None:
+                raise ResourceNotFound("InformationRequest", ir_id)
+            scope_id, resource, case, inv = await self._resolve_ir_parent(ir, uow.conn)
+
+            await authorise(user, "info_request:respond", resource,
+                            self._db, RequestContext(request_id=request_id))
+
+            if ir.status not in ("acknowledged", "returned"):
+                raise InvalidTransition(ir.status, "upload_attachment")
+
+            stored_filename, sha256_hash, size_bytes = self._storage.save(
+                scope_id=scope_id, investigation_id=ir.ir_id,
+                attachment_id=attachment_id, file_obj=file_obj,
+            )
+
+            att = InformationRequestAttachment(
+                attachment_id=attachment_id, ir_id=ir.ir_id,
+                original_filename=original_filename,
+                stored_filename=stored_filename, content_type=content_type,
+                size_bytes=size_bytes, sha256_hash=sha256_hash,
+                description=description, uploaded_by=user.user_id,
+                uploaded_at=_now(),
+            )
+
+            try:
+                await IrAttachmentRepo(self._db).create(att, uow.conn)
+            except Exception:
+                # Compensation: delete physical storage object if DB record write fails
+                if stored_filename:
+                    self._storage.delete(scope_id, ir.ir_id, stored_filename)
+                raise
+
+            await TimelineRepo(self._db).insert(
+                _make_timeline("information_request", ir_id, "ir.attachment_uploaded",
+                               user.user_id, None,
+                               {"attachment_id": attachment_id,
+                                "content_type": content_type,
+                                "size_bytes": size_bytes,
+                                "sha256_hash": sha256_hash}),
                 uow.conn)
 
-            resp = _mutation_response(ir, user.role)
-            await _store_idempotency(
-                IdempotencyRepo(self._db), idempotency_key, "PATCH", path,
-                req.model_dump(), 200, resp.model_dump_json(), uow.conn)
-            return resp
+            await OutboxRepo(self._db).insert(
+                _make_outbox("ir.attachment_uploaded", "information_request", ir_id,
+                             user.user_id, user.role,
+                             {"ir_id": ir_id, "attachment_id": attachment_id,
+                              "content_type": content_type, "size_bytes": size_bytes,
+                              "sha256_hash": sha256_hash}),
+                uow.conn)
+
+            return IrAttachmentResponse(**att.model_dump())
+
+    # ── IR5.2 — GET /information-requests/{ir_id}/attachments ────────────────
+
+    async def list_attachments(
+        self, user: ApplicationUser, ir_id: str, request_id: str = "",
+    ) -> IrAttachmentListResponse:
+        async with UnitOfWork(self._db) as uow:
+            ir = await InfoRequestRepo(self._db).fetch_by_id(ir_id, uow.conn)
+            if ir is None:
+                raise ResourceNotFound("InformationRequest", ir_id)
+            scope_id, resource, case, inv = await self._resolve_ir_parent(ir, uow.conn)
+            parent_assigned_to = case.assigned_to if case else (inv.assigned_to if inv else None)
+            if not await self._authorise_ir_read(user, ir, scope_id, parent_assigned_to):
+                raise ResourceNotFound("InformationRequest", ir_id)
+
+            items = await IrAttachmentRepo(self._db).list_by_ir(ir_id, uow.conn)
+            responses = [IrAttachmentResponse(**a.model_dump()) for a in items]
+            return IrAttachmentListResponse(total=len(responses), items=responses)
+
+    # ── IR5.3 — GET /information-requests/{ir_id}/attachments/{id}/download ──
+
+    async def get_attachment_for_download(
+        self, user: ApplicationUser, ir_id: str, attachment_id: str,
+        request_id: str = "",
+    ) -> Tuple[IrAttachmentResponse, str]:
+        async with UnitOfWork(self._db) as uow:
+            ir = await InfoRequestRepo(self._db).fetch_by_id(ir_id, uow.conn)
+            if ir is None:
+                raise ResourceNotFound("InformationRequest", ir_id)
+            scope_id, resource, case, inv = await self._resolve_ir_parent(ir, uow.conn)
+            parent_assigned_to = case.assigned_to if case else (inv.assigned_to if inv else None)
+            if not await self._authorise_ir_read(user, ir, scope_id, parent_assigned_to):
+                raise ResourceNotFound("InformationRequest", ir_id)
+
+            att = await IrAttachmentRepo(self._db).fetch_by_id_and_ir(attachment_id, ir_id, uow.conn)
+            if att is None:
+                raise ResourceNotFound("Attachment", attachment_id)
+
+            file_path = self._storage.get_path(scope_id, ir.ir_id, att.stored_filename)
+
+            await OutboxRepo(self._db).insert(
+                _make_outbox("ir.attachment_downloaded", "information_request", ir_id,
+                             user.user_id, user.role,
+                             {"ir_id": ir_id, "attachment_id": attachment_id,
+                              "downloaded_by": user.user_id}),
+                uow.conn)
+
+            return IrAttachmentResponse(**att.model_dump()), file_path
 
     # ── IR6 — PATCH /information-requests/{ir_id}/accept ──────────────────────
 
@@ -807,7 +1041,7 @@ class InformationRequestService:
                     _make_notification(ir.assigned_to, "ir_accepted",
                                        f"Information request accepted",
                                        ir.question,
-                                       "information_request", ir_id),
+                                       *_notification_parent(ir, case, inv)),
                     uow.conn)
 
             await OutboxRepo(self._db).insert(
@@ -883,7 +1117,7 @@ class InformationRequestService:
                     _make_notification(ir.assigned_to, "ir_returned",
                                        f"Information request returned for rework",
                                        req.return_reason,
-                                       "information_request", ir_id),
+                                       *_notification_parent(ir, case, inv)),
                     uow.conn)
 
             await OutboxRepo(self._db).insert(

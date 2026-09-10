@@ -4,7 +4,7 @@
 // are absent from the payload and are shown as "Restricted by policy", never
 // fabricated. PII arrives masked from the service and stays masked here.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { clsx } from 'clsx';
 import {
   ArrowLeft, RefreshCw, ShieldX, ShieldAlert, AlertTriangle, AlertCircle,
@@ -14,7 +14,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { BankingHeader } from '../Layout/BankingHeader';
 import { customer360Api, parseCustomer360Error } from '../../api/customer360Api';
-import type { Customer360ApiError } from '../../api/customer360Api';
+import type { Customer360ApiError, Customer360Context } from '../../api/customer360Api';
 import { dateOnly, isMasked, money, riskClassification, severityVariant, statusVariant } from './customer360Format';
 import { useAuth } from '../../auth/AuthProvider';
 import { PERMISSIONS } from '../../lib/permissions';
@@ -386,8 +386,19 @@ function TransactionsTable({ rows }: { rows: TransactionRow[] }) {
 
 export function Customer360Page() {
   const { customerId } = useParams<{ customerId: string }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { hasPermission } = useAuth();
+
+  const contextType = searchParams.get('context_type');
+  const contextId = searchParams.get('context_id');
+  const ctx: Customer360Context | undefined = useMemo(
+    () =>
+      contextType && contextId
+        ? { type: contextType as Customer360Context['type'], id: contextId }
+        : undefined,
+    [contextType, contextId],
+  );
 
   const [overview, setOverview] = useState<Customer360Overview | null>(null);
   const [loading, setLoading] = useState(true);
@@ -414,7 +425,7 @@ export function Customer360Page() {
     setLoading(true);
     setError(null);
     try {
-      const data = await customer360Api.getOverview(customerId);
+      const data = await customer360Api.getOverview(customerId, ctx);
       setOverview(data);
       setTab('overview');
     } catch (err) {
@@ -423,7 +434,7 @@ export function Customer360Page() {
     } finally {
       setLoading(false);
     }
-  }, [customerId, retryKey]);
+  }, [customerId, retryKey, ctx]);
 
   useEffect(() => { fetchOverview(); }, [fetchOverview]);
 
@@ -459,7 +470,7 @@ export function Customer360Page() {
     setTxLoading(true);
     setTxError(null);
     try {
-      const data = await customer360Api.getTransactions(customerId, { limit: TX_PAGE_SIZE, offset });
+      const data = await customer360Api.getTransactions(customerId, { limit: TX_PAGE_SIZE, offset }, ctx);
       setTxData(data);
     } catch (err) {
       setTxError(parseCustomer360Error(err));
@@ -467,7 +478,7 @@ export function Customer360Page() {
     } finally {
       setTxLoading(false);
     }
-  }, [customerId, transactionsGranted]);
+  }, [customerId, transactionsGranted, ctx]);
 
   const txLoaded = txData !== null;
   useEffect(() => {

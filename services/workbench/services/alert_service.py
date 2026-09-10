@@ -28,16 +28,16 @@ from workbench.exceptions import (
 )
 from workbench.models import (
     Alert, AssignmentHistoryEntry, AuditOutboxEvent,
-    ComplianceCase, IdempotencyRecord, Investigation, Notification,
+    IdempotencyRecord, Investigation, Notification,
     ActivityTimelineEntry,
 )
 from workbench.repos import (
-    AlertRepo, ApprovalRepo, AssignmentHistoryRepo, CaseRepo,
+    AlertRepo, ApprovalRepo, AssignmentHistoryRepo,
     IdempotencyRepo, InvestigationRepo, NotificationRepo, OutboxRepo, TimelineRepo,
 )
 from workbench.schemas.alerts import (
     AlertAdminResponse, AlertResponse, AssignAlertRequest,
-    DismissAlertRequest, EscalateResponse, InvestigateResponse, MutationResponse,
+    DismissAlertRequest, InvestigateResponse, MutationResponse,
 )
 from workbench.uow import UnitOfWork
 
@@ -501,82 +501,6 @@ class AlertService:
                 alert=await self._to_alert_response(alert),
                 investigation_id=investigation.investigation_id,
                 version=alert.version,
-            )
-            await _store_idempotency(
-                IdempotencyRepo(self._db), idempotency_key, "POST", path,
-                req.model_dump(), 200, resp.model_dump_json(), uow.conn)
-            return resp
-
-    # ── POST /alerts/{alert_id}/escalate ──────────────────────────────────────
-
-    async def escalate(
-        self, user: ApplicationUser, alert_id: str, req: EscalateAlertRequest,
-        idempotency_key: Optional[str] = None,
-        request_id: str = "",
-    ) -> EscalateResponse:
-        path = f"/api/v1/alerts/{alert_id}/escalate"
-        async with UnitOfWork(self._db) as uow:
-            idem = await _check_idempotency(
-                IdempotencyRepo(self._db), idempotency_key, "POST", path,
-                req.model_dump(), uow.conn)
-            if idem:
-                return EscalateResponse.model_validate_json(idem[1])
-
-            alert = await AlertRepo(self._db).fetch_by_id(alert_id, uow.conn)
-            if alert is None:
-                raise ResourceNotFound("Alert", alert_id)
-
-            await authorise(user, "alert:transition", _resource_from_alert(alert),
-                            self._db, RequestContext(request_id=request_id))
-
-            if alert.status != "under_investigation":
-                raise InvalidTransition(alert.status, "escalate")
-
-            inv = await InvestigationRepo(self._db).fetch_by_alert(alert_id, uow.conn)
-            if inv is None:
-                raise ResourceNotFound("Investigation", f"linked to alert {alert_id}")
-
-            existing_case = await CaseRepo(self._db).fetch_active_for_alert(alert_id, uow.conn)
-            if existing_case:
-                return EscalateResponse(
-                    alert=await self._to_alert_response(alert),
-                    case_id=existing_case.case_id,
-                    version=alert.version,
-                )
-
-            case = ComplianceCase(
-                case_id=_uuid(), title=req.title, description=req.description,
-                alert_id=alert_id, investigation_id=inv.investigation_id,
-                scope_id=alert.scope_id, priority=req.priority.value,
-                created_by=user.user_id,
-                version=1, created_at=_now(), updated_at=_now(),
-            )
-            await CaseRepo(self._db).create(case, uow.conn)
-
-            await TimelineRepo(self._db).insert(
-                _make_timeline("alert", alert_id, "alert.escalated", user.user_id,
-                              {"status": "under_investigation", "investigation_id": inv.investigation_id},
-                              {"case_id": case.case_id, "priority": req.priority.value}),
-                uow.conn)
-            await TimelineRepo(self._db).insert(
-                _make_timeline("compliance_case", case.case_id, "case.created", user.user_id,
-                              None, {"title": req.title, "priority": req.priority.value}),
-                uow.conn)
-
-            await OutboxRepo(self._db).insert(
-                _make_outbox("alert.escalated", "alert", alert_id,
-                            user.user_id, user.role,
-                            {"alert_id": alert_id, "case_id": case.case_id}),
-                uow.conn)
-            await OutboxRepo(self._db).insert(
-                _make_outbox("case.created", "compliance_case", case.case_id,
-                            user.user_id, user.role,
-                            {"case_id": case.case_id, "alert_id": alert_id}),
-                uow.conn)
-
-            resp = EscalateResponse(
-                alert=await self._to_alert_response(alert),
-                case_id=case.case_id, version=alert.version,
             )
             await _store_idempotency(
                 IdempotencyRepo(self._db), idempotency_key, "POST", path,

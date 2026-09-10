@@ -16,8 +16,9 @@ from workbench.exceptions import VersionConflict
 from .models import (
     ActivityTimelineEntry, Alert, ApprovalDecision, ApprovalRequest,
     AssignmentHistoryEntry, AuditOutboxEvent, Comment, ComplianceCase,
-    Decision, IdempotencyRecord, InformationRequest, Investigation,
-    InvestigationAttachment, Notification,
+    Decision, IdempotencyRecord, InformationRequest, InformationRequestAttachment,
+    Investigation, InvestigationAttachment, InvestigationReportSubmission,
+    InvestigationReviewDecision, Notification,
 )
 
 T = TypeVar("T")
@@ -157,7 +158,9 @@ class InvestigationRepo:
         return Investigation(**r) if r else None
 
     async def list(self, scope_id: str | None = None, status: str | None = None,
-                   assigned_to: str | None = None, limit: int = 50, offset: int = 0,
+                   assigned_to: str | None = None,
+                   compliance_officer_id: str | None = None,
+                   limit: int = 50, offset: int = 0,
                    conn: asyncpg.Connection | None = None) -> list[Investigation]:
         parts = ["SELECT * FROM investigations WHERE 1=1"]
         params: list = []
@@ -168,6 +171,8 @@ class InvestigationRepo:
             parts.append(f"AND status = ${i}"); params.append(status); i += 1
         if assigned_to:
             parts.append(f"AND assigned_to = ${i}"); params.append(assigned_to); i += 1
+        if compliance_officer_id is not None:
+            parts.append(f"AND compliance_officer_id = ${i}"); params.append(compliance_officer_id); i += 1
         parts.append(f"ORDER BY created_at DESC LIMIT ${i} OFFSET ${i+1}")
         params.extend([limit, offset])
         rows = await _fetch_all(self._db, " ".join(parts), params, conn)
@@ -192,14 +197,14 @@ class InvestigationRepo:
             UPDATE investigations SET title=$1, description=$2, alert_id=$3, scope_id=$4,
                 status=$5, priority=$6, assigned_to=$7, findings_text=$8, findings_refs=$9::jsonb,
                 conclusion=$10, started_at=$11, submitted_at=$12, completed_at=$13,
-                return_reason=$14, version=$15, updated_at=$16
-            WHERE investigation_id=$17 AND version=$18
+                return_reason=$14, version=$15, updated_at=$16, compliance_officer_id=$17
+            WHERE investigation_id=$18 AND version=$19
         """, [
             inv.title, inv.description, inv.alert_id, inv.scope_id,
             inv.status, inv.priority, inv.assigned_to, inv.findings_text,
             inv.findings_refs, inv.conclusion, inv.started_at, inv.submitted_at,
             inv.completed_at, inv.return_reason, inv.version, inv.updated_at,
-            inv.investigation_id, expected_version,
+            inv.compliance_officer_id, inv.investigation_id, expected_version,
         ], conn)
         if r == "UPDATE 0":
             existing = await self.fetch_by_id(inv.investigation_id, conn)
@@ -207,6 +212,88 @@ class InvestigationRepo:
                 return None
             raise VersionConflict()
         return inv
+
+
+# ── Investigation Report Submission Repository (INSERT-only immutable snapshot) ─
+
+class ReportSubmissionRepo:
+    """Persists and reads authoritative, immutable report snapshots.
+
+    Successive snapshots are only ever appended; there is intentionally no
+    UPDATE/DELETE path. The original submitted report is therefore preserved
+    as a durable historical record even across IR feedback loops.
+    """
+
+    def __init__(self, db: DatabaseConnector) -> None:
+        self._db = db
+
+    async def fetch_for_investigation(
+        self, investigation_id: str, conn: asyncpg.Connection | None = None
+    ) -> InvestigationReportSubmission | None:
+        r = await _fetch_one(
+            self._db,
+            "SELECT * FROM investigation_report_submissions "
+            "WHERE investigation_id = $1 ORDER BY submitted_at DESC, created_at DESC LIMIT 1",
+            [investigation_id], conn)
+        return InvestigationReportSubmission(**r) if r else None
+
+    async def insert(
+        self, sub: InvestigationReportSubmission,
+        conn: asyncpg.Connection | None = None,
+    ) -> InvestigationReportSubmission:
+        await _execute(self._db, """
+            INSERT INTO investigation_report_submissions (
+                submission_id, investigation_id, analyst_id, compliance_officer_id,
+                findings_text, findings_refs, conclusion, submitted_at,
+                evidence_manifest, report_hash, created_at)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+        """, [
+            sub.submission_id, sub.investigation_id, sub.analyst_id,
+            sub.compliance_officer_id, sub.findings_text, sub.findings_refs,
+            sub.conclusion, sub.submitted_at, sub.evidence_manifest,
+            sub.report_hash, sub.created_at,
+        ], conn)
+        return sub
+
+
+# ── Investigation Review Decision Repository ─────────────────────────────────
+
+class ReviewDecisionRepo:
+    """Persists immutable investigation-level final decisions.
+
+    INSERT-only — decisions (NOT_HARMFUL / ESCALATE_TO_CASE) are never
+    updated or deleted. Corrections are new audit events, not rewrites.
+    """
+
+    def __init__(self, db: DatabaseConnector) -> None:
+        self._db = db
+
+    async def fetch_for_investigation(
+        self, investigation_id: str, conn: asyncpg.Connection | None = None
+    ) -> list[InvestigationReviewDecision]:
+        rows = await _fetch_all(
+            self._db,
+            "SELECT * FROM investigation_review_decisions "
+            "WHERE investigation_id = $1 ORDER BY decided_at ASC",
+            [investigation_id], conn)
+        return [InvestigationReviewDecision(**r) for r in rows]
+
+    async def insert(
+        self, decision: InvestigationReviewDecision,
+        conn: asyncpg.Connection | None = None,
+    ) -> InvestigationReviewDecision:
+        await _execute(self._db, """
+            INSERT INTO investigation_review_decisions (
+                review_decision_id, investigation_id, compliance_officer_id,
+                decision_type, rationale, resulting_case_id, decided_at, created_at)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+        """, [
+            decision.review_decision_id, decision.investigation_id,
+            decision.compliance_officer_id, decision.decision_type,
+            decision.rationale, decision.resulting_case_id,
+            decision.decided_at, decision.created_at,
+        ], conn)
+        return decision
 
 
 # ── Investigation Attachment Repository ───────────────────────────────────────
@@ -544,6 +631,35 @@ class InfoRequestRepo:
                 return None
             raise VersionConflict()
         return ir
+
+
+# ── Information Request Attachment Repository ─────────────────────────────────
+
+class IrAttachmentRepo:
+    """Persistence for analyst response attachments on information requests."""
+
+    def __init__(self, db: DatabaseConnector) -> None:
+        self._db = db
+
+    async def fetch_by_id_and_ir(self, attachment_id: str, ir_id: str, conn: asyncpg.Connection | None = None) -> InformationRequestAttachment | None:
+        r = await _fetch_one(self._db, "SELECT * FROM information_request_attachments WHERE attachment_id = $1 AND ir_id = $2", [attachment_id, ir_id], conn)
+        return InformationRequestAttachment(**r) if r else None
+
+    async def list_by_ir(self, ir_id: str, conn: asyncpg.Connection | None = None) -> list[InformationRequestAttachment]:
+        rows = await _fetch_all(self._db, "SELECT * FROM information_request_attachments WHERE ir_id = $1 ORDER BY uploaded_at ASC", [ir_id], conn)
+        return [InformationRequestAttachment(**r) for r in rows]
+
+    async def create(self, att: InformationRequestAttachment, conn: asyncpg.Connection | None = None) -> InformationRequestAttachment:
+        await _execute(self._db, """
+            INSERT INTO information_request_attachments (attachment_id, ir_id, original_filename,
+                stored_filename, content_type, size_bytes, sha256_hash, description, uploaded_by, uploaded_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        """, [
+            att.attachment_id, att.ir_id, att.original_filename,
+            att.stored_filename, att.content_type, att.size_bytes,
+            att.sha256_hash, att.description, att.uploaded_by, att.uploaded_at,
+        ], conn)
+        return att
 
 
 # ── Approval Request Repository ────────────────────────────────────────────────

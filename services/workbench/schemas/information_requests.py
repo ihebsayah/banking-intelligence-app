@@ -111,3 +111,20 @@ class InformationRequestListResponse(BaseModel):
     page: int
     page_size: int
     items: List[Union[InformationRequestResponse, InformationRequestAdminView]] = []
+
+
+class IrAttachmentResponse(BaseModel):
+    attachment_id: str
+    ir_id: str
+    original_filename: str
+    content_type: str
+    size_bytes: int
+    sha256_hash: str
+    description: Optional[str] = None
+    uploaded_by: str
+    uploaded_at: datetime
+
+
+class IrAttachmentListResponse(BaseModel):
+    total: int
+    items: List[IrAttachmentResponse] = []

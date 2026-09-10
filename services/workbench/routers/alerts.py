@@ -15,9 +15,8 @@ from shared.database import DatabaseConnector
 from workbench.exceptions import WorkbenchError
 from workbench.schemas.alerts import (
     AcknowledgeAlertRequest, AlertAdminResponse, AlertListResponse, AlertResponse,
-    AssignAlertRequest, DismissAlertRequest, EscalateAlertRequest,
-    EscalateResponse, InvestigateAlertRequest, InvestigateResponse,
-    MutationResponse,
+    AssignAlertRequest, DismissAlertRequest, InvestigateAlertRequest,
+    InvestigateResponse, MutationResponse,
 )
 from workbench.services.alert_service import AlertService
 
@@ -128,20 +127,6 @@ async def investigate_alert(
     u = _get_user(request)
     svc = _service(request)
     result = await svc.investigate(u, alert_id, req, x_idempotency_key, x_request_id or "")
-    return JSONResponse(content=result.model_dump(mode="json"), headers={"X-Version": str(result.version)})
-
-
-# ── POST /alerts/{alert_id}/escalate ─────────────────────────────────────────
-
-@router.post("/{alert_id}/escalate", response_model=EscalateResponse)
-async def escalate_alert(
-    alert_id: str, req: EscalateAlertRequest, request: Request,
-    x_idempotency_key: Optional[str] = Header(None, alias="X-Idempotency-Key"),
-    x_request_id: Optional[str] = Header(None, alias="X-Request-ID"),
-):
-    u = _get_user(request)
-    svc = _service(request)
-    result = await svc.escalate(u, alert_id, req, x_idempotency_key, x_request_id or "")
     return JSONResponse(content=result.model_dump(mode="json"), headers={"X-Version": str(result.version)})
 
 

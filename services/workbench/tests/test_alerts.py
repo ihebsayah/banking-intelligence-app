@@ -16,7 +16,7 @@ from workbench.exceptions import (
 from workbench.models import Alert, ApprovalRequest, Investigation
 from workbench.schemas.alerts import (
     AcknowledgeAlertRequest, AlertResponse, AssignAlertRequest,
-    DismissAlertRequest, EscalateAlertRequest, InvestigateAlertRequest,
+    DismissAlertRequest, InvestigateAlertRequest,
     MutationResponse,
 )
 from workbench.services.alert_service import AlertService, _validate_assignee
@@ -330,55 +330,6 @@ class TestInvestigate:
              patch("workbench.repos._fetch_one", AsyncMock(return_value=a.model_dump())):
             with pytest.raises(InvalidTransition):
                 await AlertService(mock_db).investigate(MOCK_USER, a.alert_id, req)
-
-
-# ── escalate ─────────────────────────────────────────────────────────────────
-
-class TestEscalate:
-    @pytest.mark.asyncio
-    async def test_create_case(self, mock_db):
-        a = make_alert(assigned_to="user1", status="under_investigation", version=2)
-        inv_id = UID()
-        req = EscalateAlertRequest(title="Escalation", expected_version=2)
-        uow_mock = make_uow_mock()
-        with patch(UOW_TARGET, return_value=uow_mock), \
-             patch(AUTH_TARGET, AsyncMock()), \
-             patch("workbench.repos._fetch_one", AsyncMock(side_effect=[
-                 a.model_dump(),  # fetch_by_id
-                 dict(investigation_id=inv_id, title="Inv", created_by="user1",
-                      status="open", scope_id="hq_main", alert_id=a.alert_id,
-                      description=None, version=1,
-                      created_at=NOW, updated_at=NOW),  # investigation
-                 None,  # no existing case
-             ])), \
-             patch("workbench.repos._execute", AsyncMock(return_value="INSERT 0 1")):
-            result = await AlertService(mock_db).escalate(MOCK_USER, a.alert_id, req)
-        assert result.case_id is not None
-
-    @pytest.mark.asyncio
-    async def test_no_investigation_raises(self, mock_db):
-        a = make_alert(assigned_to="user1", status="under_investigation", version=2)
-        req = EscalateAlertRequest(title="Test", expected_version=2)
-        uow_mock = make_uow_mock()
-        with patch(UOW_TARGET, return_value=uow_mock), \
-             patch(AUTH_TARGET, AsyncMock()), \
-             patch("workbench.repos._fetch_one", AsyncMock(side_effect=[
-                 a.model_dump(),  # fetch_by_id
-                 None,  # no investigation
-             ])):
-            with pytest.raises(ResourceNotFound):
-                await AlertService(mock_db).escalate(MOCK_USER, a.alert_id, req)
-
-    @pytest.mark.asyncio
-    async def test_wrong_alert_state(self, mock_db):
-        a = make_alert(assigned_to="user1", status="acknowledged", version=1)
-        req = EscalateAlertRequest(title="Test", expected_version=1)
-        uow_mock = make_uow_mock()
-        with patch(UOW_TARGET, return_value=uow_mock), \
-             patch(AUTH_TARGET, AsyncMock()), \
-             patch("workbench.repos._fetch_one", AsyncMock(return_value=a.model_dump())):
-            with pytest.raises(InvalidTransition):
-                await AlertService(mock_db).escalate(MOCK_USER, a.alert_id, req)
 
 
 # ── idempotency ──────────────────────────────────────────────────────────────

@@ -78,7 +78,7 @@ export function InvestigationQueuePage() {
     : 'Workbench — Investigation Queue';
 
   const headerSubtitle = queueMode === 'submitted'
-    ? 'Submitted investigations awaiting compliance review'
+    ? 'Investigations assigned to you for compliance review'
     : 'Investigations assigned to you';
 
   return (
@@ -191,7 +191,7 @@ export function InvestigationQueuePage() {
             <FolderSearch size={28} style={{ color: 'var(--text-muted)' }} />
             <p className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>
               {queueMode === 'submitted'
-                ? 'No submitted investigations awaiting review'
+                ? 'No investigations assigned to you'
                 : 'No investigations assigned to you'}
             </p>
             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>

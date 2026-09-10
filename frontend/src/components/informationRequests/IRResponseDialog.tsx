@@ -1,6 +1,7 @@
 // src/components/informationRequests/IRResponseDialog.tsx
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Download, Paperclip } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { StatusBadge } from '../ui/StatusBadge';
 import { informationRequestsApi } from '../../api/informationRequestsApi';
@@ -8,7 +9,15 @@ import { parseCaseError } from '../cases/caseErrors';
 import { useAuth } from '../../auth/AuthProvider';
 import { PERMISSIONS } from '../../lib/permissions';
 import { formatDateTime } from '../../utils/formatters';
-import type { InformationRequest } from '../../types/cases';
+import type { InformationRequest, InformationRequestAttachment } from '../../types/cases';
+
+const ACCEPTED_FILE_TYPES = '.pdf,.png,.jpg,.jpeg,.csv,.xlsx,.txt';
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 const irStatusVariant: Record<string, 'blue' | 'green' | 'yellow' | 'purple' | 'gray' | 'red'> = {
   open: 'blue',
@@ -42,6 +51,8 @@ export function IRResponseDialog({ open, ir, onClose, onSuccess, onConflict }: P
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conflict, setConflict] = useState(false);
+  const [attachments, setAttachments] = useState<InformationRequestAttachment[]>([]);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -49,6 +60,13 @@ export function IRResponseDialog({ open, ir, onClose, onSuccess, onConflict }: P
       setSubmitting(false);
       setError(null);
       setConflict(false);
+      setSelectedFile(null);
+      setAttachments([]);
+      if (ir?.ir_id) {
+        informationRequestsApi.listAttachments(ir.ir_id)
+          .then((res) => setAttachments(res.items))
+          .catch(() => setAttachments([]));
+      }
     }
     // Re-init the draft only when a new request is opened (not on background refetch).
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -93,7 +111,11 @@ export function IRResponseDialog({ open, ir, onClose, onSuccess, onConflict }: P
     setError(null);
     setConflict(false);
     try {
-      const res = await informationRequestsApi.respond(ir.ir_id, { response_text: text, expected_version: ir.version });
+      const res = await informationRequestsApi.respond(ir.ir_id, {
+        response_text: text,
+        expected_version: ir.version,
+        ...(selectedFile ? { file: selectedFile } : {}),
+      });
       onSuccess(res.information_request, true);
     } catch (err) {
       const parsed = parseCaseError(err);
@@ -105,6 +127,15 @@ export function IRResponseDialog({ open, ir, onClose, onSuccess, onConflict }: P
       }
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleDownload = async (att: InformationRequestAttachment) => {
+    if (!ir) return;
+    try {
+      await informationRequestsApi.downloadAttachment(ir.ir_id, att.attachment_id, att.original_filename);
+    } catch (err) {
+      setError(parseCaseError(err).message);
     }
   };
 
@@ -228,6 +259,63 @@ export function IRResponseDialog({ open, ir, onClose, onSuccess, onConflict }: P
                 : 'Send your response to compliance for review.'}
           </p>
         </div>
+
+        {canEdit && (
+          <div>
+            <label htmlFor="ir-attachment" className="block text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>
+              Attach a file (optional)
+            </label>
+            <input
+              id="ir-attachment"
+              type="file"
+              accept={ACCEPTED_FILE_TYPES}
+              onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
+              className="block w-full text-xs outline-none"
+              style={{ color: 'var(--text-secondary)' }}
+            />
+            {selectedFile && (
+              <p className="mt-1 text-[10px] font-mono" style={{ color: 'var(--text-subtle)' }}>
+                {selectedFile.name} · {formatFileSize(selectedFile.size)}
+              </p>
+            )}
+            <p className="text-[10px]" style={{ color: 'var(--text-subtle)' }}>
+              PDF, PNG, JPG, CSV, XLSX or TXT — up to 10 MB.
+            </p>
+          </div>
+        )}
+
+        {attachments.length > 0 && (
+          <div>
+            <p className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>
+              <Paperclip size={11} />
+              Attached files
+            </p>
+            <ul className="space-y-1">
+              {attachments.map((att) => (
+                <li key={att.attachment_id}
+                  className="flex items-center justify-between gap-2 rounded-lg border px-3 py-1.5"
+                  style={{ background: 'var(--bg-tertiary)', borderColor: 'var(--bg-border)' }}>
+                  <span className="font-mono text-[11px] truncate" style={{ color: 'var(--text-primary)' }}>
+                    {att.original_filename}
+                    <span className="text-[10px]" style={{ color: 'var(--text-subtle)' }}>
+                      {' '}· {formatFileSize(att.size_bytes)} · by {att.uploaded_by}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleDownload(att)}
+                    aria-label={`Download ${att.original_filename}`}
+                    className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold border transition-all hover:brightness-95"
+                    style={{ background: 'var(--bg-card)', borderColor: 'var(--bg-border)', color: 'var(--accent-blue)' }}
+                  >
+                    <Download size={11} />
+                    Download
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {conflict && (
           <div role="alert" className="px-3 py-2 rounded-lg border text-xs"

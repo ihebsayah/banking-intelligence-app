@@ -100,6 +100,8 @@ class Customer360Service:
         user: Any,
         customer_id: str,
         request_id: str = "",
+        context_type: Optional[str] = None,
+        context_id: Optional[str] = None,
     ) -> Optional[Tuple[Customer360Overview, Dict[str, Any]]]:
         """Return (overview, audit) or None when the customer is missing/out of scope."""
         try:
@@ -110,9 +112,12 @@ class Customer360Service:
             return None
 
         scope = await self._resolve_scope(user, customer_id)
-        if scope is None:
+        in_scope = scope is not None
+        allowed_branches, scope_ids = scope if in_scope else ([], [])
+        if not await self._authorize_customer_context(
+            user, customer_id, context_type, context_id, in_scope=in_scope
+        ):
             return None
-        allowed_branches, scope_ids = scope
 
         data_quality = DataQuality()
         perms = set(user.permissions or [])
@@ -284,6 +289,8 @@ class Customer360Service:
         request_id: str = "",
         limit: int = 20,
         offset: int = 0,
+        context_type: Optional[str] = None,
+        context_id: Optional[str] = None,
     ) -> Optional[Tuple[TransactionSummary, List[TransactionRow], int, DataQuality, Dict[str, Any]]]:
         """Recent transactions + lifetime summary for one customer.
 
@@ -299,9 +306,12 @@ class Customer360Service:
             return None
 
         scope = await self._resolve_scope(user, customer_id)
-        if scope is None:
+        in_scope = scope is not None
+        allowed_branches, scope_ids = scope if in_scope else ([], [])
+        if not await self._authorize_customer_context(
+            user, customer_id, context_type, context_id, in_scope=in_scope
+        ):
             return None
-        allowed_branches, scope_ids = scope
 
         data_quality = DataQuality()
         allowed_accounts: Optional[List[str]] = None
@@ -357,7 +367,13 @@ class Customer360Service:
         offset: int = 0,
         request_id: str = "",
     ) -> Tuple[CustomerSearchResponse, Dict[str, Any]]:
-        """Search authorized customers matching query within caller's org scope."""
+        """Search customers matching query within caller's org scope.
+
+        C6: standalone enumeration is admin-only by default; operational roles
+        (Analyst/Compliance) may search within their org scope too. Identity is
+        masked unless the caller holds customer:read_pii. The route guard
+        enforces the customer:read_* permission.
+        """
         clean_q = (query or "").strip()
         limit = max(1, min(50, limit))
         offset = max(0, offset)
@@ -485,6 +501,85 @@ class Customer360Service:
         # finer-grained production scopes land.
         role = user.user_role
         return [{"scope_id": "global" if role == "admin" else "hq_main", "scope_type": "bank"}]
+
+    # ── workflow-context authorization ──────────────────────────────────────
+
+    async def _authorize_customer_context(
+        self,
+        user: Any,
+        customer_id: str,
+        context_type: Optional[str],
+        context_id: Optional[str],
+        in_scope: bool = False,
+    ) -> bool:
+        """Gate Customer 360 reads for operational roles.
+
+        Object-context authorization (C6): permission + scope/relationship =
+        access. A customer is readable by an operational role when (a) it lies
+        within the caller's org scope (standalone search/direct access), or
+        (b) it is reachable through an authorized workflow object (alert /
+        investigation / case) the caller owns or is assigned to, whose customer
+        linkage equals the requested customer. Admin keeps the approved
+        metadata-only platform read (not operational — no context object
+        required).
+        """
+        role = (user.user_role or "").lower()
+        if role == "admin":
+            return True
+
+        if in_scope:
+            return True
+
+        if context_type is None or context_id is None:
+            return False
+        ct = context_type.strip().lower()
+        cid = str(context_id).strip()
+        if ct not in ("alert", "investigation", "case") or not cid:
+            return False
+
+        if self._wb is None:
+            return False
+
+        try:
+            if ct == "alert":
+                row = await self._wb.fetch_alert_context(cid)
+                if not row:
+                    return False
+                if (row.get("related_entity_type") or "").lower() != "customer":
+                    return False
+                if str(row.get("related_entity_id") or "") != str(customer_id):
+                    return False
+                # analyst only — compliance has no standalone alert workspace
+                return role == "analyst" and str(row.get("assigned_to") or "") == str(user.user_id)
+
+            if ct == "investigation":
+                row = await self._wb.fetch_investigation_context(cid)
+                if not row:
+                    return False
+                if (row.get("related_entity_type") or "").lower() != "customer":
+                    return False
+                if str(row.get("related_entity_id") or "") != str(customer_id):
+                    return False
+                if role == "analyst":
+                    return str(row.get("analyst_id") or "") == str(user.user_id)
+                if role == "compliance":
+                    return str(row.get("compliance_officer_id") or "") == str(user.user_id)
+                return False
+
+            if ct == "case":
+                row = await self._wb.fetch_case_context(cid)
+                if not row:
+                    return False
+                if (row.get("related_entity_type") or "").lower() != "customer":
+                    return False
+                if str(row.get("related_entity_id") or "") != str(customer_id):
+                    return False
+                # compliance only — analysts have no case workspace
+                return role == "compliance" and str(row.get("assigned_to") or "") == str(user.user_id)
+        except Exception:
+            return False
+
+        return False
 
     # ── section builders ────────────────────────────────────────────────────
 

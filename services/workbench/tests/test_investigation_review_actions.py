@@ -4,6 +4,11 @@ Tests for:
  - Mark Not Harmful (§18 tests 1-9)
  - Escalate to Compliance Case (§18 tests 10-21)
  - Information Request regression (§18 tests 22-23)
+
+These unit tests patch the concrete repository classes (as in
+test_notifications.py / test_comments.py) rather than the raw `_fetch_one`
+helper, since the C5 flow now persists decisions structurally via
+ReviewDecisionRepo and resolves the source alert via AlertRepo.
 """
 import uuid
 from datetime import datetime, timezone
@@ -15,7 +20,10 @@ from shared.authorise import (
     ApplicationUser, AuthorisationError, PermissionDeniedError,
 )
 from workbench.exceptions import InvalidTransition, ResourceNotFound, VersionConflict, WorkbenchError
-from workbench.models import ComplianceCase, Investigation
+from workbench.models import (
+    Alert, ComplianceCase, Investigation, InvestigationReportSubmission,
+    InvestigationReviewDecision,
+)
 from workbench.schemas.investigations import (
     EscalateInvestigationRequest, ReviewNotHarmfulRequest,
     TransitionInvestigationRequest,
@@ -93,6 +101,42 @@ def submitted_inv(**kwargs) -> Investigation:
     return Investigation(**defaults)
 
 
+def make_alert(**kwargs) -> Alert:
+    defaults = {
+        "alert_id": "alert_001",
+        "alert_type": "kpi_breach",
+        "severity": "high",
+        "title": "Test Alert",
+        "description": None,
+        "scope_id": "hq_main",
+        "status": "under_investigation",
+        "assigned_to": "analyst1",
+        "version": 1,
+        "created_at": _now(),
+        "updated_at": _now(),
+    }
+    defaults.update(kwargs)
+    return Alert(**defaults)
+
+
+def make_snapshot(**kwargs) -> InvestigationReportSubmission:
+    defaults = {
+        "submission_id": str(uuid.uuid4()),
+        "investigation_id": str(uuid.uuid4()),
+        "analyst_id": "analyst1",
+        "compliance_officer_id": "comp1",
+        "findings_text": "Evidence found",
+        "findings_refs": [],
+        "conclusion": "Suspicious",
+        "submitted_at": _now(),
+        "evidence_manifest": [],
+        "report_hash": "abc123",
+        "created_at": _now(),
+    }
+    defaults.update(kwargs)
+    return InvestigationReportSubmission(**defaults)
+
+
 def mock_uow():
     uow = MagicMock()
     uow.conn = MagicMock()
@@ -100,6 +144,10 @@ def mock_uow():
     cm.__aenter__ = AsyncMock(return_value=uow)
     cm.__aexit__ = AsyncMock(return_value=None)
     return cm
+
+
+# Patch target mirrors the pattern in test_notifications.py / test_comments.py.
+AUTH_TARGET = "workbench.services.investigation_service.authorise"
 
 
 # ── Mark Not Harmful Tests ─────────────────────────────────────────────────────
@@ -111,40 +159,29 @@ class TestMarkNotHarmful:
         """Test 1: Compliance can mark a submitted investigation not harmful."""
         inv = submitted_inv()
         req = ReviewNotHarmfulRequest(rationale="No AML indicators found.", expected_version=3)
-
-        async def fake_fetch_one(*args, **kwargs):
-            sql = str(args[1]) if len(args) > 1 else ""
-            if "FROM investigations" in sql:
-                return inv.model_dump()
-            if "FROM users" in sql:
-                return {"status": "active"}
-            if "idempotency" in sql.lower():
-                return None
-            return None
-
-        async def fake_fetch_all(*args, **kwargs):
-            return []
-
-        async def fake_execute(*args, **kwargs):
-            return "UPDATE 1"
-
-        mock_db.fetch_one = AsyncMock(side_effect=fake_fetch_one)
-        mock_db.fetch_all = AsyncMock(side_effect=fake_fetch_all)
-        mock_db.execute = AsyncMock(side_effect=fake_execute)
-
+        decisions = []
+        alert = make_alert()
         with patch("workbench.services.investigation_service.UnitOfWork", return_value=mock_uow()), \
              patch("workbench.repos.InvestigationRepo.fetch_by_id", new_callable=AsyncMock, return_value=inv), \
              patch("workbench.repos.InvestigationRepo.update", new_callable=AsyncMock, return_value=inv), \
-             patch("workbench.repos.CommentRepo.create", new_callable=AsyncMock), \
+             patch("workbench.repos.ReviewDecisionRepo.insert", side_effect=lambda d, c: decisions.append(d) or d), \
+             patch("workbench.repos.AlertRepo.fetch_by_id", new_callable=AsyncMock, return_value=alert), \
+             patch("workbench.repos.AlertRepo.update", new_callable=AsyncMock), \
+             patch("workbench.repos.NotificationRepo.insert", new_callable=AsyncMock), \
              patch("workbench.repos.TimelineRepo.insert", new_callable=AsyncMock), \
              patch("workbench.repos.OutboxRepo.insert", new_callable=AsyncMock), \
              patch("workbench.repos.IdempotencyRepo.lookup", new_callable=AsyncMock, return_value=None), \
              patch("workbench.repos.IdempotencyRepo.store", new_callable=AsyncMock), \
-             patch("shared.authorise.authorise", new_callable=AsyncMock):
+             patch(AUTH_TARGET, new_callable=AsyncMock):
             svc = InvestigationService(mock_db)
             result = await svc.review_not_harmful(COMPLIANCE, inv.investigation_id, req)
             assert result.success is True
             assert result.investigation.status == "completed"
+            assert len(decisions) == 1
+            assert decisions[0].decision_type == "NOT_HARMFUL"
+            assert decisions[0].resulting_case_id is None
+            assert decisions[0].rationale == "No AML indicators found."
+            assert decisions[0].compliance_officer_id == COMPLIANCE.user_id
 
     @pytest.mark.asyncio
     async def test_2_analyst_cannot_mark_not_harmful(self, mock_db):
@@ -155,7 +192,7 @@ class TestMarkNotHarmful:
         with patch("workbench.services.investigation_service.UnitOfWork", return_value=mock_uow()), \
              patch("workbench.repos.InvestigationRepo.fetch_by_id", new_callable=AsyncMock, return_value=inv), \
              patch("workbench.repos.IdempotencyRepo.lookup", new_callable=AsyncMock, return_value=None), \
-             patch("shared.authorise.authorise", new_callable=AsyncMock, side_effect=PermissionDeniedError("investigation:review")):
+             patch(AUTH_TARGET, new_callable=AsyncMock, side_effect=PermissionDeniedError("investigation:review")):
             svc = InvestigationService(mock_db)
             with pytest.raises(PermissionDeniedError):
                 await svc.review_not_harmful(ANALYST, inv.investigation_id, req)
@@ -168,9 +205,10 @@ class TestMarkNotHarmful:
 
         with patch("workbench.services.investigation_service.UnitOfWork", return_value=mock_uow()), \
              patch("workbench.repos.InvestigationRepo.fetch_by_id", new_callable=AsyncMock, return_value=inv), \
-             patch("workbench.repos.IdempotencyRepo.lookup", new_callable=AsyncMock, return_value=None):
+             patch("workbench.repos.IdempotencyRepo.lookup", new_callable=AsyncMock, return_value=None), \
+             patch(AUTH_TARGET, new_callable=AsyncMock, side_effect=PermissionDeniedError("investigation:review")):
             svc = InvestigationService(mock_db)
-            with pytest.raises(AuthorisationError):
+            with pytest.raises(PermissionDeniedError):
                 await svc.review_not_harmful(ADMIN, inv.investigation_id, req)
 
     def test_4_rationale_required(self):
@@ -188,7 +226,7 @@ class TestMarkNotHarmful:
         with patch("workbench.services.investigation_service.UnitOfWork", return_value=mock_uow()), \
              patch("workbench.repos.InvestigationRepo.fetch_by_id", new_callable=AsyncMock, return_value=inv), \
              patch("workbench.repos.IdempotencyRepo.lookup", new_callable=AsyncMock, return_value=None), \
-             patch("workbench.services.investigation_service.authorise", new_callable=AsyncMock):
+             patch(AUTH_TARGET, new_callable=AsyncMock):
             svc = InvestigationService(mock_db)
             with pytest.raises(InvalidTransition):
                 await svc.review_not_harmful(COMPLIANCE, inv.investigation_id, req)
@@ -204,12 +242,15 @@ class TestMarkNotHarmful:
         with patch("workbench.services.investigation_service.UnitOfWork", return_value=mock_uow()), \
              patch("workbench.repos.InvestigationRepo.fetch_by_id", new_callable=AsyncMock, return_value=inv), \
              patch("workbench.repos.InvestigationRepo.update", new_callable=AsyncMock, return_value=completed_inv), \
-             patch("workbench.repos.CommentRepo.create", new_callable=AsyncMock), \
+             patch("workbench.repos.ReviewDecisionRepo.insert", new_callable=AsyncMock), \
+             patch("workbench.repos.AlertRepo.fetch_by_id", new_callable=AsyncMock, return_value=make_alert()), \
+             patch("workbench.repos.AlertRepo.update", new_callable=AsyncMock), \
+             patch("workbench.repos.NotificationRepo.insert", new_callable=AsyncMock), \
              patch("workbench.repos.TimelineRepo.insert", new_callable=AsyncMock), \
              patch("workbench.repos.OutboxRepo.insert", new_callable=AsyncMock), \
              patch("workbench.repos.IdempotencyRepo.lookup", new_callable=AsyncMock, return_value=None), \
              patch("workbench.repos.IdempotencyRepo.store", new_callable=AsyncMock), \
-             patch("shared.authorise.authorise", new_callable=AsyncMock):
+             patch(AUTH_TARGET, new_callable=AsyncMock):
             svc = InvestigationService(mock_db)
             result = await svc.review_not_harmful(COMPLIANCE, inv.investigation_id, req)
             assert result.investigation.status == "completed"
@@ -227,16 +268,20 @@ class TestMarkNotHarmful:
         with patch("workbench.services.investigation_service.UnitOfWork", return_value=mock_uow()), \
              patch("workbench.repos.InvestigationRepo.fetch_by_id", new_callable=AsyncMock, return_value=inv), \
              patch("workbench.repos.InvestigationRepo.update", new_callable=AsyncMock, return_value=inv), \
-             patch("workbench.repos.CommentRepo.create", new_callable=AsyncMock), \
+             patch("workbench.repos.ReviewDecisionRepo.insert", new_callable=AsyncMock), \
+             patch("workbench.repos.AlertRepo.fetch_by_id", new_callable=AsyncMock, return_value=make_alert()), \
+             patch("workbench.repos.AlertRepo.update", new_callable=AsyncMock), \
+             patch("workbench.repos.NotificationRepo.insert", new_callable=AsyncMock), \
              patch("workbench.repos.TimelineRepo.insert", side_effect=capture_timeline), \
              patch("workbench.repos.OutboxRepo.insert", new_callable=AsyncMock), \
              patch("workbench.repos.IdempotencyRepo.lookup", new_callable=AsyncMock, return_value=None), \
              patch("workbench.repos.IdempotencyRepo.store", new_callable=AsyncMock), \
-             patch("shared.authorise.authorise", new_callable=AsyncMock):
+             patch(AUTH_TARGET, new_callable=AsyncMock):
             svc = InvestigationService(mock_db)
             await svc.review_not_harmful(COMPLIANCE, inv.investigation_id, req)
             event_types = [e.event_type for e in timeline_calls]
             assert "investigation.review_not_harmful" in event_types
+            assert "alert.resolved_from_investigation" in event_types
 
     @pytest.mark.asyncio
     async def test_8_no_case_created_on_not_harmful(self, mock_db):
@@ -251,13 +296,16 @@ class TestMarkNotHarmful:
         with patch("workbench.services.investigation_service.UnitOfWork", return_value=mock_uow()), \
              patch("workbench.repos.InvestigationRepo.fetch_by_id", new_callable=AsyncMock, return_value=inv), \
              patch("workbench.repos.InvestigationRepo.update", new_callable=AsyncMock, return_value=inv), \
-             patch("workbench.repos.CommentRepo.create", new_callable=AsyncMock), \
+             patch("workbench.repos.ReviewDecisionRepo.insert", new_callable=AsyncMock), \
+             patch("workbench.repos.AlertRepo.fetch_by_id", new_callable=AsyncMock, return_value=make_alert()), \
+             patch("workbench.repos.AlertRepo.update", new_callable=AsyncMock), \
+             patch("workbench.repos.NotificationRepo.insert", new_callable=AsyncMock), \
              patch("workbench.repos.TimelineRepo.insert", new_callable=AsyncMock), \
              patch("workbench.repos.OutboxRepo.insert", new_callable=AsyncMock), \
              patch("workbench.repos.IdempotencyRepo.lookup", new_callable=AsyncMock, return_value=None), \
              patch("workbench.repos.IdempotencyRepo.store", new_callable=AsyncMock), \
              patch("workbench.repos.CaseRepo.create", side_effect=capture_case_create), \
-             patch("shared.authorise.authorise", new_callable=AsyncMock):
+             patch(AUTH_TARGET, new_callable=AsyncMock):
             svc = InvestigationService(mock_db)
             await svc.review_not_harmful(COMPLIANCE, inv.investigation_id, req)
             assert len(case_creates) == 0
@@ -275,12 +323,15 @@ class TestMarkNotHarmful:
         with patch("workbench.services.investigation_service.UnitOfWork", return_value=mock_uow()), \
              patch("workbench.repos.InvestigationRepo.fetch_by_id", new_callable=AsyncMock, return_value=inv), \
              patch("workbench.repos.InvestigationRepo.update", new_callable=AsyncMock, return_value=inv), \
-             patch("workbench.repos.CommentRepo.create", new_callable=AsyncMock), \
+             patch("workbench.repos.ReviewDecisionRepo.insert", new_callable=AsyncMock), \
+             patch("workbench.repos.AlertRepo.fetch_by_id", new_callable=AsyncMock, return_value=make_alert()), \
+             patch("workbench.repos.AlertRepo.update", new_callable=AsyncMock), \
+             patch("workbench.repos.NotificationRepo.insert", new_callable=AsyncMock), \
              patch("workbench.repos.TimelineRepo.insert", new_callable=AsyncMock), \
              patch("workbench.repos.OutboxRepo.insert", side_effect=capture_outbox), \
              patch("workbench.repos.IdempotencyRepo.lookup", new_callable=AsyncMock, return_value=None), \
              patch("workbench.repos.IdempotencyRepo.store", new_callable=AsyncMock), \
-             patch("shared.authorise.authorise", new_callable=AsyncMock):
+             patch(AUTH_TARGET, new_callable=AsyncMock):
             svc = InvestigationService(mock_db)
             await svc.review_not_harmful(COMPLIANCE, inv.investigation_id, req)
             event_types = [e.event_type for e in outbox_calls]
@@ -310,23 +361,37 @@ class TestEscalateToCase:
         """Test 10: Compliance with review+case:create can escalate."""
         inv = submitted_inv()
         req = self._escalate_req()
+        created_cases = []
+        decisions = []
 
         with patch("workbench.services.investigation_service.UnitOfWork", return_value=mock_uow()), \
              patch("workbench.repos.InvestigationRepo.fetch_by_id", new_callable=AsyncMock, return_value=inv), \
              patch("workbench.repos.InvestigationRepo.update", new_callable=AsyncMock, return_value=inv), \
+             patch("workbench.repos.ReportSubmissionRepo.fetch_for_investigation",
+                   new_callable=AsyncMock, return_value=make_snapshot()), \
              patch("workbench.repos.CaseRepo.fetch_active_for_investigation", new_callable=AsyncMock, return_value=None), \
-             patch("workbench.repos.CaseRepo.create", new_callable=AsyncMock), \
-             patch("workbench.repos.CommentRepo.create", new_callable=AsyncMock), \
+             patch("workbench.repos.CaseRepo.create",
+                   side_effect=lambda c, conn: created_cases.append(c) or c), \
+             patch("workbench.repos.ReviewDecisionRepo.insert",
+                   side_effect=lambda d, c: decisions.append(d) or d), \
+             patch("workbench.repos.AlertRepo.fetch_by_id", new_callable=AsyncMock, return_value=make_alert()), \
+             patch("workbench.repos.AlertRepo.update", new_callable=AsyncMock), \
+             patch("workbench.repos.NotificationRepo.insert", new_callable=AsyncMock), \
              patch("workbench.repos.TimelineRepo.insert", new_callable=AsyncMock), \
              patch("workbench.repos.OutboxRepo.insert", new_callable=AsyncMock), \
              patch("workbench.repos.IdempotencyRepo.lookup", new_callable=AsyncMock, return_value=None), \
              patch("workbench.repos.IdempotencyRepo.store", new_callable=AsyncMock), \
-             patch("shared.authorise.authorise", new_callable=AsyncMock):
+             patch(AUTH_TARGET, new_callable=AsyncMock):
             svc = InvestigationService(mock_db)
             result = await svc.escalate_to_case(COMPLIANCE, inv.investigation_id, req)
             assert result.success is True
             assert result.case_id is not None
             assert result.investigation.status == "completed"
+            assert len(created_cases) == 1
+            assert created_cases[0].assigned_to == COMPLIANCE.user_id
+            assert len(decisions) == 1
+            assert decisions[0].decision_type == "ESCALATE_TO_CASE"
+            assert decisions[0].resulting_case_id == created_cases[0].case_id
 
     @pytest.mark.asyncio
     async def test_11_analyst_cannot_escalate(self, mock_db):
@@ -337,7 +402,7 @@ class TestEscalateToCase:
         with patch("workbench.services.investigation_service.UnitOfWork", return_value=mock_uow()), \
              patch("workbench.repos.InvestigationRepo.fetch_by_id", new_callable=AsyncMock, return_value=inv), \
              patch("workbench.repos.IdempotencyRepo.lookup", new_callable=AsyncMock, return_value=None), \
-             patch("shared.authorise.authorise", new_callable=AsyncMock, side_effect=PermissionDeniedError("investigation:review")):
+             patch(AUTH_TARGET, new_callable=AsyncMock, side_effect=PermissionDeniedError("investigation:review")):
             svc = InvestigationService(mock_db)
             with pytest.raises(PermissionDeniedError):
                 await svc.escalate_to_case(ANALYST, inv.investigation_id, req)
@@ -350,10 +415,29 @@ class TestEscalateToCase:
 
         with patch("workbench.services.investigation_service.UnitOfWork", return_value=mock_uow()), \
              patch("workbench.repos.InvestigationRepo.fetch_by_id", new_callable=AsyncMock, return_value=inv), \
-             patch("workbench.repos.IdempotencyRepo.lookup", new_callable=AsyncMock, return_value=None):
+             patch("workbench.repos.IdempotencyRepo.lookup", new_callable=AsyncMock, return_value=None), \
+             patch(AUTH_TARGET, new_callable=AsyncMock, side_effect=PermissionDeniedError("investigation:review")):
             svc = InvestigationService(mock_db)
-            with pytest.raises(AuthorisationError):
+            with pytest.raises(PermissionDeniedError):
                 await svc.escalate_to_case(ADMIN, inv.investigation_id, req)
+
+    @pytest.mark.asyncio
+    async def test_no_snapshot_rejected(self, mock_db):
+        """Escalate requires an immutable submission snapshot (NO_SUBMISSION_SNAPSHOT)."""
+        inv = submitted_inv()
+        req = self._escalate_req()
+
+        with patch("workbench.services.investigation_service.UnitOfWork", return_value=mock_uow()), \
+             patch("workbench.repos.InvestigationRepo.fetch_by_id", new_callable=AsyncMock, return_value=inv), \
+             patch("workbench.repos.ReportSubmissionRepo.fetch_for_investigation",
+                   new_callable=AsyncMock, return_value=None), \
+             patch("workbench.repos.IdempotencyRepo.lookup", new_callable=AsyncMock, return_value=None), \
+             patch(AUTH_TARGET, new_callable=AsyncMock):
+            svc = InvestigationService(mock_db)
+            with pytest.raises(WorkbenchError) as exc_info:
+                await svc.escalate_to_case(COMPLIANCE, inv.investigation_id, req)
+            assert exc_info.value.http_status == 409
+            assert "NO_SUBMISSION_SNAPSHOT" in exc_info.value.code
 
     @pytest.mark.asyncio
     async def test_13_case_links_to_investigation(self, mock_db):
@@ -368,14 +452,19 @@ class TestEscalateToCase:
         with patch("workbench.services.investigation_service.UnitOfWork", return_value=mock_uow()), \
              patch("workbench.repos.InvestigationRepo.fetch_by_id", new_callable=AsyncMock, return_value=inv), \
              patch("workbench.repos.InvestigationRepo.update", new_callable=AsyncMock, return_value=inv), \
+             patch("workbench.repos.ReportSubmissionRepo.fetch_for_investigation",
+                   new_callable=AsyncMock, return_value=make_snapshot()), \
              patch("workbench.repos.CaseRepo.fetch_active_for_investigation", new_callable=AsyncMock, return_value=None), \
              patch("workbench.repos.CaseRepo.create", side_effect=capture_case), \
-             patch("workbench.repos.CommentRepo.create", new_callable=AsyncMock), \
+             patch("workbench.repos.ReviewDecisionRepo.insert", new_callable=AsyncMock), \
+             patch("workbench.repos.AlertRepo.fetch_by_id", new_callable=AsyncMock, return_value=make_alert()), \
+             patch("workbench.repos.AlertRepo.update", new_callable=AsyncMock), \
+             patch("workbench.repos.NotificationRepo.insert", new_callable=AsyncMock), \
              patch("workbench.repos.TimelineRepo.insert", new_callable=AsyncMock), \
              patch("workbench.repos.OutboxRepo.insert", new_callable=AsyncMock), \
              patch("workbench.repos.IdempotencyRepo.lookup", new_callable=AsyncMock, return_value=None), \
              patch("workbench.repos.IdempotencyRepo.store", new_callable=AsyncMock), \
-             patch("shared.authorise.authorise", new_callable=AsyncMock):
+             patch(AUTH_TARGET, new_callable=AsyncMock):
             svc = InvestigationService(mock_db)
             await svc.escalate_to_case(COMPLIANCE, inv.investigation_id, req)
             assert len(created_cases) == 1
@@ -394,14 +483,19 @@ class TestEscalateToCase:
         with patch("workbench.services.investigation_service.UnitOfWork", return_value=mock_uow()), \
              patch("workbench.repos.InvestigationRepo.fetch_by_id", new_callable=AsyncMock, return_value=inv), \
              patch("workbench.repos.InvestigationRepo.update", new_callable=AsyncMock, return_value=inv), \
+             patch("workbench.repos.ReportSubmissionRepo.fetch_for_investigation",
+                   new_callable=AsyncMock, return_value=make_snapshot()), \
              patch("workbench.repos.CaseRepo.fetch_active_for_investigation", new_callable=AsyncMock, return_value=None), \
              patch("workbench.repos.CaseRepo.create", side_effect=capture_case), \
-             patch("workbench.repos.CommentRepo.create", new_callable=AsyncMock), \
+             patch("workbench.repos.ReviewDecisionRepo.insert", new_callable=AsyncMock), \
+             patch("workbench.repos.AlertRepo.fetch_by_id", new_callable=AsyncMock, return_value=make_alert(alert_id="alert_42")), \
+             patch("workbench.repos.AlertRepo.update", new_callable=AsyncMock), \
+             patch("workbench.repos.NotificationRepo.insert", new_callable=AsyncMock), \
              patch("workbench.repos.TimelineRepo.insert", new_callable=AsyncMock), \
              patch("workbench.repos.OutboxRepo.insert", new_callable=AsyncMock), \
              patch("workbench.repos.IdempotencyRepo.lookup", new_callable=AsyncMock, return_value=None), \
              patch("workbench.repos.IdempotencyRepo.store", new_callable=AsyncMock), \
-             patch("shared.authorise.authorise", new_callable=AsyncMock):
+             patch(AUTH_TARGET, new_callable=AsyncMock):
             svc = InvestigationService(mock_db)
             await svc.escalate_to_case(COMPLIANCE, inv.investigation_id, req)
             assert created_cases[0].alert_id == "alert_42"
@@ -425,13 +519,19 @@ class TestEscalateToCase:
         with patch("workbench.services.investigation_service.UnitOfWork", return_value=mock_uow()), \
              patch("workbench.repos.InvestigationRepo.fetch_by_id", new_callable=AsyncMock, return_value=inv), \
              patch("workbench.repos.InvestigationRepo.update", new_callable=AsyncMock, return_value=inv), \
+             patch("workbench.repos.ReportSubmissionRepo.fetch_for_investigation",
+                   new_callable=AsyncMock, return_value=make_snapshot(investigation_id=inv.investigation_id)), \
              patch("workbench.repos.CaseRepo.fetch_active_for_investigation", new_callable=AsyncMock, return_value=None), \
              patch("workbench.repos.CaseRepo.create", side_effect=capture_case), \
-             patch("workbench.repos.CommentRepo.create", new_callable=AsyncMock), \
+             patch("workbench.repos.ReviewDecisionRepo.insert", new_callable=AsyncMock), \
+             patch("workbench.repos.AlertRepo.fetch_by_id", new_callable=AsyncMock, return_value=make_alert(scope_id="branch_north")), \
+             patch("workbench.repos.AlertRepo.update", new_callable=AsyncMock), \
+             patch("workbench.repos.NotificationRepo.insert", new_callable=AsyncMock), \
              patch("workbench.repos.TimelineRepo.insert", new_callable=AsyncMock), \
              patch("workbench.repos.OutboxRepo.insert", new_callable=AsyncMock), \
              patch("workbench.repos.IdempotencyRepo.lookup", new_callable=AsyncMock, return_value=None), \
-             patch("workbench.repos.IdempotencyRepo.store", new_callable=AsyncMock):
+             patch("workbench.repos.IdempotencyRepo.store", new_callable=AsyncMock), \
+             patch(AUTH_TARGET, new_callable=AsyncMock):
             svc = InvestigationService(mock_db)
             await svc.escalate_to_case(comp_branch, inv.investigation_id, req)
             assert created_cases[0].scope_id == "branch_north"
@@ -445,14 +545,19 @@ class TestEscalateToCase:
         with patch("workbench.services.investigation_service.UnitOfWork", return_value=mock_uow()), \
              patch("workbench.repos.InvestigationRepo.fetch_by_id", new_callable=AsyncMock, return_value=inv), \
              patch("workbench.repos.InvestigationRepo.update", new_callable=AsyncMock, return_value=inv), \
+             patch("workbench.repos.ReportSubmissionRepo.fetch_for_investigation",
+                   new_callable=AsyncMock, return_value=make_snapshot()), \
              patch("workbench.repos.CaseRepo.fetch_active_for_investigation", new_callable=AsyncMock, return_value=None), \
              patch("workbench.repos.CaseRepo.create", new_callable=AsyncMock), \
-             patch("workbench.repos.CommentRepo.create", new_callable=AsyncMock), \
+             patch("workbench.repos.ReviewDecisionRepo.insert", new_callable=AsyncMock), \
+             patch("workbench.repos.AlertRepo.fetch_by_id", new_callable=AsyncMock, return_value=make_alert()), \
+             patch("workbench.repos.AlertRepo.update", new_callable=AsyncMock), \
+             patch("workbench.repos.NotificationRepo.insert", new_callable=AsyncMock), \
              patch("workbench.repos.TimelineRepo.insert", new_callable=AsyncMock), \
              patch("workbench.repos.OutboxRepo.insert", new_callable=AsyncMock), \
              patch("workbench.repos.IdempotencyRepo.lookup", new_callable=AsyncMock, return_value=None), \
              patch("workbench.repos.IdempotencyRepo.store", new_callable=AsyncMock), \
-             patch("shared.authorise.authorise", new_callable=AsyncMock):
+             patch(AUTH_TARGET, new_callable=AsyncMock):
             svc = InvestigationService(mock_db)
             result = await svc.escalate_to_case(COMPLIANCE, inv.investigation_id, req)
             assert result.investigation.status == "completed"
@@ -466,14 +571,19 @@ class TestEscalateToCase:
         with patch("workbench.services.investigation_service.UnitOfWork", return_value=mock_uow()), \
              patch("workbench.repos.InvestigationRepo.fetch_by_id", new_callable=AsyncMock, return_value=inv), \
              patch("workbench.repos.InvestigationRepo.update", new_callable=AsyncMock, return_value=inv), \
+             patch("workbench.repos.ReportSubmissionRepo.fetch_for_investigation",
+                   new_callable=AsyncMock, return_value=make_snapshot()), \
              patch("workbench.repos.CaseRepo.fetch_active_for_investigation", new_callable=AsyncMock, return_value=None), \
              patch("workbench.repos.CaseRepo.create", new_callable=AsyncMock), \
-             patch("workbench.repos.CommentRepo.create", new_callable=AsyncMock), \
+             patch("workbench.repos.ReviewDecisionRepo.insert", new_callable=AsyncMock), \
+             patch("workbench.repos.AlertRepo.fetch_by_id", new_callable=AsyncMock, return_value=make_alert()), \
+             patch("workbench.repos.AlertRepo.update", new_callable=AsyncMock), \
+             patch("workbench.repos.NotificationRepo.insert", new_callable=AsyncMock), \
              patch("workbench.repos.TimelineRepo.insert", new_callable=AsyncMock), \
              patch("workbench.repos.OutboxRepo.insert", new_callable=AsyncMock), \
              patch("workbench.repos.IdempotencyRepo.lookup", new_callable=AsyncMock, return_value=None), \
              patch("workbench.repos.IdempotencyRepo.store", new_callable=AsyncMock), \
-             patch("shared.authorise.authorise", new_callable=AsyncMock):
+             patch(AUTH_TARGET, new_callable=AsyncMock):
             svc = InvestigationService(mock_db)
             result = await svc.escalate_to_case(COMPLIANCE, inv.investigation_id, req)
             assert result.investigation.status != "submitted"
@@ -491,14 +601,19 @@ class TestEscalateToCase:
         with patch("workbench.services.investigation_service.UnitOfWork", return_value=mock_uow()), \
              patch("workbench.repos.InvestigationRepo.fetch_by_id", new_callable=AsyncMock, return_value=inv), \
              patch("workbench.repos.InvestigationRepo.update", new_callable=AsyncMock, return_value=inv), \
+             patch("workbench.repos.ReportSubmissionRepo.fetch_for_investigation",
+                   new_callable=AsyncMock, return_value=make_snapshot()), \
              patch("workbench.repos.CaseRepo.fetch_active_for_investigation", new_callable=AsyncMock, return_value=None), \
              patch("workbench.repos.CaseRepo.create", new_callable=AsyncMock), \
-             patch("workbench.repos.CommentRepo.create", new_callable=AsyncMock), \
+             patch("workbench.repos.ReviewDecisionRepo.insert", new_callable=AsyncMock), \
+             patch("workbench.repos.AlertRepo.fetch_by_id", new_callable=AsyncMock, return_value=make_alert()), \
+             patch("workbench.repos.AlertRepo.update", new_callable=AsyncMock), \
+             patch("workbench.repos.NotificationRepo.insert", new_callable=AsyncMock), \
              patch("workbench.repos.TimelineRepo.insert", side_effect=capture_timeline), \
              patch("workbench.repos.OutboxRepo.insert", new_callable=AsyncMock), \
              patch("workbench.repos.IdempotencyRepo.lookup", new_callable=AsyncMock, return_value=None), \
              patch("workbench.repos.IdempotencyRepo.store", new_callable=AsyncMock), \
-             patch("shared.authorise.authorise", new_callable=AsyncMock):
+             patch(AUTH_TARGET, new_callable=AsyncMock):
             svc = InvestigationService(mock_db)
             await svc.escalate_to_case(COMPLIANCE, inv.investigation_id, req)
             event_types = [e.event_type for e in timeline_calls]
@@ -516,10 +631,12 @@ class TestEscalateToCase:
 
         with patch("workbench.services.investigation_service.UnitOfWork", return_value=mock_uow()), \
              patch("workbench.repos.InvestigationRepo.fetch_by_id", new_callable=AsyncMock, return_value=inv), \
+             patch("workbench.repos.ReportSubmissionRepo.fetch_for_investigation",
+                   new_callable=AsyncMock, return_value=make_snapshot()), \
              patch("workbench.repos.CaseRepo.fetch_active_for_investigation", new_callable=AsyncMock, return_value=None), \
              patch("workbench.repos.CaseRepo.create", side_effect=failing_case_create), \
              patch("workbench.repos.IdempotencyRepo.lookup", new_callable=AsyncMock, return_value=None), \
-             patch("shared.authorise.authorise", new_callable=AsyncMock):
+             patch(AUTH_TARGET, new_callable=AsyncMock):
             svc = InvestigationService(mock_db)
             with pytest.raises(RuntimeError, match="DB write failed"):
                 await svc.escalate_to_case(COMPLIANCE, inv.investigation_id, req)
@@ -532,15 +649,19 @@ class TestEscalateToCase:
         existing_case = ComplianceCase(
             case_id="existing_case_1", title="Prior Case",
             investigation_id=inv.investigation_id,
+            alert_id=inv.alert_id,
             scope_id="hq_main", created_by="comp1",
+            assigned_to="comp1", priority="high",
             version=1, created_at=_now(), updated_at=_now(),
         )
 
         with patch("workbench.services.investigation_service.UnitOfWork", return_value=mock_uow()), \
              patch("workbench.repos.InvestigationRepo.fetch_by_id", new_callable=AsyncMock, return_value=inv), \
+             patch("workbench.repos.ReportSubmissionRepo.fetch_for_investigation",
+                   new_callable=AsyncMock, return_value=make_snapshot()), \
              patch("workbench.repos.CaseRepo.fetch_active_for_investigation", new_callable=AsyncMock, return_value=existing_case), \
              patch("workbench.repos.IdempotencyRepo.lookup", new_callable=AsyncMock, return_value=None), \
-             patch("shared.authorise.authorise", new_callable=AsyncMock):
+             patch(AUTH_TARGET, new_callable=AsyncMock):
             svc = InvestigationService(mock_db)
             with pytest.raises(WorkbenchError) as exc_info:
                 await svc.escalate_to_case(COMPLIANCE, inv.investigation_id, req)
@@ -560,14 +681,19 @@ class TestEscalateToCase:
         with patch("workbench.services.investigation_service.UnitOfWork", return_value=mock_uow()), \
              patch("workbench.repos.InvestigationRepo.fetch_by_id", new_callable=AsyncMock, return_value=inv), \
              patch("workbench.repos.InvestigationRepo.update", new_callable=AsyncMock, return_value=inv), \
+             patch("workbench.repos.ReportSubmissionRepo.fetch_for_investigation",
+                   new_callable=AsyncMock, return_value=make_snapshot()), \
              patch("workbench.repos.CaseRepo.fetch_active_for_investigation", new_callable=AsyncMock, return_value=None), \
              patch("workbench.repos.CaseRepo.create", side_effect=capture_case), \
-             patch("workbench.repos.CommentRepo.create", new_callable=AsyncMock), \
+             patch("workbench.repos.ReviewDecisionRepo.insert", new_callable=AsyncMock), \
+             patch("workbench.repos.AlertRepo.fetch_by_id", new_callable=AsyncMock, return_value=make_alert()), \
+             patch("workbench.repos.AlertRepo.update", new_callable=AsyncMock), \
+             patch("workbench.repos.NotificationRepo.insert", new_callable=AsyncMock), \
              patch("workbench.repos.TimelineRepo.insert", new_callable=AsyncMock), \
              patch("workbench.repos.OutboxRepo.insert", new_callable=AsyncMock), \
              patch("workbench.repos.IdempotencyRepo.lookup", new_callable=AsyncMock, return_value=None), \
              patch("workbench.repos.IdempotencyRepo.store", new_callable=AsyncMock), \
-             patch("shared.authorise.authorise", new_callable=AsyncMock):
+             patch(AUTH_TARGET, new_callable=AsyncMock):
             svc = InvestigationService(mock_db)
             await svc.escalate_to_case(COMPLIANCE, inv.investigation_id, req)
             case = created_cases[0]
@@ -600,9 +726,17 @@ class TestInformationRequestRegression:
 
     @pytest.mark.asyncio
     async def test_23_ir_resolution_returns_to_submitted(self, mock_db):
-        """Test 23: Accepted/resolved IR returns awaiting_information -> submitted via IR service."""
+        """Test 23: Accepted/resolved IR returns awaiting_information -> active via IR service."""
         from workbench.services.investigation_service import ALLOWED_TRANSITIONS
-        # Verify the state machine allows this transition (done by IR service)
+        # Verify the state machine allows the bearer transition (done by IR service)
         assert "active" in ALLOWED_TRANSITIONS.get("awaiting_information", [])
-        # IR service completes the cycle: active -> submitted is then re-submitted by analyst
-        assert "submitted" in ALLOWED_TRANSITIONS.get("active", [])
+        # C3: submission is a dedicated endpoint, NOT a generic status transition.
+        # Ensure the generic PAP no longer exposes active -> submitted as a bare
+        # status change; it is handled by submit_to_compliance (eligible-officer
+        # + ownership enforced). IR resolution returns the investigation to
+        # `active`, from which the analyst uses the submit endpoint.
+        assert "submitted" not in ALLOWED_TRANSITIONS.get("active", [])
+        from workbench.services.investigation_service import (
+            InvestigationService,
+        )
+        assert callable(getattr(InvestigationService, "submit_to_compliance"))

@@ -3,6 +3,7 @@ import { apiClient } from './client';
 import type {
   CommentListResponse,
   CommentMutationResponse,
+  EligibleComplianceOfficer,
   FindingRef,
   Investigation,
   InvestigationListResponse,
@@ -39,6 +40,11 @@ export interface TransitionPayload {
 
 export interface CancelInvestigationPayload {
   cancel_reason: string;
+  expected_version: number;
+}
+
+export interface SubmitToCompliancePayload {
+  compliance_officer_id: string;
   expected_version: number;
 }
 
@@ -121,6 +127,18 @@ export const investigationsApi = {
     const res = await apiClient.post<{ success: boolean; investigation: Investigation; case_id: string; version: number }>(
       `/investigations/${investigationId}/review/escalate`, payload,
       { headers: { 'X-Request-ID': uuid(), 'X-Idempotency-Key': uuid() } });
+    return res.data;
+  },
+
+  submitToCompliance: async (investigationId: string, payload: SubmitToCompliancePayload): Promise<InvestigationMutationResponse> => {
+    const res = await apiClient.post<InvestigationMutationResponse>(
+      `/investigations/${investigationId}/submit`, payload,
+      { headers: { 'X-Request-ID': uuid(), 'X-Idempotency-Key': uuid() } });
+    return res.data;
+  },
+
+  listEligibleComplianceOfficers: async (): Promise<EligibleComplianceOfficer[]> => {
+    const res = await apiClient.get<EligibleComplianceOfficer[]>('/investigations/eligible-compliance-officers');
     return res.data;
   },
 };

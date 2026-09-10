@@ -50,13 +50,6 @@ class InvestigateAlertRequest(BaseModel):
     expected_version: int = Field(ge=1)
 
 
-class EscalateAlertRequest(BaseModel):
-    title: str
-    description: Optional[str] = None
-    priority: AlertSeverity = AlertSeverity.MEDIUM
-    expected_version: int = Field(ge=1)
-
-
 # ── Response Schemas ───────────────────────────────────────────────────────────
 
 class AlertResponse(BaseModel):
@@ -105,13 +98,6 @@ class AlertListResponse(BaseModel):
 class MutationResponse(BaseModel):
     success: bool = True
     alert: AlertResponse
-    version: int
-
-
-class EscalateResponse(BaseModel):
-    success: bool = True
-    alert: AlertResponse
-    case_id: str
     version: int
 
 

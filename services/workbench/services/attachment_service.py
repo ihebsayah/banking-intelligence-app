@@ -9,7 +9,10 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, BinaryIO, Dict, List, Optional, Tuple
 
-from shared.authorise import ApplicationUser, RequestContext, Resource, authorise
+from shared.authorise import (
+    ApplicationUser, PermissionDeniedError as AuthPermissionDenied,
+    RequestContext, Resource, WorkflowStateError, authorise,
+)
 from shared.database import DatabaseConnector
 from workbench.exceptions import (
     InvalidTransition, ResourceNotFound, VersionConflict, WorkbenchError,
@@ -39,6 +42,34 @@ def _resource_from_inv(inv: Investigation) -> Resource:
         assigned_to=inv.assigned_to, scope_id=inv.scope_id,
         version=inv.version, entity_type="investigation",
     )
+
+
+async def _authorise_attachment_read(
+    user: ApplicationUser,
+    inv: Investigation,
+    db: DatabaseConnector,
+    request_context: RequestContext,
+) -> None:
+    """Authorise listing/downloading an investigation's attachments.
+
+    Compliance officers review via ``investigation:review`` and fall back to
+    the broad ``investigation:read`` when the workflow state has moved past
+    review. Analysts only hold ``investigation:read_own`` (not the broad
+    ``read``), so fall back to ``read_own`` when broad read is denied.
+    """
+    candidates = (["investigation:review", "investigation:read"]
+                  if user.role == "compliance"
+                  else ["investigation:read", "investigation:read_own"])
+    last_error: Optional[BaseException] = None
+    for perm in candidates:
+        try:
+            await authorise(user, perm, _resource_from_inv(inv), db, request_context)
+            return
+        except (WorkflowStateError, AuthPermissionDenied) as exc:
+            last_error = exc
+    if last_error is not None:
+        raise last_error
+
 
 
 def _make_timeline(entity_type: str, entity_id: str, event_type: str, actor_id: str,
@@ -96,7 +127,7 @@ class AttachmentService:
                             RequestContext(request_id=request_id))
 
             # Editable state check
-            if inv.status not in ("open", "active", "returned"):
+            if inv.status not in ("open", "active"):
                 raise InvalidTransition(inv.status, "upload_attachment")
 
             # Stream save file to physical private storage
@@ -163,11 +194,8 @@ class AttachmentService:
             if inv is None:
                 raise ResourceNotFound("Investigation", investigation_id)
 
-            try:
-                perm = "investigation:review" if user.role == "compliance" else "investigation:read"
-                await authorise(user, perm, _resource_from_inv(inv), self._db, RequestContext(request_id=request_id))
-            except WorkflowStateError:
-                await authorise(user, "investigation:read", _resource_from_inv(inv), self._db, RequestContext(request_id=request_id))
+            await _authorise_attachment_read(
+                user, inv, self._db, RequestContext(request_id=request_id))
 
             items = await AttachmentRepo(self._db).list_by_investigation(investigation_id, uow.conn)
             responses = [AttachmentResponse(**a.model_dump()) for a in items]
@@ -185,11 +213,8 @@ class AttachmentService:
             if inv is None:
                 raise ResourceNotFound("Investigation", investigation_id)
 
-            try:
-                perm = "investigation:review" if user.role == "compliance" else "investigation:read"
-                await authorise(user, perm, _resource_from_inv(inv), self._db, RequestContext(request_id=request_id))
-            except WorkflowStateError:
-                await authorise(user, "investigation:read", _resource_from_inv(inv), self._db, RequestContext(request_id=request_id))
+            await _authorise_attachment_read(
+                user, inv, self._db, RequestContext(request_id=request_id))
 
             att = await AttachmentRepo(self._db).fetch_by_id_and_investigation(
                 attachment_id, investigation_id, uow.conn)
@@ -225,7 +250,7 @@ class AttachmentService:
                             _resource_from_inv(inv), self._db,
                             RequestContext(request_id=request_id))
 
-            if inv.status not in ("open", "active", "returned"):
+            if inv.status not in ("open", "active"):
                 raise InvalidTransition(inv.status, "delete_attachment")
 
             att = await AttachmentRepo(self._db).fetch_by_id_and_investigation(

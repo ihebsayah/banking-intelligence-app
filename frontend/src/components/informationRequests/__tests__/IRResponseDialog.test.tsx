@@ -20,15 +20,19 @@ const mockAuth = vi.hoisted(() => {
 
 vi.mock('../../../auth/AuthProvider', () => ({ useAuth: mockAuth.useAuth }));
 
-const { mockAcknowledge, mockRespond } = vi.hoisted(() => ({
+const { mockAcknowledge, mockRespond, mockListAttachments, mockDownloadAttachment } = vi.hoisted(() => ({
   mockAcknowledge: vi.fn(),
   mockRespond: vi.fn(),
+  mockListAttachments: vi.fn(),
+  mockDownloadAttachment: vi.fn(),
 }));
 
 vi.mock('../../../api/informationRequestsApi', () => ({
   informationRequestsApi: {
     acknowledge: mockAcknowledge,
     respond: mockRespond,
+    listAttachments: mockListAttachments,
+    downloadAttachment: mockDownloadAttachment,
   },
 }));
 
@@ -65,6 +69,7 @@ describe('IRResponseDialog', () => {
     vi.clearAllMocks();
     mockAcknowledge.mockResolvedValue({ success: true, information_request: { ...base, status: 'acknowledged', version: 2 }, version: 2 });
     mockRespond.mockResolvedValue({ success: true, information_request: { ...base, status: 'responded', version: 2 }, version: 2 });
+    mockListAttachments.mockResolvedValue({ total: 0, items: [] });
   });
 
   it('shows Acknowledge and a disabled textarea for an open request', () => {
@@ -109,6 +114,42 @@ describe('IRResponseDialog', () => {
     const acknowledged: InformationRequest = { ...base, status: 'acknowledged', version: 2 };
     renderDialog(acknowledged);
     expect(screen.getByRole('button', { name: 'Submit Response' })).toBeDisabled();
+  });
+
+  it('submits the selected file together with the response in a single call', async () => {
+    const acknowledged: InformationRequest = { ...base, status: 'acknowledged', version: 2 };
+    const { onSuccess } = renderDialog(acknowledged);
+    const file = new File(['pdf-content'], 'statement.pdf', { type: 'application/pdf' });
+    fireEvent.change(screen.getByLabelText('Attach a file (optional)'), { target: { files: [file] } });
+    fireEvent.change(screen.getByLabelText('Your response'), { target: { value: 'Statement attached.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Submit Response' }));
+    await waitFor(() => expect(mockRespond).toHaveBeenCalledWith('ir_1', { response_text: 'Statement attached.', expected_version: 2, file }));
+    await waitFor(() => expect(mockRespond).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith(expect.objectContaining({ status: 'responded' }), true));
+  });
+
+  it('does not submit the response when the attached file is rejected', async () => {
+    const acknowledged: InformationRequest = { ...base, status: 'acknowledged', version: 2 };
+    mockRespond.mockRejectedValue({ response: { status: 400, data: { error: 'INVALID_FILE_TYPE' } } });
+    renderDialog(acknowledged);
+    const file = new File(['pdf-content'], 'statement.pdf', { type: 'application/pdf' });
+    fireEvent.change(screen.getByLabelText('Attach a file (optional)'), { target: { files: [file] } });
+    fireEvent.change(screen.getByLabelText('Your response'), { target: { value: 'Statement attached.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Submit Response' }));
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+    expect(mockRespond).toHaveBeenCalledTimes(1);
+  });
+
+  it('lists existing attachments and downloads them', async () => {
+    const acknowledged: InformationRequest = { ...base, status: 'acknowledged', version: 2 };
+    mockListAttachments.mockResolvedValue({
+      total: 1,
+      items: [{ attachment_id: 'att_9', ir_id: 'ir_1', original_filename: 'export.csv', content_type: 'text/csv', size_bytes: 2048, sha256_hash: 'y', uploaded_by: 'analyst_001', uploaded_at: '2026-01-02T00:00:00Z' }],
+    });
+    renderDialog(acknowledged);
+    await waitFor(() => expect(screen.getByText('export.csv')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Download export.csv' }));
+    await waitFor(() => expect(mockDownloadAttachment).toHaveBeenCalledWith('ir_1', 'att_9', 'export.csv'));
   });
 
   it('is read-only when responded, accepted or cancelled', () => {

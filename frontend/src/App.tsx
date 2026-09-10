@@ -88,8 +88,8 @@ function AppContent() {
             <Route path="/dashboard"       element={<ProtectedRoute><BankingDashboard /></ProtectedRoute>} />
             <Route path="/branches"        element={<ProtectedRoute><Branches /></ProtectedRoute>} />
             <Route path="/assistant"       element={<ProtectedRoute><Assistant /></ProtectedRoute>} />
-            <Route path="/kpi"             element={<ProtectedRoute><KpiPage /></ProtectedRoute>} />
-            <Route path="/kpi-governance"  element={<ProtectedRoute requiredRole={['analyst', 'manager', 'compliance', 'admin']} requiredPermission="workbench:access"><KpiGovernancePage /></ProtectedRoute>} />
+            <Route path="/kpi"             element={<ProtectedRoute requiredRole={['analyst', 'manager', 'admin']}><KpiPage /></ProtectedRoute>} />
+            <Route path="/kpi-governance"  element={<ProtectedRoute requiredRole={['analyst', 'manager', 'admin']} requiredPermission="workbench:access"><KpiGovernancePage /></ProtectedRoute>} />
             <Route path="/risk"            element={<ProtectedRoute requiredRole={['analyst', 'manager', 'compliance', 'admin']} requiredPermission="workbench:access"><RiskPage /></ProtectedRoute>} />
             <Route path="/workbench/alerts"        element={<ProtectedRoute requiredRole={['analyst', 'admin']} requiredPermission={[PERMISSIONS.ALERT_READ_ASSIGNED, PERMISSIONS.ALERT_READ]}><AlertQueuePage /></ProtectedRoute>} />
             <Route path="/workbench/alerts/:alertId" element={<ProtectedRoute requiredRole={['analyst', 'admin']} requiredPermission={[PERMISSIONS.ALERT_READ_ASSIGNED, PERMISSIONS.ALERT_READ]}><AlertDetailPage /></ProtectedRoute>} />

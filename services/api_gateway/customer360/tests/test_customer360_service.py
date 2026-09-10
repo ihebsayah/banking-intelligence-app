@@ -216,9 +216,46 @@ class FakeWbRepo:
 
     def __init__(self, scopes=None):
         self.scopes = FakeWbRepo.DEFAULT_SCOPES if scopes is None else scopes
+        # C6 workflow-context default: an investigation owned by the requesting
+        # user (u_1) and linked to CUST_00001. Tests override to exercise IDOR.
+        self.alert_owner = "u_1"
+        self.alert_customer = "CUST_00001"
+        self.inv_analyst = "u_1"
+        self.inv_officer = "u_1"
+        self.inv_customer = "CUST_00001"
+        self.case_owner = "u_1"
+        self.case_customer = "CUST_00001"
 
     async def fetch_user_scopes(self, user_id):
         return list(self.scopes or [])
+
+    async def fetch_alert_context(self, alert_id):
+        return {
+            "related_entity_type": "customer",
+            "related_entity_id": self.alert_customer,
+            "assigned_to": self.alert_owner,
+            "status": "active",
+        }
+
+    async def fetch_investigation_context(self, investigation_id):
+        return {
+            "investigation_id": investigation_id,
+            "analyst_id": self.inv_analyst,
+            "compliance_officer_id": self.inv_officer,
+            "related_entity_type": "customer",
+            "related_entity_id": self.inv_customer,
+            "alert_assigned_to": self.alert_owner,
+        }
+
+    async def fetch_case_context(self, case_id):
+        return {
+            "case_id": case_id,
+            "assigned_to": self.case_owner,
+            "alert_id": "ALT-1",
+            "investigation_id": "INV-1",
+            "related_entity_type": "customer",
+            "related_entity_id": self.case_customer,
+        }
 
     async def fetch_customer_linked_alerts(self, customer_id):
         return []
@@ -249,7 +286,7 @@ def _make_service(monkeypatch, main=None, wb=None):
 async def test_overview_full_view_with_all_sections(monkeypatch):
     service = _make_service(monkeypatch, wb=FakeWbRepo())
     user = _user("analyst", BASE_PERMISSIONS)
-    result = await service.get_overview(user, "CUST_00001")
+    result = await service.get_overview(user, "CUST_00001", "", "investigation", "INV-1")
     assert result is not None
     overview, audit = result
     assert isinstance(overview, Customer360Overview)
@@ -270,7 +307,7 @@ async def test_overview_full_view_with_all_sections(monkeypatch):
 async def test_overview_pii_masked_without_read_pii(monkeypatch):
     service = _make_service(monkeypatch, wb=FakeWbRepo())
     user = _user("analyst", BASE_PERMISSIONS)
-    overview, audit = await service.get_overview(user, "CUST_00001")
+    overview, audit = await service.get_overview(user, "CUST_00001", "", "investigation", "INV-1")
     # Complete suppression for high-sensitivity identifiers (no length leak),
     # partial mask for email, final digits only for phone, PEP stays boolean.
     assert overview.customer.national_id == "***"
@@ -289,7 +326,7 @@ async def test_overview_pii_masked_without_read_pii(monkeypatch):
 async def test_overview_pii_unmasked_with_read_pii(monkeypatch):
     service = _make_service(monkeypatch, wb=FakeWbRepo())
     user = _user("compliance", BASE_PERMISSIONS + ["customer:read_pii"])
-    overview, audit = await service.get_overview(user, "CUST_00001")
+    overview, audit = await service.get_overview(user, "CUST_00001", "", "investigation", "INV-1")
     assert overview.customer.national_id == "09643321"
     assert overview.customer.email == "fouad@example.com"
     assert "national_id" not in audit["fields_masked"]
@@ -300,7 +337,7 @@ async def test_overview_missing_customer_returns_none(monkeypatch):
     main = FakeMainRepo()
     main.core = None
     service = _make_service(monkeypatch, main=main, wb=FakeWbRepo())
-    assert await service.get_overview(_user("analyst", BASE_PERMISSIONS), "CUST_99999") is None
+    assert await service.get_overview(_user("analyst", BASE_PERMISSIONS), "CUST_99999", "", "investigation", "INV-1") is None
 
 
 @pytest.mark.asyncio
@@ -325,7 +362,7 @@ async def test_overview_source_unavailable_raises(monkeypatch):
 async def test_overview_section_gating_hides_ungranted_sections(monkeypatch):
     service = _make_service(monkeypatch, wb=FakeWbRepo())
     user = _user("analyst", ["customer:read_risk"])
-    overview, audit = await service.get_overview(user, "CUST_00001")
+    overview, audit = await service.get_overview(user, "CUST_00001", "", "investigation", "INV-1")
     assert overview.risk is not None
     assert overview.financial_summary is None
     assert overview.transaction_summary is None
@@ -338,7 +375,7 @@ async def test_overview_section_gating_hides_ungranted_sections(monkeypatch):
 async def test_transactions_view(monkeypatch):
     service = _make_service(monkeypatch, wb=FakeWbRepo())
     user = _user("analyst", ["customer:read_transactions"])
-    result = await service.get_transactions(user, "CUST_00001", limit=10, offset=0)
+    result = await service.get_transactions(user, "CUST_00001", "", 10, 0, "investigation", "INV-1")
     assert result is not None
     summary, rows, total, dq, audit = result
     assert total == 42
@@ -361,7 +398,7 @@ async def test_transactions_out_of_scope_returns_none(monkeypatch):
 async def test_integration_db_outage_falls_back_to_role_scope(monkeypatch):
     service = _make_service(monkeypatch, wb=None)  # integration pool down
     user = _user("admin", BASE_PERMISSIONS)
-    overview, audit = await service.get_overview(user, "CUST_00001")
+    overview, audit = await service.get_overview(user, "CUST_00001", "", "investigation", "INV-1")
     assert overview is not None
     assert audit["scope_used"] == ["global"]
 
@@ -370,7 +407,7 @@ async def test_integration_db_outage_falls_back_to_role_scope(monkeypatch):
 async def test_money_fields_are_exact_strings(monkeypatch):
     service = _make_service(monkeypatch, wb=FakeWbRepo())
     user = _user("analyst", BASE_PERMISSIONS)
-    overview, _ = await service.get_overview(user, "CUST_00001")
+    overview, _ = await service.get_overview(user, "CUST_00001", "", "investigation", "INV-1")
     assert isinstance(overview.accounts[0].balance, str)
     assert overview.accounts[0].balance == "1500.50"
     assert overview.loans[0].principal == "50000.00"
@@ -496,7 +533,7 @@ async def test_analyst_kyc_is_status_level(monkeypatch):
     }
     service = _make_service(monkeypatch, main=main, wb=FakeWbRepo())
     overview, audit = await service.get_overview(
-        _user("analyst", ANALYST_PERMISSIONS), "CUST_00001"
+        _user("analyst", ANALYST_PERMISSIONS), "CUST_00001", "", "investigation", "INV-1"
     )
     assert overview.kyc_aml.kyc_status == "validated"
     assert overview.kyc_aml.latest_kyc_case.kyc_case_id is None  # status-level
@@ -515,7 +552,7 @@ async def test_compliance_sees_pep_matched_name_with_pii(monkeypatch):
     }
     service = _make_service(monkeypatch, main=main, wb=FakeWbRepo())
     overview, audit = await service.get_overview(
-        _user("compliance", BASE_PERMISSIONS + ["customer:read_pii"]), "CUST_00001"
+        _user("compliance", BASE_PERMISSIONS + ["customer:read_pii"]), "CUST_00001", "", "investigation", "INV-1"
     )
     assert overview.kyc_aml.pep_screening.matched_name == "John Doe"
     assert "screening_matched_name" not in audit["fields_masked"]
@@ -525,7 +562,7 @@ async def test_compliance_sees_pep_matched_name_with_pii(monkeypatch):
 async def test_audit_payload_has_no_raw_pii(monkeypatch):
     service = _make_service(monkeypatch, wb=FakeWbRepo())
     _, audit = await service.get_overview(
-        _user("analyst", ANALYST_PERMISSIONS), "CUST_00001"
+        _user("analyst", ANALYST_PERMISSIONS), "CUST_00001", "", "investigation", "INV-1"
     )
     assert audit["endpoint"] == "/api/v1/customers/CUST_00001/overview"
     assert audit["result_status"] == "success"
@@ -588,14 +625,14 @@ async def test_search_customers_pii_masking(monkeypatch):
     main.search_rows = [{"customer_id": "CUST_00001", "name": "Fouad Ben Salah", "segment": "PART_PREM"}]
     service = _make_service(monkeypatch, main=main, wb=FakeWbRepo())
 
-    # Without PII permission -> masked
-    res_no_pii, _ = await service.search_customers(_user("analyst", ANALYST_PERMISSIONS), query="Fouad")
+    # Without PII permission -> masked (admin retains standalone search)
+    res_no_pii, _ = await service.search_customers(_user("admin", ADMIN_PERMISSIONS), query="Fouad")
     assert res_no_pii.items[0].name == "F**** B** S****"
     assert res_no_pii.items[0].customer_id == "CUST_00001"
     assert res_no_pii.items[0].segment == "PART_PREM"
 
     # With PII permission -> unmasked
-    res_pii, _ = await service.search_customers(_user("analyst", ANALYST_PERMISSIONS + ["customer:read_pii"]), query="Fouad")
+    res_pii, _ = await service.search_customers(_user("admin", ADMIN_PERMISSIONS + ["customer:read_pii"]), query="Fouad")
     assert res_pii.items[0].name == "Fouad Ben Salah"
 
 
@@ -616,6 +653,207 @@ async def test_search_customers_out_of_scope_returns_zero(monkeypatch):
     main.search_customers = fake_search
     service = _make_service(monkeypatch, main=main, wb=ScopeFakeWb())
 
-    res, _ = await service.search_customers(_user("analyst", ANALYST_PERMISSIONS), query="CUST_99999")
+    res, _ = await service.search_customers(_user("admin", ADMIN_PERMISSIONS), query="CUST_99999")
+    assert res.items == []
+    assert res.total == 0
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# C6 — Customer 360 object-context authorization (relaxed)
+# Scope is the primary authorization: an operational role reads any customer
+# within its org scope (default FakeWbRepo = hq_main -> unrestricted).
+# Workflow-context (alert/investigation/case) remains a cross-scope escape
+# hatch. Denial now happens on: out-of-scope (branch-restricted) customers and
+# missing customers. Default FakeWbRepo authorizes user u_1 for INV-1.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class BranchWbRepo(FakeWbRepo):
+    """User holds a single branch scope (branch_a); fixtures have BR_001."""
+
+    def __init__(self):
+        super().__init__(scopes=[{"scope_id": "branch_a", "scope_type": "branch"}])
+
+
+class MissingCoreMain(FakeMainRepo):
+    async def fetch_customer_core(self, customer_id):
+        return None
+
+
+@pytest.mark.asyncio
+async def test_c6_analyst_own_investigation_allows(monkeypatch):
+    service = _make_service(monkeypatch, wb=FakeWbRepo())
+    res = await service.get_overview(
+        _user("analyst", ANALYST_PERMISSIONS, user_id="u_1"),
+        "CUST_00001", "", "investigation", "INV-1",
+    )
+    assert res is not None
+
+
+@pytest.mark.asyncio
+async def test_c6_in_scope_analyst_reads_without_context(monkeypatch):
+    # Scope is the authorization: an in-scope (hq_main) analyst can open
+    # Customer 360 directly — no workflow context required.
+    service = _make_service(monkeypatch, wb=FakeWbRepo())
+    res = await service.get_overview(
+        _user("analyst", ANALYST_PERMISSIONS, user_id="u_2"),
+        "CUST_00001",
+    )
+    assert res is not None
+
+
+@pytest.mark.asyncio
+async def test_c6_in_scope_compliance_reads_without_context(monkeypatch):
+    service = _make_service(monkeypatch, wb=FakeWbRepo())
+    res = await service.get_overview(
+        _user("compliance", BASE_PERMISSIONS + ["customer:read_pii"], user_id="u_1"),
+        "CUST_00001",
+    )
+    assert res is not None
+
+
+@pytest.mark.asyncio
+async def test_c6_analyst_own_alert_allows(monkeypatch):
+    service = _make_service(monkeypatch, wb=FakeWbRepo())
+    res = await service.get_overview(
+        _user("analyst", ANALYST_PERMISSIONS, user_id="u_1"),
+        "CUST_00001", "", "alert", "ALT-1",
+    )
+    assert res is not None
+
+
+@pytest.mark.asyncio
+async def test_c6_compliance_own_investigation_allows(monkeypatch):
+    service = _make_service(monkeypatch, wb=FakeWbRepo())
+    res = await service.get_overview(
+        _user("compliance", BASE_PERMISSIONS + ["customer:read_pii"], user_id="u_1"),
+        "CUST_00001", "", "investigation", "INV-1",
+    )
+    assert res is not None
+
+
+@pytest.mark.asyncio
+async def test_c6_compliance_own_case_allows(monkeypatch):
+    wb = FakeWbRepo()
+    service = _make_service(monkeypatch, wb=wb)
+    res = await service.get_overview(
+        _user("compliance", BASE_PERMISSIONS + ["customer:read_pii"], user_id="u_1"),
+        "CUST_00001", "", "case", "CASE-1",
+    )
+    assert res is not None
+
+
+@pytest.mark.asyncio
+async def test_c6_out_of_scope_denies_without_context(monkeypatch):
+    service = _make_service(monkeypatch, wb=BranchWbRepo())
+    assert await service.get_overview(
+        _user("analyst", ANALYST_PERMISSIONS, user_id="u_1"), "CUST_00001"
+    ) is None
+    assert await service.get_overview(
+        _user("compliance", BASE_PERMISSIONS + ["customer:read_pii"], user_id="u_1"), "CUST_00001"
+    ) is None
+
+
+@pytest.mark.asyncio
+async def test_c6_out_of_scope_owner_escapes_via_context(monkeypatch):
+    # Workflow-context is the cross-scope escape hatch: the out-of-branch owner
+    # (u_1 owns INV-1 / ALT-1 / CASE-1) is authorized through the linked object.
+    service = _make_service(monkeypatch, wb=BranchWbRepo())
+    assert await service.get_overview(
+        _user("analyst", ANALYST_PERMISSIONS, user_id="u_1"),
+        "CUST_00001", "", "investigation", "INV-1",
+    ) is not None
+    assert await service.get_overview(
+        _user("analyst", ANALYST_PERMISSIONS, user_id="u_1"),
+        "CUST_00001", "", "alert", "ALT-1",
+    ) is not None
+    assert await service.get_overview(
+        _user("compliance", BASE_PERMISSIONS + ["customer:read_pii"], user_id="u_1"),
+        "CUST_00001", "", "case", "CASE-1",
+    ) is not None
+
+
+@pytest.mark.asyncio
+async def test_c6_out_of_scope_foreign_context_denies(monkeypatch):
+    # A non-owner (u_2) holds no branch scope and no role in INV-1 (owned by
+    # u_1) -> denied despite supplying the context.
+    service = _make_service(monkeypatch, wb=BranchWbRepo())
+    assert await service.get_overview(
+        _user("analyst", ANALYST_PERMISSIONS, user_id="u_2"),
+        "CUST_00001", "", "investigation", "INV-1",
+    ) is None
+
+
+@pytest.mark.asyncio
+async def test_c6_out_of_scope_denies_transactions(monkeypatch):
+    service = _make_service(monkeypatch, wb=BranchWbRepo())
+    res = await service.get_transactions(
+        _user("analyst", ANALYST_PERMISSIONS, user_id="u_1"),
+        "CUST_00001", limit=20, offset=0,
+    )
+    assert res is None
+
+
+@pytest.mark.asyncio
+async def test_c6_missing_customer_denies(monkeypatch):
+    service = _make_service(monkeypatch, main=MissingCoreMain(), wb=FakeWbRepo())
+    assert await service.get_overview(
+        _user("analyst", ANALYST_PERMISSIONS, user_id="u_1"), "CUST_99999"
+    ) is None
+    assert await service.get_overview(
+        _user("analyst", ANALYST_PERMISSIONS, user_id="u_1"),
+        "CUST_99999", "", "investigation", "INV-1",
+    ) is None
+
+
+@pytest.mark.asyncio
+async def test_operational_search_within_scope_returns_results(monkeypatch):
+    # C6 (relaxed): operational roles search within their org scope.
+    service = _make_service(monkeypatch, wb=FakeWbRepo())
+    res, _ = await service.search_customers(
+        _user("analyst", ANALYST_PERMISSIONS), query="CUST_00001"
+    )
+    assert len(res.items) == 1
+    assert res.items[0].customer_id == "CUST_00001"
+    res2, _ = await service.search_customers(
+        _user("compliance", BASE_PERMISSIONS), query="CUST_00001"
+    )
+    assert len(res2.items) == 1
+
+
+@pytest.mark.asyncio
+async def test_operational_search_masks_pii_without_read_pii(monkeypatch):
+    # Analyst/Compliance can search, but identity stays masked without read_pii.
+    service = _make_service(monkeypatch, wb=FakeWbRepo())
+    res, _ = await service.search_customers(
+        _user("analyst", ANALYST_PERMISSIONS), query="Fouad"
+    )
+    assert res.items[0].name == "F**** B** S****"
+    res_pii, _ = await service.search_customers(
+        _user("compliance", BASE_PERMISSIONS + ["customer:read_pii"]), query="Fouad"
+    )
+    assert res_pii.items[0].name == "Fouad Ben Salah"
+
+
+@pytest.mark.asyncio
+async def test_operational_search_out_of_scope_returns_zero(monkeypatch):
+    # Branch-restricted user queries with allowed_branches=["branch_a"]; the
+    # repo applies the branch filter -> no rows (fixtures are at BR_001).
+    main = FakeMainRepo()
+
+    class ScopeFakeWb(FakeWbRepo):
+        def __init__(self):
+            super().__init__(scopes=[{"scope_id": "branch_a", "scope_type": "branch"}])
+
+    async def fake_search(query, limit=20, offset=0, allowed_branches=None):
+        if allowed_branches == ["branch_a"]:
+            return [], 0
+        return main.search_rows, len(main.search_rows)
+
+    main.search_customers = fake_search
+    service = _make_service(monkeypatch, main=main, wb=ScopeFakeWb())
+    res, _ = await service.search_customers(
+        _user("analyst", ANALYST_PERMISSIONS), query="Fouad"
+    )
     assert res.items == []
     assert res.total == 0

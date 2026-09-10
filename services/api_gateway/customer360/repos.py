@@ -491,6 +491,51 @@ class WorkbenchLinkRepository:
             return await self.resolve_customer_id_for_account(ei)
         return None
 
+    # ── workflow-context authorization reads ────────────────────────────────
+
+    async def fetch_alert_context(self, alert_id: str) -> Optional[Dict[str, Any]]:
+        """Customer linkage + owner for one alert.
+
+        Returns row with customer_id (only when the alert is explicitly linked
+        to a customer) and assigned_to, or None when the alert is absent.
+        """
+        return await self._db.fetch_one(
+            """
+            SELECT related_entity_type, related_entity_id, assigned_to, status
+              FROM alerts
+             WHERE alert_id = $1
+            """,
+            [alert_id],
+        )
+
+    async def fetch_investigation_context(self, investigation_id: str) -> Optional[Dict[str, Any]]:
+        """Customer linkage (via source alert) + owners for one investigation."""
+        return await self._db.fetch_one(
+            """
+            SELECT inv.investigation_id,
+                   inv.assigned_to AS analyst_id,
+                   inv.compliance_officer_id,
+                   a.related_entity_type, a.related_entity_id, a.assigned_to AS alert_assigned_to
+              FROM investigations inv
+              LEFT JOIN alerts a ON a.alert_id = inv.alert_id
+             WHERE inv.investigation_id = $1
+            """,
+            [investigation_id],
+        )
+
+    async def fetch_case_context(self, case_id: str) -> Optional[Dict[str, Any]]:
+        """Customer linkage (via source alert) + owner for one compliance case."""
+        return await self._db.fetch_one(
+            """
+            SELECT cc.case_id, cc.assigned_to, cc.alert_id, cc.investigation_id,
+                   a.related_entity_type, a.related_entity_id
+              FROM compliance_cases cc
+              LEFT JOIN alerts a ON a.alert_id = cc.alert_id
+             WHERE cc.case_id = $1
+            """,
+            [case_id],
+        )
+
     async def fetch_user_scopes(self, user_id: str) -> List[Dict[str, Any]]:
         return await self._db.fetch_all(
             """

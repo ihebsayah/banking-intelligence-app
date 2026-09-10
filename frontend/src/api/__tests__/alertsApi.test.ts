@@ -77,14 +77,6 @@ describe('alertsApi', () => {
     expect(cfg.headers['X-Idempotency-Key']).toBeTruthy();
   });
 
-  it('escalate sends priority and idempotency headers', async () => {
-    await alertsApi.escalate('a1', { title: 'Case', priority: 'critical', expected_version: 3 });
-    const [url, body, cfg] = mockPost.mock.calls[0];
-    expect(url).toBe('/alerts/a1/escalate');
-    expect(body).toEqual({ title: 'Case', priority: 'critical', expected_version: 3 });
-    expect(cfg.headers['X-Idempotency-Key']).toBeTruthy();
-  });
-
   it('assign sends assigned_to, version and reason', async () => {
     await alertsApi.assign('a1', { assigned_to: 'analyst_002', expected_version: 3, reason: 'reassign' });
     const [, body] = mockPatch.mock.calls[0];

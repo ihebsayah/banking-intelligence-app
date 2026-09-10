@@ -1,15 +1,16 @@
 // src/components/cases/CaseInformationRequestsTab.tsx
 import React, { useCallback, useEffect, useState } from 'react';
-import { ChevronDown, ChevronLeft, ChevronRight, Inbox } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, Download, Inbox, Paperclip } from 'lucide-react';
 import { clsx } from 'clsx';
 import { casesApi } from '../../api/casesApi';
+import { informationRequestsApi } from '../../api/informationRequestsApi';
 import { parseCaseError } from './caseErrors';
 import { IRAcceptReturnDialog } from './dialogs/IRAcceptReturnDialog';
 import { useAuth } from '../../auth/AuthProvider';
 import { PERMISSIONS } from '../../lib/permissions';
 import { StatusBadge } from '../ui/StatusBadge';
 import { formatDateTime } from '../../utils/formatters';
-import type { InformationRequest } from '../../types/cases';
+import type { InformationRequest, InformationRequestAttachment } from '../../types/cases';
 
 const PER_PAGE = 50;
 
@@ -21,6 +22,12 @@ const irStatusVariant: Record<string, 'blue' | 'green' | 'yellow' | 'purple' | '
   returned: 'yellow',
   cancelled: 'gray',
 };
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 interface Props {
   caseId: string;
@@ -38,6 +45,7 @@ export function CaseInformationRequestsTab({ caseId, refreshKey, onConflict }: P
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<Record<string, InformationRequestAttachment[]>>({});
   const [action, setAction] = useState<{ mode: 'accept' | 'return'; ir: InformationRequest } | null>(null);
 
   const fetchItems = useCallback(async () => {
@@ -57,6 +65,24 @@ export function CaseInformationRequestsTab({ caseId, refreshKey, onConflict }: P
   useEffect(() => { fetchItems(); }, [fetchItems, refreshKey]);
 
   const hasNext = items.length === PER_PAGE;
+
+  const loadAttachments = async (irId: string) => {
+    if (attachments[irId]) return;
+    try {
+      const res = await informationRequestsApi.listAttachments(irId);
+      setAttachments((prev) => ({ ...prev, [irId]: res.items }));
+    } catch {
+      setAttachments((prev) => ({ ...prev, [irId]: [] }));
+    }
+  };
+
+  const handleDownload = async (irId: string, att: InformationRequestAttachment) => {
+    try {
+      await informationRequestsApi.downloadAttachment(irId, att.attachment_id, att.original_filename);
+    } catch (err) {
+      setError(parseCaseError(err).message);
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -89,7 +115,11 @@ export function CaseInformationRequestsTab({ caseId, refreshKey, onConflict }: P
             return (
               <div key={ir.ir_id}>
                 <button
-                  onClick={() => setExpanded(isOpen ? null : ir.ir_id)}
+                  onClick={() => {
+                    const next = isOpen ? null : ir.ir_id;
+                    setExpanded(next);
+                    if (next) loadAttachments(ir.ir_id);
+                  }}
                   aria-expanded={isOpen}
                   className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-white/5"
                 >
@@ -124,6 +154,39 @@ export function CaseInformationRequestsTab({ caseId, refreshKey, onConflict }: P
                         <p className="text-xs leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--text-secondary)' }}>
                           {ir.response_text}
                         </p>
+                      </div>
+                    )}
+
+                    {(attachments[ir.ir_id]?.length ?? 0) > 0 && (
+                      <div>
+                        <p className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>
+                          <Paperclip size={11} />
+                          Attached files
+                        </p>
+                        <ul className="space-y-1">
+                          {attachments[ir.ir_id].map((att) => (
+                            <li key={att.attachment_id}
+                              className="flex items-center justify-between gap-2 rounded-lg border px-3 py-1.5"
+                              style={{ background: 'var(--bg-tertiary)', borderColor: 'var(--bg-border)' }}>
+                              <span className="font-mono text-[11px] truncate" style={{ color: 'var(--text-primary)' }}>
+                                {att.original_filename}
+                                <span className="text-[10px]" style={{ color: 'var(--text-subtle)' }}>
+                                  {' '}· {formatFileSize(att.size_bytes)} · by {att.uploaded_by}
+                                </span>
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleDownload(ir.ir_id, att)}
+                                aria-label={`Download ${att.original_filename}`}
+                                className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold border transition-all hover:brightness-95"
+                                style={{ background: 'var(--bg-card)', borderColor: 'var(--bg-border)', color: 'var(--accent-blue)' }}
+                              >
+                                <Download size={11} />
+                                Download
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
                       </div>
                     )}
 

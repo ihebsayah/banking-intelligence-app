@@ -136,3 +136,20 @@ export interface InformationRequestMutationResponse {
   information_request: InformationRequest;
   version: number;
 }
+
+export interface InformationRequestAttachment {
+  attachment_id: string;
+  ir_id: string;
+  original_filename: string;
+  content_type: string;
+  size_bytes: number;
+  sha256_hash: string;
+  description?: string | null;
+  uploaded_by: string;
+  uploaded_at: string;
+}
+
+export interface InformationRequestAttachmentListResponse {
+  total: number;
+  items: InformationRequestAttachment[];
+}

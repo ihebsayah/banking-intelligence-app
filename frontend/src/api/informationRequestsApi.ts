@@ -2,6 +2,8 @@
 import { apiClient } from './client';
 import type {
   InformationRequest,
+  InformationRequestAttachment,
+  InformationRequestAttachmentListResponse,
   InformationRequestListResponse,
   InformationRequestMutationResponse,
 } from '../types/cases';
@@ -66,9 +68,21 @@ export const informationRequestsApi = {
     return res.data;
   },
 
-  respond: async (irId: string, payload: { response_text: string; expected_version: number }): Promise<InformationRequestMutationResponse> => {
-    const res = await apiClient.patch<InformationRequestMutationResponse>(`/information-requests/${irId}/respond`, payload,
-      { headers: { 'X-Request-ID': uuid(), 'X-Idempotency-Key': uuid() } });
+  respond: async (irId: string, payload: { response_text: string; expected_version: number; file?: File; description?: string }): Promise<InformationRequestMutationResponse> => {
+    const formData = new FormData();
+    formData.append('response_text', payload.response_text);
+    formData.append('expected_version', String(payload.expected_version));
+    if (payload.file) {
+      formData.append('file', payload.file);
+      if (payload.description?.trim()) {
+        formData.append('description', payload.description.trim());
+      }
+    }
+    const res = await apiClient.patch<InformationRequestMutationResponse>(
+      `/information-requests/${irId}/respond`,
+      formData,
+      { headers: { 'Content-Type': 'multipart/form-data', 'X-Request-ID': uuid(), 'X-Idempotency-Key': uuid() } }
+    );
     return res.data;
   },
 
@@ -82,5 +96,56 @@ export const informationRequestsApi = {
     const res = await apiClient.patch<InformationRequestMutationResponse>(`/information-requests/${irId}/return`, payload,
       { headers: { 'X-Request-ID': uuid(), 'X-Idempotency-Key': uuid() } });
     return res.data;
+  },
+
+  uploadAttachment: async (
+    irId: string,
+    file: File,
+    description?: string
+  ): Promise<InformationRequestAttachment> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (description?.trim()) {
+      formData.append('description', description.trim());
+    }
+
+    const res = await apiClient.post<InformationRequestAttachment>(
+      `/information-requests/${irId}/attachments`,
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          'X-Request-ID': uuid(),
+        },
+      }
+    );
+    return res.data;
+  },
+
+  listAttachments: async (irId: string): Promise<InformationRequestAttachmentListResponse> => {
+    const res = await apiClient.get<InformationRequestAttachmentListResponse>(
+      `/information-requests/${irId}/attachments`
+    );
+    return res.data;
+  },
+
+  downloadAttachment: async (
+    irId: string,
+    attachmentId: string,
+    filename: string
+  ): Promise<void> => {
+    const res = await apiClient.get<Blob>(
+      `/information-requests/${irId}/attachments/${attachmentId}/download`,
+      { responseType: 'blob' }
+    );
+
+    const url = window.URL.createObjectURL(new Blob([res.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
   },
 };

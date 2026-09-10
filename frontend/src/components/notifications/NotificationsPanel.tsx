@@ -6,6 +6,7 @@ import { clsx } from 'clsx';
 import { BankingHeader } from '../Layout/BankingHeader';
 import { StatusBadge } from '../ui/StatusBadge';
 import { notificationsApi } from '../../api/notificationsApi';
+import { informationRequestsApi } from '../../api/informationRequestsApi';
 import { parseCaseError } from '../cases/caseErrors';
 import { formatDateTime } from '../../utils/formatters';
 import {
@@ -31,6 +32,36 @@ export function NotificationsPanel() {
   const [markingId, setMarkingId] = useState<string | null>(null);
   const [markingAll, setMarkingAll] = useState(false);
   const [liveMessage, setLiveMessage] = useState<string | null>(null);
+
+  const resolveRoute = useCallback(async (n: Notification): Promise<string | null> => {
+    if (n.entity_type === 'information_request' && n.entity_id) {
+      try {
+        const ir = await informationRequestsApi.get(n.entity_id);
+        if (ir.investigation_id) return `/workbench/investigations/${ir.investigation_id}`;
+        if (ir.case_id) return `/workbench/cases/${ir.case_id}`;
+        return null;
+      } catch {
+        return null;
+      }
+    }
+    return notificationEntityRoute(n.entity_type, n.entity_id);
+  }, []);
+
+  const [resolvedRoutes, setResolvedRoutes] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    const pending = items.filter(
+      (n) => n.entity_type === 'information_request' && n.entity_id,
+    );
+    pending.forEach((n) => {
+      resolveRoute(n).then((route) => {
+        if (cancelled || !route) return;
+        setResolvedRoutes((prev) => (prev[n.entity_id!] === route ? prev : { ...prev, [n.entity_id!]: route }));
+      });
+    });
+    return () => { cancelled = true; };
+  }, [items, resolveRoute]);
 
   const fetchItems = useCallback(async () => {
     setLoading(true);
@@ -211,7 +242,9 @@ export function NotificationsPanel() {
                 </thead>
                 <tbody className="divide-y divide-[var(--bg-border)]">
                   {items.map((n) => {
-                    const route = notificationEntityRoute(n.entity_type, n.entity_id);
+                    const route = n.entity_type === 'information_request'
+                      ? (n.entity_id ? resolvedRoutes[n.entity_id] : undefined)
+                      : notificationEntityRoute(n.entity_type, n.entity_id);
                     return (
                       <tr key={n.notification_id} className={clsx(!n.is_read && 'bg-[rgba(37,99,235,0.04)]')}>
                         <td className="pl-5 py-3.5">

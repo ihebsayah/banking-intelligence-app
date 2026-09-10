@@ -57,13 +57,23 @@ describe('informationRequestsApi', () => {
     expect(cfg.headers['X-Idempotency-Key']).toBeTruthy();
   });
 
-  it('respond patches /respond with response_text and expected_version', async () => {
+  it('respond patches /respond with response_text and expected_version as multipart form data', async () => {
     await informationRequestsApi.respond('ir_1', { response_text: 'Source confirmed.', expected_version: 2 });
     const [url, body, cfg] = mockPatch.mock.calls[0];
     expect(url).toBe('/information-requests/ir_1/respond');
-    expect(body).toEqual({ response_text: 'Source confirmed.', expected_version: 2 });
+    expect(body).toBeInstanceOf(FormData);
+    expect(body.get('response_text')).toBe('Source confirmed.');
+    expect(body.get('expected_version')).toBe('2');
     expect(cfg.headers['X-Request-ID']).toBeTruthy();
     expect(cfg.headers['X-Idempotency-Key']).toBeTruthy();
+  });
+
+  it('respond includes the attached file and content-type in the form', async () => {
+    const file = new File(['pdf-content'], 'statement.pdf', { type: 'application/pdf' });
+    await informationRequestsApi.respond('ir_1', { response_text: 'attached', expected_version: 2, file });
+    const [, body, cfg] = mockPatch.mock.calls[0];
+    expect(body.get('file')).toBe(file);
+    expect((cfg.headers['Content-Type'] as string)).toContain('multipart/form-data');
   });
 
   it('never calls obsolete submit or close routes', async () => {

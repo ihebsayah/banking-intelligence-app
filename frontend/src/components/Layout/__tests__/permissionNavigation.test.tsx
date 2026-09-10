@@ -108,6 +108,9 @@ describe('Phase 3A.7 Permission-Aware Platform Navigation', () => {
     expect(screen.queryByText('Alert Queue')).not.toBeInTheDocument();
     expect(screen.getByText('Investigations')).toBeInTheDocument();
     expect(screen.getByText('Cases')).toBeInTheDocument();
+    // Compliance is not permitted into KPI Analytics or KPI Governance
+    expect(screen.queryByText('KPI Analytics')).not.toBeInTheDocument();
+    expect(screen.queryByText('KPI Governance')).not.toBeInTheDocument();
 
     expect(screen.queryByText('Outbox Monitor')).not.toBeInTheDocument();
     expect(screen.queryByText('Reports')).not.toBeInTheDocument();
@@ -241,5 +244,29 @@ describe('Phase 3A.7 Permission-Aware Platform Navigation', () => {
 
     expect(screen.getByText('Access Denied Target')).toBeInTheDocument();
     expect(screen.queryByText('Protected Customer Detail')).not.toBeInTheDocument();
+  });
+
+  it('12. Compliance officer is denied the KPI Analytics route via ProtectedRoute', () => {
+    const complianceUser = makeUser('compliance', ['workbench:access']);
+    useAuthStore.setState({ user: complianceUser, token: 'fake-token', isAuthenticated: true, isLoading: false, error: null });
+
+    render(
+      <MemoryRouter initialEntries={['/kpi']}>
+        <Routes>
+          <Route
+            path="/kpi"
+            element={
+              <ProtectedRoute requiredRole={['analyst', 'manager', 'admin']}>
+                <div>Protected KPI Analytics</div>
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/unauthorized" element={<div>Access Denied Target</div>} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('Access Denied Target')).toBeInTheDocument();
+    expect(screen.queryByText('Protected KPI Analytics')).not.toBeInTheDocument();
   });
 });

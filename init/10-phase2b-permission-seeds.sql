@@ -68,7 +68,6 @@ INSERT INTO role_permissions (role_id, permission_key) VALUES
     ('analyst', 'alert:acknowledge'),
     ('analyst', 'alert:dismiss'),
     ('analyst', 'alert:investigate'),
-    ('analyst', 'alert:transition'),
     ('analyst', 'investigation:read_own'),
     ('analyst', 'investigation:update'),
     ('analyst', 'investigation:modify_findings'),

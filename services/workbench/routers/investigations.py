@@ -10,9 +10,10 @@ from shared.database import DatabaseConnector
 from workbench.schemas.attachments import AttachmentListResponse, AttachmentResponse
 from workbench.schemas.investigations import (
     CancelInvestigationRequest, EscalateInvestigationRequest,
-    EscalateInvestigationResponse, InvestigationListResponse,
-    InvestigationMutationResponse, InvestigationResponse,
-    ReviewNotHarmfulRequest, TransitionInvestigationRequest,
+    EscalateInvestigationResponse, EligibleComplianceOfficer,
+    InvestigationListResponse, InvestigationMutationResponse,
+    InvestigationResponse, ReviewNotHarmfulRequest,
+    SubmitInvestigationRequest, TransitionInvestigationRequest,
     UpdateInvestigationRequest,
 )
 from workbench.services.attachment_service import AttachmentService
@@ -74,6 +75,14 @@ async def list_submitted(
     return InvestigationListResponse(total=total, page=page, page_size=per_page, items=items)
 
 
+@router.get("/eligible-compliance-officers", response_model=list[EligibleComplianceOfficer])
+async def eligible_compliance_officers(request: Request):
+    u = _get_user(request)
+    svc = _service(request)
+    scope = _get_scope(request)
+    return await svc.list_eligible_compliance_officers(u, scope)
+
+
 @router.get("/{investigation_id}", response_model=InvestigationResponse)
 async def get_investigation(investigation_id: str, request: Request):
     u = _get_user(request)
@@ -103,6 +112,18 @@ async def transition_investigation(
     u = _get_user(request)
     svc = _service(request)
     result = await svc.transition(u, investigation_id, req, x_idempotency_key, x_request_id or "")
+    return JSONResponse(content=result.model_dump(mode="json"), headers={"X-Version": str(result.version)})
+
+
+@router.post("/{investigation_id}/submit", response_model=InvestigationMutationResponse)
+async def submit_to_compliance(
+    investigation_id: str, req: SubmitInvestigationRequest, request: Request,
+    x_idempotency_key: Optional[str] = Header(None, alias="X-Idempotency-Key"),
+    x_request_id: Optional[str] = Header(None, alias="X-Request-ID"),
+):
+    u = _get_user(request)
+    svc = _service(request)
+    result = await svc.submit_to_compliance(u, investigation_id, req, x_idempotency_key, x_request_id or "")
     return JSONResponse(content=result.model_dump(mode="json"), headers={"X-Version": str(result.version)})
 
 

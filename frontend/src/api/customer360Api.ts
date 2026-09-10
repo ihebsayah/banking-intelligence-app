@@ -10,6 +10,18 @@ export interface CustomerTransactionsParams {
   offset?: number;
 }
 
+export type Customer360ContextType = 'alert' | 'investigation' | 'case';
+
+export interface Customer360Context {
+  type: Customer360ContextType;
+  id: string;
+}
+
+function contextQuery(ctx?: Customer360Context): string {
+  if (!ctx) return '';
+  return `?context_type=${encodeURIComponent(ctx.type)}&context_id=${encodeURIComponent(ctx.id)}`;
+}
+
 export type Customer360ErrorKind =
   | 'forbidden'
   | 'not_found'
@@ -77,9 +89,9 @@ export interface CustomerSearchParams {
 }
 
 export const customer360Api = {
-  getOverview: async (customerId: string): Promise<Customer360Overview> => {
+  getOverview: async (customerId: string, ctx?: Customer360Context): Promise<Customer360Overview> => {
     const res = await apiClient.get<Customer360Overview>(
-      `/v1/customers/${encodeURIComponent(customerId)}/overview`,
+      `/v1/customers/${encodeURIComponent(customerId)}/overview${contextQuery(ctx)}`,
     );
     if (!isOverviewShape(res.data, customerId)) {
       throw Object.assign(new Error('Malformed overview response'), { kind: 'malformed' });
@@ -90,12 +102,13 @@ export const customer360Api = {
   getTransactions: async (
     customerId: string,
     params: CustomerTransactionsParams = {},
+    ctx?: Customer360Context,
   ): Promise<CustomerTransactionsResponse> => {
     const qs = new URLSearchParams();
     qs.append('limit', String(params.limit ?? 20));
     qs.append('offset', String(params.offset ?? 0));
     const res = await apiClient.get<CustomerTransactionsResponse>(
-      `/v1/customers/${encodeURIComponent(customerId)}/transactions?${qs.toString()}`,
+      `/v1/customers/${encodeURIComponent(customerId)}/transactions?${qs.toString()}${ctx ? `&context_type=${encodeURIComponent(ctx.type)}&context_id=${encodeURIComponent(ctx.id)}` : ''}`,
     );
     const rows = res.data?.recent_transactions;
     if (!Array.isArray(rows) || typeof res.data?.total_count !== 'number') {

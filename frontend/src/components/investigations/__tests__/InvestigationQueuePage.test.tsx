@@ -90,7 +90,8 @@ describe('InvestigationQueuePage', () => {
     mockHasPermission.mockImplementation((perm: string) => perm === PERMISSIONS.INVESTIGATION_REVIEW);
     mockListSubmitted.mockResolvedValue({ total: 0, page: 1, page_size: 50, items: [] });
     renderQueue();
-    expect(await screen.findByText('No submitted investigations awaiting review')).toBeInTheDocument();
+    expect(await screen.findByText('No investigations assigned to you')).toBeInTheDocument();
+    expect(screen.getByText('Investigations submitted by Analysts will appear here.')).toBeInTheDocument();
   });
 
   it('navigates to detail on row click', async () => {

@@ -3,12 +3,11 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import React from 'react';
 
-const { mockGet, mockAcknowledge, mockDismiss, mockEscalate, mockInvestigate, mockCreateApproval, mockGetOverview } =
+const { mockGet, mockAcknowledge, mockDismiss, mockInvestigate, mockCreateApproval, mockGetOverview } =
   vi.hoisted(() => ({
     mockGet: vi.fn(),
     mockAcknowledge: vi.fn(),
     mockDismiss: vi.fn(),
-    mockEscalate: vi.fn(),
     mockInvestigate: vi.fn(),
     mockCreateApproval: vi.fn(),
     mockGetOverview: vi.fn(),
@@ -16,7 +15,7 @@ const { mockGet, mockAcknowledge, mockDismiss, mockEscalate, mockInvestigate, mo
 
 vi.mock('../../../auth/AuthProvider', () => {
   const permissions: string[] = [
-    'alert:acknowledge', 'alert:investigate', 'alert:dismiss', 'alert:transition', 'approval:request',
+    'alert:acknowledge', 'alert:investigate', 'alert:dismiss', 'approval:request',
   ];
   return {
     useAuth: () => ({
@@ -33,7 +32,6 @@ vi.mock('../../../api/alertsApi', () => ({
     get: mockGet,
     acknowledge: mockAcknowledge,
     dismiss: mockDismiss,
-    escalate: mockEscalate,
     investigate: mockInvestigate,
     assign: vi.fn(),
   },
@@ -124,7 +122,7 @@ describe('AlertDetailPage', () => {
     const { unmount } = renderDetail();
     const links = await screen.findAllByRole('link', { name: 'Open Customer 360' });
     expect(links.length).toBe(2); // Related-row link + panel header link
-    for (const link of links) expect(link).toHaveAttribute('href', '/workbench/customers/CUST_00001');
+    for (const link of links) expect(link).toHaveAttribute('href', '/workbench/customers/CUST_00001?context_type=alert&context_id=a1');
     expect(screen.getByTestId('customer-context-panel')).toBeInTheDocument();
     expect(await screen.findByText('Fouad Ben Salah')).toBeInTheDocument();
 
@@ -152,7 +150,7 @@ describe('AlertDetailPage', () => {
     renderDetail();
     const links = await screen.findAllByRole('link', { name: 'Open Customer 360' });
     expect(links.length).toBe(2);
-    for (const link of links) expect(link).toHaveAttribute('href', '/workbench/customers/CUST_00141');
+    for (const link of links) expect(link).toHaveAttribute('href', '/workbench/customers/CUST_00141?context_type=alert&context_id=a1');
     expect(screen.getByTestId('customer-context-panel')).toBeInTheDocument();
   });
 
@@ -205,27 +203,5 @@ describe('AlertDetailPage', () => {
         approval_request_id: 'apr_1',
       }),
     );
-  });
-
-  it('escalates an under-investigation alert and navigates to the created case', async () => {
-    mockGet.mockResolvedValue(makeAlert({ status: 'under_investigation' }));
-    mockEscalate.mockResolvedValue({
-      success: true, alert: makeAlert({ status: 'under_investigation' }), case_id: 'case_9', version: 4,
-    });
-
-    renderDetail();
-    fireEvent.click(await screen.findByRole('button', { name: /Escalate/i }));
-    fireEvent.change(screen.getByPlaceholderText('Summary of the compliance concern'), {
-      target: { value: 'Round-trip case' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: /Escalate to Case/i }));
-
-    await waitFor(() => expect(mockEscalate).toHaveBeenCalledWith('a1', {
-      title: 'Round-trip case',
-      description: undefined,
-      priority: 'medium',
-      expected_version: 3,
-    }));
-    expect(await screen.findByText('case-detail-case_9')).toBeInTheDocument();
   });
 });

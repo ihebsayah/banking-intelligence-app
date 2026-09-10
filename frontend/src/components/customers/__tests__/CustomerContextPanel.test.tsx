@@ -146,7 +146,7 @@ describe('CustomerContextPanel', () => {
     expect(screen.getByText('34')).toBeInTheDocument(); // 30d Txns KPI
     expect(screen.getByText(/Tunis Main Branch · Tunis/)).toBeInTheDocument();
     expect(screen.getByText(/RM: Aymen Trabelsi/)).toBeInTheDocument();
-    expect(mockGetOverview).toHaveBeenCalledWith('CUST_00001');
+    expect(mockGetOverview).toHaveBeenCalledWith('CUST_00001', undefined);
   });
 
   it('keeps masked tokens masked and marks identity as Masked', async () => {

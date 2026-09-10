@@ -4,7 +4,6 @@ import type {
   Alert,
   AlertAdminView,
   AlertListResponse,
-  EscalateResponse,
   InvestigateResponse,
   MutationResponse,
 } from '../types/alerts';
@@ -32,13 +31,6 @@ export interface DismissAlertPayload {
 export interface InvestigateAlertPayload {
   title: string;
   description?: string;
-  expected_version: number;
-}
-
-export interface EscalateAlertPayload {
-  title: string;
-  description?: string;
-  priority: 'critical' | 'high' | 'medium' | 'low';
   expected_version: number;
 }
 
@@ -79,12 +71,6 @@ export const alertsApi = {
 
   investigate: async (alertId: string, payload: InvestigateAlertPayload): Promise<InvestigateResponse> => {
     const res = await apiClient.post<InvestigateResponse>(`/alerts/${alertId}/investigate`, payload,
-      { headers: { 'X-Request-ID': uuid(), 'X-Idempotency-Key': uuid() } });
-    return res.data;
-  },
-
-  escalate: async (alertId: string, payload: EscalateAlertPayload): Promise<EscalateResponse> => {
-    const res = await apiClient.post<EscalateResponse>(`/alerts/${alertId}/escalate`, payload,
       { headers: { 'X-Request-ID': uuid(), 'X-Idempotency-Key': uuid() } });
     return res.data;
   },

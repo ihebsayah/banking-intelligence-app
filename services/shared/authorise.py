@@ -90,6 +90,7 @@ class Resource:
     severity: Optional[str] = None
     risk_level: Optional[str] = None
     created_by: Optional[str] = None
+    compliance_officer_id: Optional[str] = None
 
 
 @dataclass
@@ -217,7 +218,7 @@ ALERT_TRANSITIONS: Dict[str, set] = {
     "new": {"alert:assign", "alert:read_assigned", "alert:read"} | COMMENT_ACTIONS,
     "assigned": {"alert:acknowledge", "alert:assign", "alert:read_assigned", "alert:read"} | COMMENT_ACTIONS,
     "acknowledged": {"alert:investigate", "alert:dismiss", "alert:assign", "alert:read_assigned", "alert:read", "approval:request"} | COMMENT_ACTIONS,
-    "under_investigation": {"alert:transition", "alert:assign", "alert:read_assigned", "alert:read", "approval:request"} | COMMENT_ACTIONS,
+    "under_investigation": {"alert:assign", "alert:read_assigned", "alert:read", "approval:request"} | COMMENT_ACTIONS,
     "resolved": {"alert:assign", "alert:read"} | COMMENT_ACTIONS,
     "dismissed": {"alert:assign", "alert:read"} | COMMENT_ACTIONS,
 }
@@ -229,12 +230,15 @@ INVESTIGATION_TRANSITIONS: Dict[str, set] = {
                "investigation:transition", "investigation:assign",
                "investigation:read_own", "investigation:read"} | COMMENT_ACTIONS,
     "awaiting_information": {"investigation:transition", "investigation:read_own",
-                             "investigation:read", "investigation:assign"} | COMMENT_ACTIONS,
+                             "investigation:read", "investigation:assign",
+                             "info_request:read_assigned", "info_request:read"} | COMMENT_ACTIONS,
     "submitted": {"investigation:review", "info_request:create", "case:create", "investigation:assign",
-                  "investigation:read_own", "investigation:read"} | COMMENT_ACTIONS,
+                  "investigation:read_own", "investigation:read",
+                  "info_request:read_assigned", "info_request:read"} | COMMENT_ACTIONS,
     "returned": {"investigation:update", "investigation:modify_findings",
                  "investigation:transition", "investigation:assign",
-                 "investigation:read_own", "investigation:read"} | COMMENT_ACTIONS,
+                 "investigation:read_own", "investigation:read",
+                 "info_request:read_assigned", "info_request:read"} | COMMENT_ACTIONS,
     "completed": {"investigation:read_own", "investigation:read"} | COMMENT_ACTIONS,
     "cancelled": {"investigation:read"} | COMMENT_ACTIONS,
 }
@@ -382,7 +386,11 @@ async def authorise(
     # Step 5 — Ownership/assignment check
     if action in OWNERSHIP_ACTIONS:
         if action == "info_request:create" and resource.entity_type == "investigation" and resource.status == "submitted":
-            pass
+            # A submitted investigation is authored by the analyst but reviewed by
+            # the assigned compliance officer. Only that officer may create a
+            # contextual information request on it.
+            if resource.compliance_officer_id and resource.compliance_officer_id != user.user_id:
+                raise OwnershipDeniedError()
         elif resource.assigned_to != user.user_id:
             raise OwnershipDeniedError()
     if action in CREATOR_ACTIONS:

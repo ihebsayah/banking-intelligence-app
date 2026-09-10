@@ -67,13 +67,6 @@ export interface InvestigateResponse {
   version: number;
 }
 
-export interface EscalateResponse {
-  success: boolean;
-  alert: Alert;
-  case_id: string;
-  version: number;
-}
-
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'expired' | 'cancelled';
 
 export interface ApprovalRequest {

@@ -33,11 +33,12 @@ class _FakeService:
         self.tx_result = tx_result
         self.calls = []
 
-    async def get_overview(self, user, customer_id, request_id=""):
-        self.calls.append(("overview", user.user_id, customer_id))
+    async def get_overview(self, user, customer_id, request_id="", context_type=None, context_id=None):
+        self.calls.append(("overview", user.user_id, customer_id, context_type, context_id))
         return self.overview
 
-    async def get_transactions(self, user, customer_id, request_id="", limit=20, offset=0):
+    async def get_transactions(self, user, customer_id, request_id="", limit=20, offset=0,
+                               context_type=None, context_id=None):
         self.calls.append(("transactions", user.user_id, customer_id))
         return self.tx_result
 
@@ -92,8 +93,8 @@ def test_manager_denied_even_with_scope_assigned(monkeypatch):
         _user("manager", [], user_id="manager_001"),
         fake,
     )
-    assert client.get("/api/v1/customers/CUST_00001/overview").status_code == 403
-    assert client.get("/api/v1/customers/CUST_00001/transactions").status_code == 403
+    assert client.get("/v1/customers/CUST_00001/overview").status_code == 403
+    assert client.get("/v1/customers/CUST_00001/transactions").status_code == 403
     assert fake.calls == []  # guard fired before the service
 
 
@@ -109,10 +110,10 @@ def test_admin_transactions_denied_403(monkeypatch):
         ),
         fake,
     )
-    assert client.get("/api/v1/customers/CUST_00001/transactions").status_code == 403
+    assert client.get("/v1/customers/CUST_00001/transactions").status_code == 403
     # overview still allowed (metadata view)
-    assert client.get("/api/v1/customers/CUST_00001/overview").status_code == 200
-    assert ("overview", "admin_001", "CUST_00001") in fake.calls
+    assert client.get("/v1/customers/CUST_00001/overview").status_code == 200
+    assert ("overview", "admin_001", "CUST_00001", None, None) in fake.calls
     assert not any(c[0] == "transactions" for c in fake.calls)
 
 
@@ -127,7 +128,7 @@ def test_analyst_transactions_allowed_in_scope(monkeypatch):
         ),
         fake,
     )
-    resp = client.get("/api/v1/customers/CUST_00001/transactions")
+    resp = client.get("/v1/customers/CUST_00001/transactions")
     assert resp.status_code == 200
     assert resp.json()["recent_transactions"][0]["transaction_id"] == "TX-1"
     assert ("transactions", "analyst_001", "CUST_00001") in fake.calls
@@ -145,7 +146,7 @@ def test_out_of_scope_compliance_overview_404(monkeypatch):
         ),
         fake,
     )
-    resp = client.get("/api/v1/customers/CUST_00001/overview")
+    resp = client.get("/v1/customers/CUST_00001/overview")
     assert resp.status_code == 404
     assert resp.json()["detail"]["error"] == "CUSTOMER_NOT_FOUND"
 
@@ -153,16 +154,32 @@ def test_out_of_scope_compliance_overview_404(monkeypatch):
 def test_customer_search_permission_denied_403(monkeypatch):
     fake = _FakeService()
     client = _make_client(monkeypatch, _user("manager", [], user_id="manager_001"), fake)
-    resp = client.get("/api/v1/customers?q=Fouad")
+    resp = client.get("/v1/customers?q=Fouad")
     assert resp.status_code == 403
 
 
 def test_customer_search_allowed_with_basic_perm(monkeypatch):
     fake = _FakeService()
     client = _make_client(monkeypatch, _user("analyst", ["customer:read_basic"], user_id="analyst_001"), fake)
-    resp = client.get("/api/v1/customers?q=Fouad")
+    resp = client.get("/v1/customers?q=Fouad")
     assert resp.status_code == 200
     data = resp.json()
     assert len(data["items"]) == 1
     assert data["items"][0]["customer_id"] == "CUST_00001"
     assert ("search", "analyst_001", "Fouad") in fake.calls
+
+
+def test_overview_forwards_workflow_context_to_service(monkeypatch):
+    # C6: the route must pass context_type/context_id through to the service so
+    # object-context authorization can run (the service enforces the gate).
+    fake = _FakeService(overview=_min_overview())
+    client = _make_client(
+        monkeypatch,
+        _user("analyst", ["customer:read_basic"], user_id="analyst_001"),
+        fake,
+    )
+    resp = client.get(
+        "/v1/customers/CUST_00001/overview?context_type=investigation&context_id=INV-42"
+    )
+    assert resp.status_code == 200
+    assert ("overview", "analyst_001", "CUST_00001", "investigation", "INV-42") in fake.calls

@@ -1,5 +1,9 @@
 """Information request service tests (IR1-IR8)."""
+import io
 import json
+import os
+import shutil
+import tempfile
 import uuid
 from datetime import date, datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -9,10 +13,10 @@ import pytest
 from shared.authorise import ApplicationUser, PermissionDeniedError
 
 from workbench.exceptions import (
-    IdempotencyMismatch, InvalidAssignee, InvalidTransition,
-    ResourceNotFound, VersionConflict, WorkbenchError,
+    FileTooLarge, IdempotencyMismatch, InvalidAssignee, InvalidFileType,
+    InvalidTransition, ResourceNotFound, VersionConflict, WorkbenchError,
 )
-from workbench.models import ComplianceCase, InformationRequest
+from workbench.models import ComplianceCase, InformationRequest, InformationRequestAttachment, Investigation
 from workbench.schemas.information_requests import (
     AcceptInformationRequest, AcknowledgeInformationRequest,
     CancelInformationRequest, CreateInformationRequest,
@@ -23,6 +27,7 @@ from workbench.schemas.information_requests import (
 from workbench.services.information_request_service import (
     InformationRequestService, _validate_assignee,
 )
+from workbench.storage import EvidenceStorage
 
 UID = lambda: str(uuid.uuid4())
 NOW = datetime.now(timezone.utc)
@@ -69,6 +74,19 @@ def make_ir(**kw):
                     version=1, created_at=NOW, updated_at=NOW)
     defaults.update(kw)
     return InformationRequest(**defaults)
+
+
+def make_inv(**kw):
+    defaults = dict(investigation_id=UID(), title="Test Investigation",
+                    description=None, alert_id=None,
+                    scope_id="hq_main", status="submitted", priority="high",
+                    assigned_to="user1", created_by="user1",
+                    findings_text=None, findings_refs=None, conclusion=None,
+                    started_at=None, submitted_at=NOW, completed_at=None,
+                    return_reason=None, compliance_officer_id=None,
+                    version=2, created_at=NOW, updated_at=NOW)
+    defaults.update(kw)
+    return Investigation(**defaults)
 
 
 def make_uow_mock():
@@ -242,7 +260,8 @@ class TestCreate:
         args = mock_notify.await_args[0][0]
         assert args.notification_type == "ir_created"
         assert args.user_id == "user2"
-        assert args.entity_type == "information_request"
+        assert args.entity_type == "compliance_case"
+        assert args.entity_id == c.case_id
 
     @pytest.mark.asyncio
     async def test_create_writes_outbox(self, mock_db):
@@ -411,6 +430,56 @@ class TestList:
             await InformationRequestService(mock_db).list_for_case(
                 COMPLIANCE, c.case_id, page=1, per_page=500)
         assert mock_list.call_args.kwargs["limit"] == 100
+
+    @pytest.mark.asyncio
+    async def test_compliance_officer_sees_all_responded_irs_on_submitted_investigation(self, mock_db):
+        from shared.authorise import PermissionDeniedError
+        inv = make_inv(status="submitted", compliance_officer_id="user1",
+                       assigned_to="analyst9", created_by="analyst9")
+        responded = make_ir(investigation_id=inv.investigation_id, assigned_to="analyst9",
+                            created_by="comp_creator", status="responded",
+                            response_text="Beneficiary statements attached.")
+        foreign = make_ir(investigation_id=inv.investigation_id, assigned_to="analyst8",
+                          created_by="comp_creator", status="responded",
+                          response_text="Other analyst response.")
+        uow_mock = make_uow_mock()
+        with patch(UOW_TARGET, return_value=uow_mock), \
+             patch("workbench.repos._fetch_one", AsyncMock(return_value=inv.model_dump())), \
+             patch("workbench.repos.InfoRequestRepo.list_by_investigation",
+                   AsyncMock(return_value=[responded, foreign])), \
+             patch(AUTH_TARGET, AsyncMock(side_effect=[
+                 PermissionDeniedError("info_request:read_assigned"), None,
+             ])):
+            items, total = await InformationRequestService(mock_db).list_for_investigation(
+                COMPLIANCE, inv.investigation_id)
+        assert total == 2
+        assert any(i.response_text == "Beneficiary statements attached." for i in items)
+        assert any(i.response_text == "Other analyst response." for i in items)
+
+    @pytest.mark.asyncio
+    async def test_assigned_analyst_sees_own_irs_on_awaiting_information(self, mock_db):
+        inv = make_inv(status="awaiting_information", assigned_to="user1")
+        mine = make_ir(investigation_id=inv.investigation_id, assigned_to="user1")
+        others = make_ir(investigation_id=inv.investigation_id, assigned_to="user5")
+        uow_mock = make_uow_mock()
+        with patch(UOW_TARGET, return_value=uow_mock), \
+             patch("workbench.repos._fetch_one", AsyncMock(return_value=inv.model_dump())), \
+             patch("workbench.repos.InfoRequestRepo.list_by_investigation",
+                   AsyncMock(return_value=[mine, others])), \
+             patch(AUTH_TARGET, AsyncMock()):
+            items, total = await InformationRequestService(mock_db).list_for_investigation(
+                ANALYST, inv.investigation_id)
+        assert total == 1
+        assert items[0].ir_id == mine.ir_id
+
+    @pytest.mark.asyncio
+    async def test_list_investigation_not_found(self, mock_db):
+        uow_mock = make_uow_mock()
+        with patch(UOW_TARGET, return_value=uow_mock), \
+             patch("workbench.repos._fetch_one", AsyncMock(return_value=None)):
+            with pytest.raises(ResourceNotFound):
+                await InformationRequestService(mock_db).list_for_investigation(
+                    COMPLIANCE, "bad-id")
 
 
 class TestGetById:
@@ -698,6 +767,8 @@ class TestRespond:
         assert args.notification_type == "ir_responded"
         assert args.user_id == "user9"
         assert args.body == "records attached"
+        assert args.entity_type == "compliance_case"
+        assert args.entity_id == c.case_id
 
     @pytest.mark.asyncio
     async def test_outbox_hashes_response(self, mock_db):
@@ -736,6 +807,158 @@ class TestRespond:
              patch("workbench.repos._execute", AsyncMock(return_value="UPDATE 0")):
             with pytest.raises(VersionConflict):
                 await InformationRequestService(mock_db).respond(ANALYST, ir.ir_id, req)
+
+    @pytest.mark.asyncio
+    async def test_respond_resumes_awaiting_investigation(self, mock_db):
+        """Responding to the last active IR pushes an awaiting_information investigation back to submitted."""
+        ir = make_ir(assigned_to="user1", status="acknowledged", version=2,
+                     case_id=None, investigation_id="inv_1")
+        inv = Investigation(
+            investigation_id="inv_1", title="Test Investigation", description=None,
+            alert_id=None, scope_id="hq_main", status="awaiting_information",
+            priority="medium", assigned_to="user1", created_by="user1",
+            findings_text=None, findings_refs=None, conclusion=None,
+            started_at=None, submitted_at=None, completed_at=None,
+            return_reason=None, version=4, created_at=NOW, updated_at=NOW,
+        )
+        req = RespondInformationRequest(response_text="Here is the statement", expected_version=2)
+        uow_mock = make_uow_mock()
+        mock_timeline = AsyncMock()
+        mock_outbox = AsyncMock()
+        with patch(UOW_TARGET, return_value=uow_mock), \
+             patch(AUTH_TARGET, AsyncMock()), \
+             patch("workbench.repos._fetch_one", AsyncMock(side_effect=[
+                 ir.model_dump(), inv.model_dump(),
+             ])), \
+             patch("workbench.repos._fetch_all", AsyncMock(return_value=[ir.model_dump()])), \
+             patch("workbench.repos._execute", AsyncMock(return_value="UPDATE 1")), \
+             patch("workbench.repos.TimelineRepo.insert", mock_timeline), \
+             patch("workbench.repos.NotificationRepo.insert", AsyncMock()), \
+             patch("workbench.repos.OutboxRepo.insert", mock_outbox):
+            result = await InformationRequestService(mock_db).respond(ANALYST, ir.ir_id, req)
+        assert result.information_request.status == "responded"
+        inv_events = [a[0][0] for a in mock_timeline.await_args_list
+                      if a[0][0].event_type == "investigation.submitted"]
+        assert len(inv_events) == 1
+        assert inv_events[0].new_value["status"] == "submitted"
+        assert inv_events[0].new_value["reason"] == "ir_responded"
+        outbox_events = [a[0][0].event_type for a in mock_outbox.await_args_list]
+        assert "investigation.submitted" in outbox_events
+        resp_outbox = [a[0][0] for a in mock_outbox.await_args_list
+                       if a[0][0].event_type == "ir.responded"][0]
+        assert resp_outbox.payload["metadata"]["investigation_resumed_triggered"] is True
+
+    @pytest.mark.asyncio
+    async def test_respond_does_not_resume_when_other_irs_active(self, mock_db):
+        """If another active IR remains, the investigation stays awaiting_information."""
+        ir = make_ir(assigned_to="user1", status="acknowledged", version=2,
+                     case_id=None, investigation_id="inv_1")
+        inv = Investigation(
+            investigation_id="inv_1", title="Test Investigation", description=None,
+            alert_id=None, scope_id="hq_main", status="awaiting_information",
+            priority="medium", assigned_to="user1", created_by="user1",
+            findings_text=None, findings_refs=None, conclusion=None,
+            started_at=None, submitted_at=None, completed_at=None,
+            return_reason=None, version=4, created_at=NOW, updated_at=NOW,
+        )
+        req = RespondInformationRequest(response_text="docs", expected_version=2)
+        uow_mock = make_uow_mock()
+        mock_timeline = AsyncMock()
+        mock_outbox = AsyncMock()
+        with patch(UOW_TARGET, return_value=uow_mock), \
+             patch(AUTH_TARGET, AsyncMock()), \
+             patch("workbench.repos._fetch_one", AsyncMock(side_effect=[
+                 ir.model_dump(), inv.model_dump(),
+             ])), \
+             patch("workbench.repos._fetch_all", AsyncMock(return_value=[
+                 ir.model_dump(),
+                 {"ir_id": "other", "case_id": None, "investigation_id": "inv_1",
+                  "created_by": "user1", "assigned_to": "user1", "question": "q",
+                  "due_date": None, "status": "open", "response_text": None,
+                  "responded_at": None, "acceptance_note": None, "return_reason": None,
+                  "accepted_at": None, "returned_at": None, "accepted_by": None,
+                  "returned_by": None, "cancelled_at": None, "cancelled_by": None,
+                  "cancel_reason": None, "version": 1, "created_at": NOW, "updated_at": NOW},
+             ])), \
+             patch("workbench.repos._execute", AsyncMock(return_value="UPDATE 1")), \
+             patch("workbench.repos.TimelineRepo.insert", mock_timeline), \
+             patch("workbench.repos.NotificationRepo.insert", AsyncMock()), \
+             patch("workbench.repos.OutboxRepo.insert", mock_outbox):
+            await InformationRequestService(mock_db).respond(ANALYST, ir.ir_id, req)
+        inv_events = [a[0][0] for a in mock_timeline.await_args_list
+                      if a[0][0].event_type == "investigation.submitted"]
+        assert inv_events == []
+        resp_outbox = [a[0][0] for a in mock_outbox.await_args_list
+                       if a[0][0].event_type == "ir.responded"][0]
+        assert resp_outbox.payload["metadata"]["investigation_resumed_triggered"] is False
+
+    @pytest.mark.asyncio
+    async def test_respond_with_attachment_stores_file_and_logs_events(self, mock_db):
+        """Respond accepts a file and records it atomically with the response."""
+        ir = make_ir(assigned_to="user1", status="acknowledged", version=2)
+        c = make_case(case_id=ir.case_id, status="awaiting_information")
+        req = RespondInformationRequest(response_text="records attached", expected_version=2)
+        content = b"%PDF-1.4 statement evidence"
+        file_obj = io.BytesIO(content)
+        uow_mock = make_uow_mock()
+        mock_timeline = AsyncMock()
+        mock_outbox = AsyncMock()
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            storage = EvidenceStorage(root_dir=tmp_dir)
+            with patch(UOW_TARGET, return_value=uow_mock), \
+                 patch(AUTH_TARGET, AsyncMock()), \
+                 patch("workbench.repos._fetch_one", AsyncMock(side_effect=[
+                     ir.model_dump(), c.model_dump(),
+                 ])), \
+                 patch("workbench.repos._execute", AsyncMock(return_value="UPDATE 1")), \
+                 patch("workbench.repos.TimelineRepo.insert", mock_timeline), \
+                 patch("workbench.repos.NotificationRepo.insert", AsyncMock()), \
+                 patch("workbench.repos.OutboxRepo.insert", mock_outbox):
+                svc = InformationRequestService(mock_db, storage=storage)
+                result = await svc.respond(
+                    ANALYST, ir.ir_id, req,
+                    original_filename="statement.pdf", content_type="application/pdf",
+                    file_obj=file_obj,
+                )
+            assert result.information_request.status == "responded"
+            assert result.information_request.response_text == "records attached"
+            up_tl = [a[0][0] for a in mock_timeline.await_args_list
+                     if a[0][0].event_type == "ir.attachment_uploaded"]
+            assert len(up_tl) == 1
+            assert up_tl[0].new_value["size_bytes"] == len(content)
+            assert storage.exists("hq_main", ir.ir_id, f"{up_tl[0].new_value['attachment_id']}.bin")
+            outbox_events = [a[0][0].event_type for a in mock_outbox.await_args_list]
+            assert "ir.attachment_uploaded" in outbox_events
+            assert "ir.responded" in outbox_events
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    @pytest.mark.asyncio
+    async def test_respond_rejects_invalid_file_type(self, mock_db):
+        ir = make_ir(assigned_to="user1", status="acknowledged", version=2)
+        c = make_case(case_id=ir.case_id, status="awaiting_information")
+        req = RespondInformationRequest(response_text="docs", expected_version=2)
+        uow_mock = make_uow_mock()
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            storage = EvidenceStorage(root_dir=tmp_dir)
+            with patch(UOW_TARGET, return_value=uow_mock), \
+                 patch(AUTH_TARGET, AsyncMock()), \
+                 patch("workbench.repos._fetch_one", AsyncMock(side_effect=[
+                     ir.model_dump(), c.model_dump(),
+                 ])):
+                with pytest.raises(InvalidFileType):
+                    await InformationRequestService(mock_db, storage=storage).respond(
+                        ANALYST, ir.ir_id, req,
+                        original_filename="evil.exe",
+                        content_type="application/x-msdownload",
+                        file_obj=io.BytesIO(b"MZ\x90\x00"),
+                    )
+            dest = os.path.join(tmp_dir, "hq_main", ir.ir_id)
+            assert not os.path.isdir(dest) or os.listdir(dest) == []
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 class TestAccept:
@@ -1192,6 +1415,9 @@ class TestRouteRegistration:
         assert ("/api/v1/information-requests/{ir_id}", ("GET",)) in routes
         assert ("/api/v1/information-requests/{ir_id}/acknowledge", ("PATCH",)) in routes
         assert ("/api/v1/information-requests/{ir_id}/respond", ("PATCH",)) in routes
+        assert ("/api/v1/information-requests/{ir_id}/attachments", ("GET",)) in routes
+        assert ("/api/v1/information-requests/{ir_id}/attachments", ("POST",)) in routes
+        assert ("/api/v1/information-requests/{ir_id}/attachments/{attachment_id}/download", ("GET",)) in routes
         assert ("/api/v1/information-requests/{ir_id}/accept", ("PATCH",)) in routes
         assert ("/api/v1/information-requests/{ir_id}/return", ("PATCH",)) in routes
         assert ("/api/v1/information-requests/{ir_id}/cancel", ("POST",)) in routes
@@ -1209,9 +1435,9 @@ class TestRouteRegistration:
         assert "/api/v1/information-requests/{ir_id}/submit" not in paths
         assert "/api/v1/cases/{case_id}/information-requests/{ir_id}" not in paths
 
-    def test_exact_count_eleven(self):
+    def test_exact_count_fourteen(self):
         from workbench.routers.information_requests import router
-        assert len(router.routes) == 11
+        assert len(router.routes) == 14
 
 
 class TestListAssigned:
@@ -1307,3 +1533,189 @@ class TestListAssigned:
         tl.assert_not_called()
         ob.assert_not_called()
         nt.assert_not_called()
+
+
+class TestIrAttachments:
+    @pytest.fixture
+    def temp_storage(self):
+        tmp_dir = tempfile.mkdtemp()
+        storage = EvidenceStorage(root_dir=tmp_dir)
+        yield storage
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    @pytest.mark.asyncio
+    async def test_analyst_uploads_attachment(self, mock_db, temp_storage):
+        ir = make_ir(assigned_to="user1", status="acknowledged", version=2)
+        c = make_case(case_id=ir.case_id, status="awaiting_information")
+        content = b"%PDF-1.4 statement evidence"
+        file_obj = io.BytesIO(content)
+        uow_mock = make_uow_mock()
+        with patch(UOW_TARGET, return_value=uow_mock), \
+             patch(AUTH_TARGET, AsyncMock()), \
+             patch("workbench.repos._fetch_one", AsyncMock(side_effect=[
+                 ir.model_dump(), c.model_dump(),
+             ])), \
+             patch("workbench.repos._execute", AsyncMock()), \
+             patch("workbench.repos.TimelineRepo.insert", AsyncMock()), \
+             patch("workbench.repos.OutboxRepo.insert", AsyncMock()):
+            svc = InformationRequestService(mock_db, storage=temp_storage)
+            res = await svc.upload_attachment(
+                user=ANALYST, ir_id=ir.ir_id,
+                original_filename="statement.pdf", content_type="application/pdf",
+                file_obj=file_obj, description="Monthly statement",
+            )
+        assert res.original_filename == "statement.pdf"
+        assert res.ir_id == ir.ir_id
+        assert res.size_bytes == len(content)
+        assert res.uploaded_by == "user1"
+        assert temp_storage.exists("hq_main", ir.ir_id, f"{res.attachment_id}.bin")
+
+    @pytest.mark.asyncio
+    async def test_upload_rejected_when_not_editable(self, mock_db, temp_storage):
+        ir = make_ir(assigned_to="user1", status="responded", version=3)
+        c = make_case(case_id=ir.case_id, status="awaiting_information")
+        uow_mock = make_uow_mock()
+        with patch(UOW_TARGET, return_value=uow_mock), \
+             patch(AUTH_TARGET, AsyncMock()), \
+             patch("workbench.repos._fetch_one", AsyncMock(side_effect=[
+                 ir.model_dump(), c.model_dump(),
+             ])):
+            svc = InformationRequestService(mock_db, storage=temp_storage)
+            with pytest.raises(InvalidTransition):
+                await svc.upload_attachment(
+                    user=ANALYST, ir_id=ir.ir_id,
+                    original_filename="statement.pdf", content_type="application/pdf",
+                    file_obj=io.BytesIO(b"pdf"),
+                )
+
+    @pytest.mark.asyncio
+    async def test_upload_rejects_invalid_file_type(self, mock_db, temp_storage):
+        svc = InformationRequestService(mock_db, storage=temp_storage)
+        with pytest.raises(InvalidFileType):
+            await svc.upload_attachment(
+                user=ANALYST, ir_id=UID(),
+                original_filename="malware.exe", content_type="application/x-msdownload",
+                file_obj=io.BytesIO(b"MZ"),
+            )
+
+    @pytest.mark.asyncio
+    async def test_upload_rejects_too_large(self, mock_db, temp_storage):
+        ir = make_ir(assigned_to="user1", status="acknowledged", version=2)
+        c = make_case(case_id=ir.case_id, status="awaiting_information")
+        uow_mock = make_uow_mock()
+        big = b"A" * (10 * 1024 * 1024 + 1)
+        with patch(UOW_TARGET, return_value=uow_mock), \
+             patch(AUTH_TARGET, AsyncMock()), \
+             patch("workbench.repos._fetch_one", AsyncMock(side_effect=[
+                 ir.model_dump(), c.model_dump(),
+             ])):
+            svc = InformationRequestService(mock_db, storage=temp_storage)
+            with pytest.raises(FileTooLarge):
+                await svc.upload_attachment(
+                    user=ANALYST, ir_id=ir.ir_id,
+                    original_filename="big.pdf", content_type="application/pdf",
+                    file_obj=io.BytesIO(big),
+                )
+        assert not temp_storage.exists("hq_main", ir.ir_id, f"{big[0]}.bin")
+
+    @pytest.mark.asyncio
+    async def test_upload_cleans_up_on_db_failure(self, mock_db, temp_storage):
+        ir = make_ir(assigned_to="user1", status="acknowledged", version=2)
+        c = make_case(case_id=ir.case_id, status="awaiting_information")
+        uow_mock = make_uow_mock()
+        with patch(UOW_TARGET, return_value=uow_mock), \
+             patch(AUTH_TARGET, AsyncMock()), \
+             patch("workbench.repos._fetch_one", AsyncMock(side_effect=[
+                 ir.model_dump(), c.model_dump(),
+             ])), \
+             patch("workbench.repos._execute", AsyncMock(side_effect=Exception("db down"))), \
+             patch("workbench.repos.TimelineRepo.insert", AsyncMock()), \
+             patch("workbench.repos.OutboxRepo.insert", AsyncMock()):
+            svc = InformationRequestService(mock_db, storage=temp_storage)
+            with pytest.raises(Exception, match="db down"):
+                await svc.upload_attachment(
+                    user=ANALYST, ir_id=ir.ir_id,
+                    original_filename="statement.pdf", content_type="application/pdf",
+                    file_obj=io.BytesIO(b"%PDF-1.4"),
+                )
+        remaining = os.listdir(os.path.join(temp_storage.root_dir, "hq_main", ir.ir_id)) if os.path.exists(os.path.join(temp_storage.root_dir, "hq_main", ir.ir_id)) else []
+        assert remaining == []
+
+    @pytest.mark.asyncio
+    async def test_analyst_lists_attachments(self, mock_db, temp_storage):
+        ir = make_ir(assigned_to="user1", status="responded", version=3)
+        c = make_case(case_id=ir.case_id, status="awaiting_information")
+        att = InformationRequestAttachment(
+            attachment_id=UID(), ir_id=ir.ir_id,
+            original_filename="statement.pdf", stored_filename=f"{UID()}.bin",
+            content_type="application/pdf", size_bytes=10, sha256_hash="h" * 64,
+            uploaded_by="user1", uploaded_at=NOW,
+        )
+        uow_mock = make_uow_mock()
+        with patch(UOW_TARGET, return_value=uow_mock), \
+             patch(AUTH_TARGET, AsyncMock()), \
+             patch("workbench.repos._fetch_one", AsyncMock(side_effect=[
+                 ir.model_dump(), c.model_dump(),
+             ])), \
+             patch("workbench.repos._fetch_all", AsyncMock(return_value=[att.model_dump()])):
+            result = await InformationRequestService(mock_db).list_attachments(ANALYST, ir.ir_id)
+        assert result.total == 1
+        assert result.items[0].original_filename == "statement.pdf"
+
+    @pytest.mark.asyncio
+    async def test_list_denied_to_unrelated_user(self, mock_db, temp_storage):
+        ir = make_ir(assigned_to="user5", created_by="user6", status="responded", version=3)
+        c = make_case(case_id=ir.case_id, assigned_to="user5", created_by="user6")
+        uow_mock = make_uow_mock()
+        with patch(UOW_TARGET, return_value=uow_mock), \
+             patch(AUTH_TARGET, AsyncMock(side_effect=[
+                 PermissionDeniedError("info_request:read_assigned"),
+                 None,
+             ])), \
+             patch("workbench.repos._fetch_one", AsyncMock(side_effect=[
+                 ir.model_dump(), c.model_dump(),
+             ])):
+            svc = InformationRequestService(mock_db, storage=temp_storage)
+            with pytest.raises(ResourceNotFound):
+                await svc.list_attachments(OTHER_COMPLIANCE, ir.ir_id)
+
+    @pytest.mark.asyncio
+    async def test_download_returns_path_and_audits(self, mock_db, temp_storage):
+        ir = make_ir(assigned_to="user1", status="responded", version=3)
+        c = make_case(case_id=ir.case_id, status="awaiting_information")
+        att_id = UID()
+        stored, sha, size = temp_storage.save(
+            "hq_main", ir.ir_id, att_id, io.BytesIO(b"%PDF-1.4 content"))
+        att = InformationRequestAttachment(
+            attachment_id=att_id, ir_id=ir.ir_id,
+            original_filename="statement.pdf", stored_filename=stored,
+            content_type="application/pdf", size_bytes=size, sha256_hash=sha,
+            uploaded_by="user1", uploaded_at=NOW,
+        )
+        uow_mock = make_uow_mock()
+        mock_outbox = AsyncMock()
+        with patch(UOW_TARGET, return_value=uow_mock), \
+             patch(AUTH_TARGET, AsyncMock()), \
+             patch("workbench.repos._fetch_one", AsyncMock(side_effect=[
+                 ir.model_dump(), c.model_dump(), att.model_dump(),
+             ])), \
+             patch("workbench.repos.OutboxRepo.insert", mock_outbox):
+            svc = InformationRequestService(mock_db, storage=temp_storage)
+            response, file_path = await svc.get_attachment_for_download(ANALYST, ir.ir_id, att_id)
+        assert response.original_filename == "statement.pdf"
+        assert os.path.exists(file_path)
+        assert response.attachment_id == att_id
+
+    @pytest.mark.asyncio
+    async def test_download_unknown_attachment(self, mock_db, temp_storage):
+        ir = make_ir(assigned_to="user1", status="responded", version=3)
+        c = make_case(case_id=ir.case_id, status="awaiting_information")
+        uow_mock = make_uow_mock()
+        with patch(UOW_TARGET, return_value=uow_mock), \
+             patch(AUTH_TARGET, AsyncMock()), \
+             patch("workbench.repos._fetch_one", AsyncMock(side_effect=[
+                 ir.model_dump(), c.model_dump(), None,
+             ])):
+            svc = InformationRequestService(mock_db, storage=temp_storage)
+            with pytest.raises(ResourceNotFound):
+                await svc.get_attachment_for_download(ANALYST, ir.ir_id, UID())

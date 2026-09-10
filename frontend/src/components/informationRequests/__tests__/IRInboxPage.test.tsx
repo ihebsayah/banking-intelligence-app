@@ -13,11 +13,12 @@ const mockAuth = vi.hoisted(() => ({
 
 vi.mock('../../../auth/AuthProvider', () => ({ useAuth: mockAuth.useAuth }));
 
-const { mockListAssigned, mockGet, mockAcknowledge, mockRespond } = vi.hoisted(() => ({
+const { mockListAssigned, mockGet, mockAcknowledge, mockRespond, mockListAttachments } = vi.hoisted(() => ({
   mockListAssigned: vi.fn(),
   mockGet: vi.fn(),
   mockAcknowledge: vi.fn(),
   mockRespond: vi.fn(),
+  mockListAttachments: vi.fn(),
 }));
 
 vi.mock('../../../api/informationRequestsApi', () => ({
@@ -26,6 +27,9 @@ vi.mock('../../../api/informationRequestsApi', () => ({
     get: mockGet,
     acknowledge: mockAcknowledge,
     respond: mockRespond,
+    listAttachments: mockListAttachments,
+    uploadAttachment: vi.fn(),
+    downloadAttachment: vi.fn(),
   },
 }));
 
@@ -63,6 +67,7 @@ describe('IRInboxPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockListAssigned.mockResolvedValue({ total: 3, page: 1, page_size: 50, items: [base, overdue, accepted] });
+    mockListAttachments.mockResolvedValue({ total: 0, items: [] });
   });
 
   it('renders assigned requests with case id, question, due date and status', async () => {

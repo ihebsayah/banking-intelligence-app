@@ -108,7 +108,14 @@ export const NAV_GROUPS: NavGroup[] = [
     title: 'Intelligence & Analytics',
     items: [
       { id: 'assistant', to: '/assistant', label: 'AI Assistant', icon: Bot, category: 'Navigate' },
-      { id: 'kpi',       to: '/kpi',       label: 'KPI Analytics', icon: BarChart3, category: 'Navigate' },
+      {
+        id: 'kpi',
+        to: '/kpi',
+        label: 'KPI Analytics',
+        icon: BarChart3,
+        category: 'Navigate',
+        requiredRoles: ['analyst', 'manager', 'admin'],
+      },
       {
         id: 'kpi-governance',
         to: '/kpi-governance',
@@ -116,7 +123,7 @@ export const NAV_GROUPS: NavGroup[] = [
         icon: Shield,
         category: 'Navigate',
         requiredPermissions: PERMISSIONS.WORKBENCH_ACCESS,
-        requiredRoles: ['analyst', 'manager', 'compliance', 'admin'],
+        requiredRoles: ['analyst', 'manager', 'admin'],
       },
       {
         id: 'risk',

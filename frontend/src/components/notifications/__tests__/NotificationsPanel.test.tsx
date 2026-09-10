@@ -3,10 +3,11 @@ import { render, screen, waitFor, fireEvent, within } from '@testing-library/rea
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import React from 'react';
 
-const { mockList, mockMarkRead, mockMarkAllRead } = vi.hoisted(() => ({
+const { mockList, mockMarkRead, mockMarkAllRead, mockIRGet } = vi.hoisted(() => ({
   mockList: vi.fn(),
   mockMarkRead: vi.fn(),
   mockMarkAllRead: vi.fn(),
+  mockIRGet: vi.fn(),
 }));
 
 vi.mock('../../../api/notificationsApi', () => ({
@@ -15,6 +16,10 @@ vi.mock('../../../api/notificationsApi', () => ({
     markRead: mockMarkRead,
     markAllRead: mockMarkAllRead,
   },
+}));
+
+vi.mock('../../../api/informationRequestsApi', () => ({
+  informationRequestsApi: { get: mockIRGet },
 }));
 
 import { NotificationsPanel } from '../NotificationsPanel';
@@ -51,6 +56,11 @@ describe('NotificationsPanel', () => {
     mockList.mockResolvedValue({ total: 2, page: 1, page_size: 50, unread_count: 1, items: [base, read] });
     mockMarkRead.mockResolvedValue({ success: true, notification: { ...base, is_read: true } });
     mockMarkAllRead.mockResolvedValue({ marked_read: 1 });
+    mockIRGet.mockResolvedValue({
+      ir_id: 'ir_1', case_id: null, investigation_id: 'inv_9',
+      created_by: 'compliance_001', assigned_to: 'analyst_001', question: 'Docs?',
+      status: 'responded', version: 3, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z',
+    });
   });
 
   it('renders current-user notification rows with explicit unread/read text', async () => {
@@ -171,5 +181,19 @@ describe('NotificationsPanel', () => {
     renderPanel();
     await screen.findByText('Alert assigned to you');
     expect(screen.queryByLabelText(/user/i)).not.toBeInTheDocument();
+  });
+
+  it('resolves an information_request notification to its parent investigation route', async () => {
+    const irNotification: Notification = {
+      ...base, notification_id: 'n_ir', notification_type: 'ir_responded',
+      title: 'Information request responded', body: 'records attached',
+      entity_type: 'information_request', entity_id: 'ir_1',
+    };
+    mockList.mockResolvedValue({ total: 1, page: 1, page_size: 50, unread_count: 1, items: [irNotification] });
+    renderPanel();
+    await screen.findByText('records attached');
+    await waitFor(() => expect(mockIRGet).toHaveBeenCalledWith('ir_1'));
+    const irLink = await screen.findByText('Information Request');
+    await waitFor(() => expect(irLink.closest('a')).toHaveAttribute('href', '/workbench/investigations/inv_9'));
   });
 });

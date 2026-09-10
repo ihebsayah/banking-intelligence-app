@@ -10,7 +10,6 @@ export const PERMISSIONS = {
   ALERT_ACKNOWLEDGE: 'alert:acknowledge',
   ALERT_DISMISS: 'alert:dismiss',
   ALERT_INVESTIGATE: 'alert:investigate',
-  ALERT_TRANSITION: 'alert:transition',
   INVESTIGATION_READ_OWN: 'investigation:read_own',
   INVESTIGATION_READ: 'investigation:read',
   INVESTIGATION_UPDATE: 'investigation:update',
@@ -119,12 +118,12 @@ export function usePermissions() {
         }
       }
 
-      // 2. Role evaluation: if specified
-      if (opts.requiredRoles && userRole) {
+      // 2. Role evaluation: if specified, enforce even when userRole is absent
+      if (opts.requiredRoles) {
         const roles = Array.isArray(opts.requiredRoles)
           ? opts.requiredRoles
           : [opts.requiredRoles];
-        if (roles.length > 0 && !roles.includes(userRole)) {
+        if (roles.length > 0 && !roles.includes(userRole ?? '')) {
           return false;
         }
       }

@@ -332,7 +332,7 @@ describe('CaseDetailPage', () => {
     expect(await screen.findByTestId('customer-context-panel')).toBeInTheDocument();
     expect(await screen.findByText('Fouad Ben Salah')).toBeInTheDocument();
     expect(mocks.mockAlertGet).toHaveBeenCalledWith('al_12345678');
-    expect(mocks.mockGetOverview).toHaveBeenCalledWith('CUST_00001');
+    expect(mocks.mockGetOverview).toHaveBeenCalledWith('CUST_00001', { type: 'case', id: 'case_1' });
   });
 
   it('resolves customer context via the investigation when the case has no direct alert', async () => {
@@ -343,7 +343,7 @@ describe('CaseDetailPage', () => {
     expect(await screen.findByTestId('customer-context-panel')).toBeInTheDocument();
     expect(mocks.mockInvGet).toHaveBeenCalledWith('inv_1');
     expect(mocks.mockAlertGet).toHaveBeenCalledWith('al_55555555');
-    expect(mocks.mockGetOverview).toHaveBeenCalledWith('CUST_00099');
+    expect(mocks.mockGetOverview).toHaveBeenCalledWith('CUST_00099', { type: 'case', id: 'case_1' });
   });
 
   it('shows no customer context for a non-customer linked alert', async () => {
@@ -375,7 +375,7 @@ describe('CaseDetailPage', () => {
     });
     renderDetail();
     expect(await screen.findByTestId('customer-context-panel')).toBeInTheDocument();
-    expect(mocks.mockGetOverview).toHaveBeenCalledWith('CUST_00141');
+    expect(mocks.mockGetOverview).toHaveBeenCalledWith('CUST_00141', { type: 'case', id: 'case_1' });
   });
 
   it('shows no customer context when the case has no linked alert or investigation', async () => {
